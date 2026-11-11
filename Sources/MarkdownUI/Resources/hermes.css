@@ -1,0 +1,186 @@
+:root {
+  color-scheme: light dark;
+  --md-added: #1a7f37;
+  --md-added-bg: rgba(46, 160, 67, 0.12);
+  --md-added-word: rgba(46, 160, 67, 0.35);
+  --md-removed: #cf222e;
+  --md-removed-bg: rgba(248, 81, 73, 0.12);
+  --md-removed-word: rgba(248, 81, 73, 0.35);
+  --md-modified: #9a6700;
+  --md-accent: #0969da;
+  --md-gutter: 40px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --md-added: #3fb950;
+    --md-removed: #f85149;
+    --md-modified: #d29922;
+    --md-accent: #1f6feb;
+  }
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+}
+
+/* The host view draws the background. */
+.markdown-body {
+  background: transparent;
+  font-size: 14px;
+  padding: 16px 24px;
+  box-sizing: border-box;
+}
+
+body.diff .markdown-body {
+  padding-left: var(--md-gutter);
+  padding-right: var(--md-gutter);
+}
+
+/* Sized to content: the host scrolls, so the page must not. */
+body.fit {
+  overflow: hidden;
+}
+
+body.fit .markdown-body {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+body.fit:not(.diff) .markdown-body {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.mermaid-diagram {
+  margin-bottom: 16px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: var(--md-removed);
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+
+/* ---- rich diff ---- */
+
+.md-block,
+.markdown-body li[class*="md-"] {
+  position: relative;
+}
+
+/* The block carries the spacing, so its tint and its buttons line up with the content. */
+.md-block {
+  margin: 0 0 16px;
+  border-radius: 3px;
+}
+
+.markdown-body .md-block > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.markdown-body .md-block:has(> h1, > h2, > h3, > h4, > h5, > h6) {
+  margin-top: 24px;
+}
+
+.md-block:not(.md-unchanged) {
+  padding: 4px 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+}
+
+/* Extends the hover area of a commentable block into the left gutter. */
+[data-start]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: 100vw;
+}
+
+.md-added { background: var(--md-added-bg); box-shadow: -3px 0 0 var(--md-added); }
+.md-removed { background: var(--md-removed-bg); box-shadow: -3px 0 0 var(--md-removed); }
+.md-modified { box-shadow: -3px 0 0 var(--md-modified); }
+
+/* No bar on list items: it would cover the bullet or the task checkbox. */
+.markdown-body li.md-added,
+.markdown-body li.md-removed,
+.markdown-body li.md-modified {
+  box-shadow: none;
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: -6px;
+}
+
+/* A removed item has no number in the new file. */
+.markdown-body ol > li.md-removed {
+  counter-increment: list-item 0;
+  list-style-type: none;
+}
+
+.markdown-body ins {
+  background: var(--md-added-word);
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+.markdown-body del {
+  background: var(--md-removed-word);
+  text-decoration: line-through;
+  border-radius: 2px;
+}
+
+.md-mermaid-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.md-mermaid-diff > div {
+  box-shadow: none;
+  border-radius: 3px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.md-mermaid-diff .mermaid-diagram { margin-bottom: 0; }
+
+.md-add,
+.md-badge {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  font: 600 12px/22px -apple-system, sans-serif;
+  color: #fff;
+  background: var(--md-accent);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.md-add { left: -32px; font-size: 16px; }
+.md-badge { right: -32px; }
+
+.md-block:not(.md-unchanged) > .md-add { left: -24px; }
+.md-block:not(.md-unchanged) > .md-badge { right: -24px; }
+
+/* Top-level list items sit 2em inside the content edge. */
+.markdown-body li > .md-add { left: calc(-2em - 32px); }
+.markdown-body li[class*="md-"]:not(.md-unchanged) > .md-add { left: calc(-2em - 26px); }
+.markdown-body li > .md-badge { right: -32px; }

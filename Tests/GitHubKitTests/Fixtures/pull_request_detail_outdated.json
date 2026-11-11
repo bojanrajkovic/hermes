@@ -1,0 +1,139 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwDOVkPx6c8AAAABOF9iUQ",
+        "body": "",
+        "comments": {
+          "nodes": []
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "id": "PRR_kwDOVkPx6c8AAAABXDX3Mw",
+              "author": {
+                "__typename": "User",
+                "login": "bojanrajkovic",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+              },
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-11-10T12:45:58Z"
+            },
+            {
+              "id": "PRR_kwDOVkPx6c8AAAABXDc7rQ",
+              "author": {
+                "__typename": "User",
+                "login": "bojanrajkovic",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+              },
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-11-10T12:52:17Z"
+            },
+            {
+              "id": "PRR_kwDOVkPx6c8AAAABXDeAJg",
+              "author": {
+                "__typename": "User",
+                "login": "bojanrajkovic",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+              },
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-11-10T12:53:31Z"
+            }
+          ]
+        },
+        "reviewRequests": {
+          "nodes": []
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "493b8beb78cc076023bb19bdd8be99ff60ea4ba6",
+                "messageHeadline": "ci: build and test the image on every PR"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOVkPx6c61szsV",
+              "path": ".github/workflows/ci.yml",
+              "line": null,
+              "startLine": null,
+              "diffSide": "RIGHT",
+              "startDiffSide": null,
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOVkPx6c8AAAABDbYimA",
+                    "author": {
+                      "__typename": "User",
+                      "login": "bojanrajkovic",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+                    },
+                    "body": "Which cluster? Why is this detail about my deployment leaking, again. :-) It’s fine to just build for amd64 now, but add a post-v1 issue to build for arm64 too.",
+                    "createdAt": "2026-11-10T12:45:58Z"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOVkPx6c61s8i8",
+              "path": ".github/workflows/ci.yml",
+              "line": null,
+              "startLine": null,
+              "diffSide": "RIGHT",
+              "startDiffSide": null,
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOVkPx6c8AAAABDbcJew",
+                    "author": {
+                      "__typename": "User",
+                      "login": "bojanrajkovic",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+                    },
+                    "body": "Explain? Can’t we do a Zizmor suppression since we know this is safe if the branch isn’t main?",
+                    "createdAt": "2026-11-10T12:52:17Z"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOVkPx6c61s-TW",
+              "path": ".github/workflows/ci.yml",
+              "line": null,
+              "startLine": null,
+              "diffSide": "RIGHT",
+              "startDiffSide": null,
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOVkPx6c8AAAABDbc3lA",
+                    "author": {
+                      "__typename": "User",
+                      "login": "bojanrajkovic",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+                    },
+                    "body": "Cut this verbosity, you don’t need this over explaining crap. ",
+                    "createdAt": "2026-11-10T12:53:31Z"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "viewer": {
+      "organizations": {
+        "nodes": [
+          {
+            "login": "Freenode-Csharp",
+            "name": "Freenode ##csharp",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/855608?v=4"
+          }
+        ]
+      }
+    }
+  }
+}

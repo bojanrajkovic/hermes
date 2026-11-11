@@ -1,0 +1,37 @@
+diff --git a/added.bin b/added.bin
+new file mode 100644
+index 0000000..a903574
+Binary files /dev/null and b/added.bin differ
+diff --git a/bin.dat b/bin.dat
+deleted file mode 100644
+index 8835708..0000000
+Binary files a/bin.dat and /dev/null differ
+diff --git a/empty.txt b/new empty.txt
+similarity index 100%
+rename from empty.txt
+rename to new empty.txt
+diff --git a/run.sh b/run.sh
+deleted file mode 100755
+index f5bdd21..0000000
+--- a/run.sh
++++ /dev/null
+@@ -1 +0,0 @@
+-run
+diff --git a/tool.sh b/tool.sh
+new file mode 100644
+index 0000000..23a30a7
+--- /dev/null
++++ b/tool.sh
+@@ -0,0 +1,2 @@
++run
++more
+diff --git a/added.bin b/added.bin
+new file mode 100644
+index 0000000000000000000000000000000000000000..a903574af00b573ad9bdb2bccf8d93ed00c675de
+GIT binary patch
+literal 2
+JcmZQz1^@sB00aO4
+
+literal 0
+HcmV?d00001
+

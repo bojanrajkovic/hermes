@@ -1,0 +1,200 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..68f4f97
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,91 @@
++name: CI
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++
++permissions:
++  contents: read
++
++concurrency:
++  group: ci-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
++jobs:
++  test:
++    name: Lint and test
++    runs-on: ubuntu-26.04
++    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
++    timeout-minutes: 15
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          persist-credentials: false
++      # Caches are written only by pushes to main. A PR restores main's caches and saves none, so
++      # PRs can't fill the cache quota or leave anything for a later run to restore.
++      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
++        with:
++          cache_save: ${{ github.ref == 'refs/heads/main' }}
++      - id: pnpm-store
++        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
++      - if: github.ref == 'refs/heads/main'
++        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
++        with: &pnpm-store-cache
++          path: ${{ steps.pnpm-store.outputs.path }}
++          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
++          restore-keys: pnpm-store-${{ runner.os }}-
++      - if: github.ref != 'refs/heads/main'
++        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
++        with: *pnpm-store-cache
++      - run: pnpm install --frozen-lockfile
++      # Fails if a package's registry signature doesn't verify.
++      - run: pnpm audit signatures
++      - run: pnpm check
++
++  db:
++    name: Database tests
++    runs-on: ubuntu-26.04
++    timeout-minutes: 15
++    # The same image and digest scripts/db.sh runs locally.
++    services:
++      postgres:
++        image: postgres:18@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583
++        env:
++          POSTGRES_PASSWORD: airway
++        ports:
++          - 5432:5432
++        options: >-
++          --health-cmd "pg_isready --username postgres"
++          --health-interval 2s
++          --health-timeout 5s
++          --health-retries 15
++    env:
++      AIRWAY_TEST_POSTGRES_URL: postgres://postgres:airway@127.0.0.1:5432/postgres
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          persist-credentials: false
++      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
++        with:
++          cache_save: ${{ github.ref == 'refs/heads/main' }}
++      - id: pnpm-store
++        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
++      # Only restores: the Lint and test job saves the store on main.
++      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
++        with: *pnpm-store-cache
++      - run: pnpm install --frozen-lockfile
++      - run: pnpm test:db
++
++  # The ruleset on main requires Check. A job skipped after a failed job it needs counts as passing,
++  # so this one always runs and fails unless every job it gates succeeded.
++  check:
++    name: Check
++    needs: [test, db]
++    if: always()
++    # One step of a few seconds, so the 1-vCPU runner is enough.
++    runs-on: ubuntu-slim
++    timeout-minutes: 5
++    steps:
++      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
++        run: exit 1
+diff --git a/docs/ci.md b/docs/ci.md
+new file mode 100644
+index 0000000..50dc1d1
+--- /dev/null
++++ b/docs/ci.md
+@@ -0,0 +1,24 @@
++# CI
++
++`.github/workflows/ci.yml` runs on every pull request and on every push to `main`.
++
++| Job | What it runs |
++|---|---|
++| Lint and test | `pnpm audit signatures`, then `pnpm check` |
++| Database tests | `pnpm test:db`, with Postgres 18 as a service container |
++| Check | Fails unless both jobs above succeeded |
++
++## The Check job
++
++`main` requires one check: Check. It exists because GitHub counts a job that was skipped after a job it needs failed as passing. Check always runs, and it fails if any job it gates failed, was cancelled, or was skipped. A new job joins the gate by being added to Check's `needs`.
++
++## Supply chain
++
++- Every action is pinned to a full commit SHA, with its version in a comment.
++- The workflow's token can only read the repo, and checkout doesn't keep the credentials around.
++- `pnpm install --frozen-lockfile` installs exactly what the lockfile says, and `pnpm audit signatures` fails if a package's registry signature doesn't verify.
++- Only pushes to `main` write caches (mise's tools and the pnpm store). Pull requests only restore them.
++
++## The ruleset on main
++
++`main` requires Check to pass. Branches don't have to be up to date, and admins can bypass it.
+diff --git a/docs/development.md b/docs/development.md
+new file mode 100644
+index 0000000..b08cd4f
+--- /dev/null
++++ b/docs/development.md
+@@ -0,0 +1,67 @@
++# Development
++
++## Setup
++
++You need [mise](https://mise.jdx.dev) and a container runtime, [Podman](https://podman.io) or Docker. `mise install` installs the Node and pnpm versions pinned in `mise.toml`. `pnpm install` installs everything else. pnpm refuses package versions less than a day old, and versions published with weaker trust evidence than an earlier one; `pnpm-workspace.yaml` says why.
++
++## Scripts
++
++| Script | What it does |
++|---|---|
++| `pnpm check` | Runs `typecheck`, `lint`, `format:check`, and `test`, reporting every failure instead of stopping at the first |
++| `pnpm typecheck` | Runs `tsc` on the root project, then each package's own `typecheck` script |
++| `pnpm lint` | Oxlint, with type-aware rules |
++| `pnpm format` / `format:check` | Oxfmt: rewrite files, or only report |
++| `pnpm test` | The unit tests |
++| `pnpm test:db` | The database tests; start Postgres first |
++| `pnpm db:up` / `db:down` | Start or stop Postgres 18 in Podman or Docker |
++
++## Workspace
++
++airway is a pnpm workspace. Each package lives in `packages/<name>/`, is private, and carries the same version as every other package. A package exists once it has code; there are no empty placeholders.
++
++Adding a package takes four things:
++
++1. `package.json` with `"private": true`, the shared version, `"type": "module"`, and `"exports": { "./*": "./src/*.ts" }`. Other packages then import `@airway/<name>/<file>`, which resolves to `src/<file>.ts`.
++2. `tsconfig.json` that includes only `src` and sets up the platform the package runs on. `tsconfig.base.json` extends `@tsconfig/strictest` and holds airway's module settings.
++
++   | The package runs in | `extends` | Also set |
++   |---|---|---|
++   | The server, or only in tests | `["@tsconfig/node/tsconfig.json", "../../tsconfig.base.json"]` | |
++   | The browser | `"../../tsconfig.base.json"` | `"lib": ["ESNext", "DOM", "DOM.Iterable"]`, `"types": []` |
++   | Both | `"../../tsconfig.base.json"` | `"lib": ["ESNext"]`, `"types": []` |
++
++   `@tsconfig/node` is a catalog alias for the current Node major's base, such as `npm:@tsconfig/node26`, so a Node upgrade changes one catalog line. A shared package with no Node or DOM types can't touch either platform by accident: `node:fs` or `window` fails to compile.
++3. `src/` for the code.
++4. `tests/` for its tests, mirroring `src/`, with a `tests/tsconfig.json` that extends `../tsconfig.json`, includes `.`, and sets `"types": ["node"]` if the package's own config doesn't. Tests get their own project because their helpers bring in Node's types, and in one shared project those types would reach `src` too. [Testing](testing.md) covers where tests go.
++5. A `typecheck` script: `tsc --project . && tsc --project tests`. `pnpm typecheck` runs it in every package.
++
++`@airway/testing` holds test helpers that more than one package uses. It never ships in the image. A package that uses it lists `"@airway/testing": "workspace:*"` in its `devDependencies`.
++
++## Dependencies
++
++Every dependency's version lives once, in the `catalog` in `pnpm-workspace.yaml`. Each `package.json` says `"catalog:"` instead of a version. `catalogMode: strict` makes `pnpm add` go through the catalog. A version typed into a `package.json` by hand isn't caught, so review rejects it.
++
++To add a dependency, run `pnpm add <name> --filter @airway/<package>`. pnpm adds it to the catalog with an exact version (`savePrefix: ""`) and points the package at it.
++
++## Lint and format
++
++Oxlint runs the rules, and tsgolint runs the type-aware ones with TypeScript 7, reading each file's nearest `tsconfig.json`. The config has two files:
++
++- `oxlint.presets.ts` holds the rules of ESLint's recommended preset and typescript-eslint's `strictTypeChecked` and `stylisticTypeChecked` presets, translated for Oxlint, which has no presets of its own.
++- `oxlint.config.ts` holds airway's own rules, each with a comment saying why.
++
++A few house rules shape how code reads:
++
++- Types, not interfaces, and named return types instead of inline object shapes.
++- Conditions are real booleans: `if (count > 0)`, never `if (count)`.
++- No casts that claim more than the compiler knows. Parse, narrow, or brand instead.
++- Only the file that owns a branded type creates it. Its constructor casts behind a `typescript/no-unsafe-type-assertion` disable comment that says why. When you add a brand, add it to `BRANDS` in `oxlint.config.ts`, so no other file can forge one even with that comment.
++
++Oxlint runs some rules through JavaScript plugins it marks as alpha. `tests/lint.test.ts` lints `tests/fixtures/lint/violations.ts`, which breaks a set of rules on purpose, including every rule that runs as an alpha plugin, and checks the exact count per rule.
++
++Oxfmt formats TypeScript, JSON, and YAML at a width of 100. It skips Markdown.
++
++## Pull requests
++
++[AGENTS.md](../AGENTS.md#pull-requests) has the rules for pull requests.

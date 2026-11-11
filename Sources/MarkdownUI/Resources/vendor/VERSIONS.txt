@@ -1,0 +1,16 @@
+Vendored builds. To update one, download the same path at the new version.
+
+From https://cdn.jsdelivr.net/npm/
+  markdown-it.min.js             markdown-it@14.1.0/dist/markdown-it.min.js
+  markdown-it-task-lists.min.js  markdown-it-task-lists@2.1.1/dist/markdown-it-task-lists.min.js
+  markdown-it-footnote.min.js    markdown-it-footnote@4.0.0/dist/markdown-it-footnote.min.js
+  markdown-it-anchor.min.js      markdown-it-anchor@9.2.0/dist/markdownItAnchor.umd.js
+  markdown-it-emoji.min.js       markdown-it-emoji@3.0.0/dist/markdown-it-emoji.min.js
+  purify.min.js                  dompurify@3.2.6/dist/purify.min.js
+  github-markdown.css            github-markdown-css@5.8.1/github-markdown.css
+  mermaid.min.js                 mermaid@11.12.0/dist/mermaid.min.js
+
+From https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/
+  highlight.min.js               highlight.min.js (the "common" language set)
+  highlight-github.min.css       styles/github.min.css
+  highlight-github-dark.min.css  styles/github-dark.min.css

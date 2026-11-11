@@ -1,0 +1,70 @@
+{
+  "data": {
+    "repositoryOwner": {
+      "repositories": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "Y3Vyc29yOnYyOpK0MjAyNS0xMi0wMlQwMzo1MToyNFrOQgygoQ=="
+        },
+        "nodes": [
+          {
+            "name": "hermes",
+            "owner": {
+              "login": "bojanrajkovic"
+            },
+            "url": "https://github.com/bojanrajkovic/hermes",
+            "isPrivate": true,
+            "issues": {
+              "totalCount": 0
+            },
+            "pullRequests": {
+              "totalCount": 0
+            }
+          },
+          {
+            "name": "airway",
+            "owner": {
+              "login": "bojanrajkovic"
+            },
+            "url": "https://github.com/bojanrajkovic/airway",
+            "isPrivate": false,
+            "issues": {
+              "totalCount": 59
+            },
+            "pullRequests": {
+              "totalCount": 4
+            }
+          },
+          {
+            "name": "hermes-playground",
+            "owner": {
+              "login": "bojanrajkovic"
+            },
+            "url": "https://github.com/bojanrajkovic/hermes-playground",
+            "isPrivate": false,
+            "issues": {
+              "totalCount": 41
+            },
+            "pullRequests": {
+              "totalCount": 8
+            }
+          },
+          {
+            "name": "grounds",
+            "owner": {
+              "login": "bojanrajkovic"
+            },
+            "url": "https://github.com/bojanrajkovic/grounds",
+            "isPrivate": false,
+            "issues": {
+              "totalCount": 2
+            },
+            "pullRequests": {
+              "totalCount": 1
+            }
+          }
+        ]
+      }
+    }
+  }
+}

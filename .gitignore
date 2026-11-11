@@ -1,0 +1,8 @@
+.build/
+build/
+dist/
+*.xcodeproj/
+.DS_Store
+.agents/
+.claude/worktrees/
+.swiftpm/

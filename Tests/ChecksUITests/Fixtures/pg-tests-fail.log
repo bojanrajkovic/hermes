@@ -1,0 +1,276 @@
+﻿2026-11-11T02:46:28.1143357Z Current runner version: '2.338.2'
+2026-11-11T02:46:28.1219152Z ##[group]Runner Image Provisioner
+2026-11-11T02:46:28.1220465Z Hosted Compute Agent
+2026-11-11T02:46:28.1221531Z Version: 20261028.624
+2026-11-11T02:46:28.1222551Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+2026-11-11T02:46:28.1223680Z Build Date: 2026-10-28T21:51:42Z
+2026-11-11T02:46:28.1224923Z Worker ID: {f7e75bf3-60db-4602-969f-9ecb65d59fcb}
+2026-11-11T02:46:28.1246361Z Region: westcentralus
+2026-11-11T02:46:28.1247744Z Cloud: Azure
+2026-11-11T02:46:28.1248630Z ##[endgroup]
+2026-11-11T02:46:28.1250765Z ##[group]Operating System
+2026-11-11T02:46:28.1251845Z Ubuntu
+2026-11-11T02:46:28.1252638Z 26.04.1
+2026-11-11T02:46:28.1253527Z LTS
+2026-11-11T02:46:28.1254343Z ##[endgroup]
+2026-11-11T02:46:28.1255241Z ##[group]Runner Image
+2026-11-11T02:46:28.1256474Z Image: ubuntu-26.04
+2026-11-11T02:46:28.1257361Z Version: 20261101.186.1
+2026-11-11T02:46:28.1259477Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261101.186/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-11T02:46:28.1262106Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261101.186
+2026-11-11T02:46:28.1263751Z ##[endgroup]
+2026-11-11T02:46:28.1265483Z ##[group]GITHUB_TOKEN Permissions
+2026-11-11T02:46:28.1288971Z Contents: read
+2026-11-11T02:46:28.1289911Z Metadata: read
+2026-11-11T02:46:28.1290737Z ##[endgroup]
+2026-11-11T02:46:28.1293920Z Secret source: Actions
+2026-11-11T02:46:28.1295354Z Cache mode: write
+2026-11-11T02:46:28.1301669Z Prepare workflow directory
+2026-11-11T02:46:28.1962795Z Prepare all required actions
+2026-11-11T02:46:28.2133382Z Getting action download info
+2026-11-11T02:46:28.5710459Z Download action repository 'actions/checkout@v3' (SHA:a37ce9120846195fa4ece8f58b268e6043cb2f26)
+2026-11-11T02:46:28.7884448Z Complete job name: tests
+2026-11-11T02:46:28.8711621Z ##[group]Run actions/checkout@v3
+2026-11-11T02:46:28.8712451Z with:
+2026-11-11T02:46:28.8712959Z   repository: bojanrajkovic/hermes-playground
+2026-11-11T02:46:28.8717082Z   token: ***
+2026-11-11T02:46:28.8717536Z   ssh-strict: true
+2026-11-11T02:46:28.8718014Z   persist-credentials: true
+2026-11-11T02:46:28.8718523Z   clean: true
+2026-11-11T02:46:28.8718984Z   sparse-checkout-cone-mode: true
+2026-11-11T02:46:28.8719513Z   fetch-depth: 1
+2026-11-11T02:46:28.8719958Z   fetch-tags: false
+2026-11-11T02:46:28.8720404Z   lfs: false
+2026-11-11T02:46:28.8720842Z   submodules: false
+2026-11-11T02:46:28.8721301Z   set-safe-directory: true
+2026-11-11T02:46:28.8721819Z   allow-unsafe-pr-checkout: false
+2026-11-11T02:46:28.8722542Z ##[endgroup]
+2026-11-11T02:46:29.0802366Z (node:2120) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-11T02:46:29.0833938Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-11T02:46:29.0944325Z Syncing repository: bojanrajkovic/hermes-playground
+2026-11-11T02:46:29.0947010Z ##[group]Getting Git version info
+2026-11-11T02:46:29.0948098Z Working directory is '/home/runner/work/hermes-playground/hermes-playground'
+2026-11-11T02:46:29.0949594Z [command]/usr/bin/git version
+2026-11-11T02:46:29.0950374Z git version 2.56.0
+2026-11-11T02:46:29.0952991Z ##[endgroup]
+2026-11-11T02:46:29.0959323Z Temporarily overriding HOME='/home/runner/work/_temp/726e7712-3cbb-43e5-85ea-d65d4e08e0d6' before making global git config changes
+2026-11-11T02:46:29.0960883Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-11T02:46:29.0962661Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/hermes-playground/hermes-playground
+2026-11-11T02:46:29.0968441Z Deleting the contents of '/home/runner/work/hermes-playground/hermes-playground'
+2026-11-11T02:46:29.0970141Z ##[group]Initializing the repository
+2026-11-11T02:46:29.0971395Z [command]/usr/bin/git init /home/runner/work/hermes-playground/hermes-playground
+2026-11-11T02:46:29.0973132Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-11T02:46:29.0980893Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-11T02:46:29.0982740Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-11T02:46:29.0984206Z hint: call:
+2026-11-11T02:46:29.0985476Z hint:
+2026-11-11T02:46:29.0986769Z hint: 	git config --global init.defaultBranch <name>
+2026-11-11T02:46:29.0988500Z hint:
+2026-11-11T02:46:29.0989771Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-11T02:46:29.0991835Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-11T02:46:29.0993285Z hint:
+2026-11-11T02:46:29.0994507Z hint: 	git branch -m <name>
+2026-11-11T02:46:29.0995643Z hint:
+2026-11-11T02:46:29.0997628Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-11T02:46:29.1000073Z Initialized empty Git repository in /home/runner/work/hermes-playground/hermes-playground/.git/
+2026-11-11T02:46:29.1004805Z [command]/usr/bin/git remote add origin https://github.com/bojanrajkovic/hermes-playground
+2026-11-11T02:46:29.1036423Z ##[endgroup]
+2026-11-11T02:46:29.1038192Z ##[group]Disabling automatic garbage collection
+2026-11-11T02:46:29.1040140Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-11T02:46:29.1075518Z ##[endgroup]
+2026-11-11T02:46:29.1077734Z ##[group]Setting up auth
+2026-11-11T02:46:29.1081938Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-11T02:46:29.1118055Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-11T02:46:29.2342533Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-11T02:46:29.2346961Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-11T02:46:29.2350666Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-11T02:46:29.2353161Z ##[endgroup]
+2026-11-11T02:46:29.2354790Z ##[group]Fetching the repository
+2026-11-11T02:46:29.2356633Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --progress --no-recurse-submodules --depth=1 origin +2daac3a8ce3a17af1c2fbcc92bcad152895677a4:refs/remotes/pull/3/merge
+2026-11-11T02:46:29.5297286Z remote: Enumerating objects: 54, done.        
+2026-11-11T02:46:29.5302740Z remote: Counting objects:   1% (1/54)        
+2026-11-11T02:46:29.5304400Z remote: Counting objects:   3% (2/54)        
+2026-11-11T02:46:29.5308783Z remote: Counting objects:   5% (3/54)        
+2026-11-11T02:46:29.5309745Z remote: Counting objects:   7% (4/54)        
+2026-11-11T02:46:29.5310465Z remote: Counting objects:   9% (5/54)        
+2026-11-11T02:46:29.5311559Z remote: Counting objects:  11% (6/54)        
+2026-11-11T02:46:29.5312683Z remote: Counting objects:  12% (7/54)        
+2026-11-11T02:46:29.5313367Z remote: Counting objects:  14% (8/54)        
+2026-11-11T02:46:29.5314047Z remote: Counting objects:  16% (9/54)        
+2026-11-11T02:46:29.5315127Z remote: Counting objects:  18% (10/54)        
+2026-11-11T02:46:29.5315910Z remote: Counting objects:  20% (11/54)        
+2026-11-11T02:46:29.5317208Z remote: Counting objects:  22% (12/54)        
+2026-11-11T02:46:29.5318021Z remote: Counting objects:  24% (13/54)        
+2026-11-11T02:46:29.5319000Z remote: Counting objects:  25% (14/54)        
+2026-11-11T02:46:29.5320146Z remote: Counting objects:  27% (15/54)        
+2026-11-11T02:46:29.5321238Z remote: Counting objects:  29% (16/54)        
+2026-11-11T02:46:29.5322353Z remote: Counting objects:  31% (17/54)        
+2026-11-11T02:46:29.5323462Z remote: Counting objects:  33% (18/54)        
+2026-11-11T02:46:29.5324592Z remote: Counting objects:  35% (19/54)        
+2026-11-11T02:46:29.5325693Z remote: Counting objects:  37% (20/54)        
+2026-11-11T02:46:29.5327248Z remote: Counting objects:  38% (21/54)        
+2026-11-11T02:46:29.5328370Z remote: Counting objects:  40% (22/54)        
+2026-11-11T02:46:29.5329512Z remote: Counting objects:  42% (23/54)        
+2026-11-11T02:46:29.5330616Z remote: Counting objects:  44% (24/54)        
+2026-11-11T02:46:29.5331716Z remote: Counting objects:  46% (25/54)        
+2026-11-11T02:46:29.5332827Z remote: Counting objects:  48% (26/54)        
+2026-11-11T02:46:29.5333943Z remote: Counting objects:  50% (27/54)        
+2026-11-11T02:46:29.5335236Z remote: Counting objects:  51% (28/54)        
+2026-11-11T02:46:29.5336665Z remote: Counting objects:  53% (29/54)        
+2026-11-11T02:46:29.5337817Z remote: Counting objects:  55% (30/54)        
+2026-11-11T02:46:29.5338932Z remote: Counting objects:  57% (31/54)        
+2026-11-11T02:46:29.5340036Z remote: Counting objects:  59% (32/54)        
+2026-11-11T02:46:29.5341133Z remote: Counting objects:  61% (33/54)        
+2026-11-11T02:46:29.5342240Z remote: Counting objects:  62% (34/54)        
+2026-11-11T02:46:29.5343344Z remote: Counting objects:  64% (35/54)        
+2026-11-11T02:46:29.5344440Z remote: Counting objects:  66% (36/54)        
+2026-11-11T02:46:29.5345528Z remote: Counting objects:  68% (37/54)        
+2026-11-11T02:46:29.5346974Z remote: Counting objects:  70% (38/54)        
+2026-11-11T02:46:29.5348092Z remote: Counting objects:  72% (39/54)        
+2026-11-11T02:46:29.5349186Z remote: Counting objects:  74% (40/54)        
+2026-11-11T02:46:29.5350284Z remote: Counting objects:  75% (41/54)        
+2026-11-11T02:46:29.5351373Z remote: Counting objects:  77% (42/54)        
+2026-11-11T02:46:29.5352475Z remote: Counting objects:  79% (43/54)        
+2026-11-11T02:46:29.5353794Z remote: Counting objects:  81% (44/54)        
+2026-11-11T02:46:29.5354922Z remote: Counting objects:  83% (45/54)        
+2026-11-11T02:46:29.5356211Z remote: Counting objects:  85% (46/54)        
+2026-11-11T02:46:29.5357375Z remote: Counting objects:  87% (47/54)        
+2026-11-11T02:46:29.5358476Z remote: Counting objects:  88% (48/54)        
+2026-11-11T02:46:29.5359593Z remote: Counting objects:  90% (49/54)        
+2026-11-11T02:46:29.5360697Z remote: Counting objects:  92% (50/54)        
+2026-11-11T02:46:29.5361794Z remote: Counting objects:  94% (51/54)        
+2026-11-11T02:46:29.5362905Z remote: Counting objects:  96% (52/54)        
+2026-11-11T02:46:29.5364028Z remote: Counting objects:  98% (53/54)        
+2026-11-11T02:46:29.5365138Z remote: Counting objects: 100% (54/54)        
+2026-11-11T02:46:29.5366490Z remote: Counting objects: 100% (54/54), done.        
+2026-11-11T02:46:29.5367729Z remote: Compressing objects:   2% (1/44)        
+2026-11-11T02:46:29.5368889Z remote: Compressing objects:   4% (2/44)        
+2026-11-11T02:46:29.5370059Z remote: Compressing objects:   6% (3/44)        
+2026-11-11T02:46:29.5371214Z remote: Compressing objects:   9% (4/44)        
+2026-11-11T02:46:29.5372424Z remote: Compressing objects:  11% (5/44)        
+2026-11-11T02:46:29.5373683Z remote: Compressing objects:  13% (6/44)        
+2026-11-11T02:46:29.5374835Z remote: Compressing objects:  15% (7/44)        
+2026-11-11T02:46:29.5375979Z remote: Compressing objects:  18% (8/44)        
+2026-11-11T02:46:29.5377414Z remote: Compressing objects:  20% (9/44)        
+2026-11-11T02:46:29.5378575Z remote: Compressing objects:  22% (10/44)        
+2026-11-11T02:46:29.5379751Z remote: Compressing objects:  25% (11/44)        
+2026-11-11T02:46:29.5380656Z remote: Compressing objects:  27% (12/44)        
+2026-11-11T02:46:29.5381359Z remote: Compressing objects:  29% (13/44)        
+2026-11-11T02:46:29.5382050Z remote: Compressing objects:  31% (14/44)        
+2026-11-11T02:46:29.5382744Z remote: Compressing objects:  34% (15/44)        
+2026-11-11T02:46:29.5383454Z remote: Compressing objects:  36% (16/44)        
+2026-11-11T02:46:29.5384156Z remote: Compressing objects:  38% (17/44)        
+2026-11-11T02:46:29.5384852Z remote: Compressing objects:  40% (18/44)        
+2026-11-11T02:46:29.5385715Z remote: Compressing objects:  43% (19/44)        
+2026-11-11T02:46:29.5386654Z remote: Compressing objects:  45% (20/44)        
+2026-11-11T02:46:29.5387350Z remote: Compressing objects:  47% (21/44)        
+2026-11-11T02:46:29.5388046Z remote: Compressing objects:  50% (22/44)        
+2026-11-11T02:46:29.5388746Z remote: Compressing objects:  52% (23/44)        
+2026-11-11T02:46:29.5389452Z remote: Compressing objects:  54% (24/44)        
+2026-11-11T02:46:29.5390159Z remote: Compressing objects:  56% (25/44)        
+2026-11-11T02:46:29.5390861Z remote: Compressing objects:  59% (26/44)        
+2026-11-11T02:46:29.5391582Z remote: Compressing objects:  61% (27/44)        
+2026-11-11T02:46:29.5392291Z remote: Compressing objects:  63% (28/44)        
+2026-11-11T02:46:29.5393010Z remote: Compressing objects:  65% (29/44)        
+2026-11-11T02:46:29.5393709Z remote: Compressing objects:  68% (30/44)        
+2026-11-11T02:46:29.5394405Z remote: Compressing objects:  70% (31/44)        
+2026-11-11T02:46:29.5395141Z remote: Compressing objects:  72% (32/44)        
+2026-11-11T02:46:29.5395841Z remote: Compressing objects:  75% (33/44)        
+2026-11-11T02:46:29.5396768Z remote: Compressing objects:  77% (34/44)        
+2026-11-11T02:46:29.5398100Z remote: Compressing objects:  79% (35/44)        
+2026-11-11T02:46:29.5398859Z remote: Compressing objects:  81% (36/44)        
+2026-11-11T02:46:29.5399568Z remote: Compressing objects:  84% (37/44)        
+2026-11-11T02:46:29.5400277Z remote: Compressing objects:  86% (38/44)        
+2026-11-11T02:46:29.5401050Z remote: Compressing objects:  88% (39/44)        
+2026-11-11T02:46:29.5401860Z remote: Compressing objects:  90% (40/44)        
+2026-11-11T02:46:29.5402594Z remote: Compressing objects:  93% (41/44)        
+2026-11-11T02:46:29.5403569Z remote: Compressing objects:  95% (42/44)        
+2026-11-11T02:46:29.5404285Z remote: Compressing objects:  97% (43/44)        
+2026-11-11T02:46:29.5404992Z remote: Compressing objects: 100% (44/44)        
+2026-11-11T02:46:29.5405760Z remote: Compressing objects: 100% (44/44), done.        
+2026-11-11T02:46:29.5718890Z remote: Total 54 (delta 0), reused 50 (delta 0), pack-reused 0 (from 0)        
+2026-11-11T02:46:29.5794887Z From https://github.com/bojanrajkovic/hermes-playground
+2026-11-11T02:46:29.5797067Z  * [new ref]         2daac3a8ce3a17af1c2fbcc92bcad152895677a4 -> pull/3/merge
+2026-11-11T02:46:29.5803179Z ##[endgroup]
+2026-11-11T02:46:29.5804828Z ##[group]Determining the checkout info
+2026-11-11T02:46:29.5807010Z ##[endgroup]
+2026-11-11T02:46:29.5808595Z ##[group]Checking out the ref
+2026-11-11T02:46:29.5810918Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/3/merge
+2026-11-11T02:46:29.5881840Z Note: switching to 'refs/remotes/pull/3/merge'.
+2026-11-11T02:46:29.5886791Z 
+2026-11-11T02:46:29.5887793Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-11T02:46:29.5890870Z changes and commit them, and you can discard any commits you make in this
+2026-11-11T02:46:29.5893025Z state without impacting any branches by switching back to a branch.
+2026-11-11T02:46:29.5894362Z 
+2026-11-11T02:46:29.5895175Z If you want to create a new branch to retain commits you create, you may
+2026-11-11T02:46:29.5897313Z do so (now or later) by using -c with the switch command. Example:
+2026-11-11T02:46:29.5898528Z 
+2026-11-11T02:46:29.5899076Z   git switch -c <new-branch-name>
+2026-11-11T02:46:29.5899852Z 
+2026-11-11T02:46:29.5900404Z Or undo this operation with:
+2026-11-11T02:46:29.5901068Z 
+2026-11-11T02:46:29.5901574Z   git switch -
+2026-11-11T02:46:29.5902134Z 
+2026-11-11T02:46:29.5903092Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-11T02:46:29.5904535Z 
+2026-11-11T02:46:29.5906302Z HEAD is now at 2daac3a Merge aa3e376b7c00cbc6cce94635c30ae16a647ec7ba into 584b41724e56774d598c03d83ec3c48590e1d4e5
+2026-11-11T02:46:29.5910190Z ##[endgroup]
+2026-11-11T02:46:29.5939341Z [command]/usr/bin/git log -1 --format='%H'
+2026-11-11T02:46:29.5967712Z '2daac3a8ce3a17af1c2fbcc92bcad152895677a4'
+2026-11-11T02:46:29.6252539Z ##[group]Run bash scripts/run-tests.sh
+2026-11-11T02:46:29.6253703Z [36;1mbash scripts/run-tests.sh[0m
+2026-11-11T02:46:29.6341820Z shell: /usr/bin/bash -e {0}
+2026-11-11T02:46:29.6342429Z ##[endgroup]
+2026-11-11T02:46:29.6460101Z ##[group]pricing
+2026-11-11T02:46:29.6461650Z [1msrc/ts/pricing.test.ts[0m
+2026-11-11T02:46:29.6463984Z   [32m✓[0m billableWeightKg uses actual weight for dense parcels [2m(3 ms)[0m
+2026-11-11T02:46:29.6466528Z   [32m✓[0m billableWeightKg uses volumetric weight for light parcels [2m(1 ms)[0m
+2026-11-11T02:46:29.6468418Z   [32m✓[0m quote adds the base rate [2m(1 ms)[0m
+2026-11-11T02:46:29.6470392Z ##[endgroup]
+2026-11-11T02:46:29.6471879Z ##[group]tracker
+2026-11-11T02:46:29.6472961Z [1msrc/ts/tracker.test.ts[0m
+2026-11-11T02:46:29.6474332Z   [32m✓[0m register rejects duplicate ids [2m(2 ms)[0m
+2026-11-11T02:46:29.6475877Z   [32m✓[0m record appends an event [2m(1 ms)[0m
+2026-11-11T02:46:29.6477988Z   [31m✗[0m record rejects delivered -> in_transit [2m(14 ms)[0m
+2026-11-11T02:46:29.6493131Z 
+2026-11-11T02:46:29.6494136Z   [31m● Tracker › record rejects delivered -> in_transit[0m
+2026-11-11T02:46:29.6495157Z 
+2026-11-11T02:46:29.6495665Z     expect(received).toThrow(expected)
+2026-11-11T02:46:29.6496635Z 
+2026-11-11T02:46:29.6497392Z     Expected constructor: [32mInvalidTransitionError[0m
+2026-11-11T02:46:29.6498856Z     Received function did not throw
+2026-11-11T02:46:29.6499651Z 
+2026-11-11T02:46:29.6500219Z       52 |     const from = currentStatus(shipment);
+2026-11-11T02:46:29.6501487Z     > 53 |     if (!ALLOWED[from].includes(status)) {
+2026-11-11T02:46:29.6502702Z          |                        ^
+2026-11-11T02:46:29.6503936Z       54 |       throw new InvalidTransitionError(from, status);
+2026-11-11T02:46:29.6504906Z 
+2026-11-11T02:46:29.6505531Z       at Object.<anonymous> (src/ts/tracker.test.ts:41:38)
+2026-11-11T02:46:29.6506899Z 
+2026-11-11T02:46:29.6534807Z ##[error]Expected InvalidTransitionError, but the function did not throw
+2026-11-11T02:46:29.6548699Z   [32m✓[0m countByStatus counts every status [2m(1 ms)[0m
+2026-11-11T02:46:29.6549914Z ##[endgroup]
+2026-11-11T02:46:29.6550748Z ##[group]format
+2026-11-11T02:46:29.6551301Z [1msrc/ts/format.test.ts[0m
+2026-11-11T02:46:29.6552018Z   [32m✓[0m formatEvent prints the note [2m(1 ms)[0m
+2026-11-11T02:46:29.6552851Z   [32m✓[0m formatSummary colors the status [2m(2 ms)[0m
+2026-11-11T02:46:29.6553811Z ##[endgroup]
+2026-11-11T02:46:29.6554069Z 
+2026-11-11T02:46:29.6554390Z [31m[1mTests: 1 failed[0m, 8 passed, 9 total
+2026-11-11T02:46:29.6559534Z ##[error]Process completed with exit code 1.
+2026-11-11T02:46:29.6807972Z Post job cleanup.
+2026-11-11T02:46:29.7615008Z (node:2208) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-11T02:46:29.7618272Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-11T02:46:29.7646994Z [command]/usr/bin/git version
+2026-11-11T02:46:29.7688837Z git version 2.56.0
+2026-11-11T02:46:29.7727143Z Temporarily overriding HOME='/home/runner/work/_temp/fe071e3d-9e27-44ea-a419-4297ecbf0c9c' before making global git config changes
+2026-11-11T02:46:29.7730313Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-11T02:46:29.7733023Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/hermes-playground/hermes-playground
+2026-11-11T02:46:29.7773886Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-11T02:46:29.7827621Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-11T02:46:29.8148376Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-11T02:46:29.8171139Z http.https://github.com/.extraheader
+2026-11-11T02:46:29.8181347Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-11T02:46:29.8221549Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-11T02:46:29.8670190Z Cleaning up orphan processes
+2026-11-11T02:46:29.9097321Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

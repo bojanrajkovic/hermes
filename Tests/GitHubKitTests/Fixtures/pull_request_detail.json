@@ -1,0 +1,117 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwDOVkPx6c8AAAABOQYNoQ",
+        "body": "A builder query is a JSON spec with Honeycomb's field names. `parseSpec` checks one and fills in its defaults, or returns issues that name the wrong field and list what's allowed there.\n\nThe zod schema is generated from the registry: one variant per dataset, and within it one filter variant per column. So a spec can only name that dataset's columns, with the operations and values each column's kind allows. Three checks span fields: a calculation, breakdown, or order appears once, an order names a calculation or breakdown of the same spec, and a having names a calculation and compares with a value of the kind it gives.\n\n- `COUNT` takes no column, `COUNT_DISTINCT` takes any, `SUM`, `AVG`, and the percentiles take a metric, and `MIN` and `MAX` take any number, integer, timestamp, or date column.\n- Dates and times are ISO text. A time must carry its offset.\n- Each dataset now declares its grain, and a spec can't bucket finer than it: `nights` allows `night`, `week`, and `month`.\n- A spec without a granularity asks for totals only.\n- A query covers at most 3,660 nights, and a finer granularity fewer: `2s` one night, `30s` a week, `1m` a fortnight, `5m` a month, `15m` a quarter, and `1h` a year. A spec over the limit is refused with the steps its range allows.\n- `granularity: \"auto\"` picks the finest allowed step that gives one group at most 300 buckets. The pick depends only on the spec, and `granularityOf` returns it.\n\nThe schema is as exact as the registry allows, which makes it large as JSON Schema (about 68,000 characters). What an agent tool publishes is that tool's choice; it validates with this schema either way.\n\n`@airway/contract/query/arbitrary` has fast-check arbitraries of valid specs, built from the registry, for tests of anything that takes a spec. fast-check stays a dev dependency: only tests import them.\n\nPart of #6.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+        "comments": {
+          "nodes": []
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "id": "PRR_kwDOVkPx6c8AAAABXNqjZw",
+              "author": {
+                "__typename": "User",
+                "login": "bojanrajkovic",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+              },
+              "state": "COMMENTED",
+              "body": "",
+              "submittedAt": "2026-11-11T02:14:53Z"
+            }
+          ]
+        },
+        "reviewRequests": {
+          "nodes": []
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "2e37d09f269f804235064028c1dc7279e1b9b5fd",
+                "messageHeadline": "feat(contract): define the query spec"
+              }
+            },
+            {
+              "commit": {
+                "oid": "815bf1e1e22e7547b42a8fe53b7252840a637ce6",
+                "messageHeadline": "fix(contract): reject a time Temporal can't read"
+              }
+            },
+            {
+              "commit": {
+                "oid": "30af686f40a4d14ffe5f1b8ee53119380d9c9d4a",
+                "messageHeadline": "docs: list the query spec in the docs index"
+              }
+            },
+            {
+              "commit": {
+                "oid": "9494e3cf425ae7cb5732a0fb129f38819eb2deac",
+                "messageHeadline": "fix(contract): reject repeated clauses and say what nights accepts"
+              }
+            },
+            {
+              "commit": {
+                "oid": "ba9b5ff0286c676cb7f41672472c054602233683",
+                "messageHeadline": "fix(contract): keep the repeat check to clauses an order can name"
+              }
+            },
+            {
+              "commit": {
+                "oid": "4bd78988c833563343b311c798a7181c0a8ddae0",
+                "messageHeadline": "feat(contract): limit how many nights each granularity covers"
+              }
+            },
+            {
+              "commit": {
+                "oid": "e97a1511f429b099c8581e10adf7baf860cecac8",
+                "messageHeadline": "feat(contract): let a spec ask for an automatic granularity"
+              }
+            },
+            {
+              "commit": {
+                "oid": "88a4762599dd00849120a7fd7788296c1c86d1ad",
+                "messageHeadline": "refactor(contract): derive the auto granularity from step lengths and…"
+              }
+            },
+            {
+              "commit": {
+                "oid": "d615b1576dc23e289b61e89d48f2daa60fc5fc53",
+                "messageHeadline": "docs(contract): say the range limits are chosen, not derived"
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOVkPx6c61_s72",
+              "path": "packages/contract/src/query/spec.ts",
+              "line": 28,
+              "startLine": 28,
+              "diffSide": "RIGHT",
+              "startDiffSide": null,
+              "isResolved": true,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOVkPx6c8AAAABDjIZ8w",
+                    "author": {
+                      "__typename": "User",
+                      "login": "bojanrajkovic",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+                    },
+                    "body": "Is this doc comment still correct?",
+                    "createdAt": "2026-11-11T02:14:53Z"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

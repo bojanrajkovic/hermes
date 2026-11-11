@@ -1,0 +1,147 @@
+{
+  "data": {
+    "repository": {
+      "issues": {
+        "totalCount": 59,
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMS0wNVQxNzo1MTozMVrPAAAAAXM5FX8="
+        },
+        "nodes": [
+          {
+            "id": "I_kwDOVkPx6c8AAAABczjJlw",
+            "number": 6,
+            "title": "feat(contract): define query specs, their links, and their results",
+            "url": "https://github.com/bojanrajkovic/airway/issues/6",
+            "state": "OPEN",
+            "createdAt": "2026-11-05T17:16:44Z",
+            "updatedAt": "2026-11-11T01:23:41Z",
+            "author": {
+              "__typename": "User",
+              "login": "bojanrajkovic",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "lane: foundation",
+                  "color": "0e8a16"
+                },
+                {
+                  "name": "size: XL",
+                  "color": "e99695"
+                },
+                {
+                  "name": "area: query engine",
+                  "color": "c5def5"
+                },
+                {
+                  "name": "area: explorer",
+                  "color": "c5def5"
+                },
+                {
+                  "name": "area: mcp",
+                  "color": "c5def5"
+                }
+              ]
+            },
+            "comments": {
+              "totalCount": 0
+            },
+            "assignees": {
+              "nodes": []
+            },
+            "closedByPullRequestsReferences": {
+              "nodes": [
+                {
+                  "number": 96,
+                  "title": "feat(contract): define query results and the agent row cap",
+                  "state": "OPEN",
+                  "headRefName": "query-results"
+                }
+              ]
+            }
+          },
+          {
+            "id": "I_kwDOVkPx6c8AAAABczkugA",
+            "number": 41,
+            "title": "feat(web): chart explorer results and list them in a table",
+            "url": "https://github.com/bojanrajkovic/airway/issues/41",
+            "state": "OPEN",
+            "createdAt": "2026-11-05T17:18:19Z",
+            "updatedAt": "2026-11-11T01:23:45Z",
+            "author": {
+              "__typename": "User",
+              "login": "bojanrajkovic",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "lane: ui",
+                  "color": "d93f0b"
+                },
+                {
+                  "name": "size: L",
+                  "color": "f9d0c4"
+                },
+                {
+                  "name": "area: explorer",
+                  "color": "c5def5"
+                }
+              ]
+            },
+            "comments": {
+              "totalCount": 0
+            },
+            "assignees": {
+              "nodes": []
+            },
+            "closedByPullRequestsReferences": {
+              "nodes": []
+            }
+          },
+          {
+            "id": "I_kwDOVkPx6c8AAAABczlIUw",
+            "number": 50,
+            "title": "feat(mcp): add the instructions block, describe_datasets, run_query, and run_sql",
+            "url": "https://github.com/bojanrajkovic/airway/issues/50",
+            "state": "OPEN",
+            "createdAt": "2026-11-05T17:18:43Z",
+            "updatedAt": "2026-11-11T01:23:47Z",
+            "author": {
+              "__typename": "User",
+              "login": "bojanrajkovic",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "lane: mcp",
+                  "color": "0052cc"
+                },
+                {
+                  "name": "size: M",
+                  "color": "fef2c0"
+                },
+                {
+                  "name": "area: mcp",
+                  "color": "c5def5"
+                }
+              ]
+            },
+            "comments": {
+              "totalCount": 0
+            },
+            "assignees": {
+              "nodes": []
+            },
+            "closedByPullRequestsReferences": {
+              "nodes": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

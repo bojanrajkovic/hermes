@@ -1,0 +1,292 @@
+{
+  "data": {
+    "search": {
+      "issueCount": 34,
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "Y3Vyc29yOjM0"
+      },
+      "nodes": [
+        {
+          "id": "PR_kwDOVkPx6c8AAAABOQYQvg",
+          "number": 96,
+          "title": "feat(contract): define query results and the agent row cap",
+          "url": "https://github.com/bojanrajkovic/airway/pull/96",
+          "isDraft": false,
+          "createdAt": "2026-11-11T00:54:05Z",
+          "updatedAt": "2026-11-11T02:15:28Z",
+          "headRefName": "query-results",
+          "baseRefName": "query-links",
+          "headRefOid": "dcd01fd72064f966f24dd1197cf5a273b8b132f8",
+          "reviewDecision": null,
+          "additions": 224,
+          "deletions": 1,
+          "changedFiles": 6,
+          "mergeable": "MERGEABLE",
+          "repository": {
+            "name": "airway",
+            "owner": {
+              "login": "bojanrajkovic"
+            }
+          },
+          "author": {
+            "__typename": "User",
+            "login": "bojanrajkovic",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "dcd01fd72064f966f24dd1197cf5a273b8b132f8",
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          },
+          "stack": {
+            "id": "PRS_kwDOVkPx6c4AMxgs",
+            "number": 97,
+            "size": 3,
+            "baseRefName": "main"
+          },
+          "stackEntry": {
+            "position": 3
+          },
+          "closingIssuesReferences": {
+            "nodes": [
+              {
+                "number": 6
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_kwDOVkPx6c8AAAABOQYPDA",
+          "number": 95,
+          "title": "feat(contract): give a query one canonical form, link, and short code",
+          "url": "https://github.com/bojanrajkovic/airway/pull/95",
+          "isDraft": false,
+          "createdAt": "2026-11-11T00:54:03Z",
+          "updatedAt": "2026-11-11T02:15:29Z",
+          "headRefName": "query-links",
+          "baseRefName": "query-spec",
+          "headRefOid": "d2414e603a5bc564b4d5e9d14c6f042195929502",
+          "reviewDecision": null,
+          "additions": 520,
+          "deletions": 1,
+          "changedFiles": 8,
+          "mergeable": "MERGEABLE",
+          "repository": {
+            "name": "airway",
+            "owner": {
+              "login": "bojanrajkovic"
+            }
+          },
+          "author": {
+            "__typename": "User",
+            "login": "bojanrajkovic",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "d2414e603a5bc564b4d5e9d14c6f042195929502",
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          },
+          "stack": {
+            "id": "PRS_kwDOVkPx6c4AMxgs",
+            "number": 97,
+            "size": 3,
+            "baseRefName": "main"
+          },
+          "stackEntry": {
+            "position": 2
+          },
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "PR_kwDOVkPx6c8AAAABOQYNoQ",
+          "number": 94,
+          "title": "feat(contract): define the query spec",
+          "url": "https://github.com/bojanrajkovic/airway/pull/94",
+          "isDraft": false,
+          "createdAt": "2026-11-11T00:54:01Z",
+          "updatedAt": "2026-11-11T02:15:28Z",
+          "headRefName": "query-spec",
+          "baseRefName": "main",
+          "headRefOid": "d615b1576dc23e289b61e89d48f2daa60fc5fc53",
+          "reviewDecision": null,
+          "additions": 1093,
+          "deletions": 10,
+          "changedFiles": 14,
+          "mergeable": "MERGEABLE",
+          "repository": {
+            "name": "airway",
+            "owner": {
+              "login": "bojanrajkovic"
+            }
+          },
+          "author": {
+            "__typename": "User",
+            "login": "bojanrajkovic",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "d615b1576dc23e289b61e89d48f2daa60fc5fc53",
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          },
+          "stack": {
+            "id": "PRS_kwDOVkPx6c4AMxgs",
+            "number": 97,
+            "size": 3,
+            "baseRefName": "main"
+          },
+          "stackEntry": {
+            "position": 1
+          },
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "PR_kwDOVkPx6c8AAAABOPV1TQ",
+          "number": 91,
+          "title": "chore(main): release 0.1.1",
+          "url": "https://github.com/bojanrajkovic/airway/pull/91",
+          "isDraft": false,
+          "createdAt": "2026-11-10T23:12:08Z",
+          "updatedAt": "2026-11-11T01:09:06Z",
+          "headRefName": "release-please--branches--main--components--airway",
+          "baseRefName": "main",
+          "headRefOid": "c31127d6fa135f40753ea2c1f5df6606ca3ad738",
+          "reviewDecision": null,
+          "additions": 6,
+          "deletions": 6,
+          "changedFiles": 6,
+          "mergeable": "MERGEABLE",
+          "repository": {
+            "name": "airway",
+            "owner": {
+              "login": "bojanrajkovic"
+            }
+          },
+          "author": {
+            "__typename": "Bot",
+            "login": "bojan-s-releaser-bot",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/110747?v=4"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "name": "autorelease: pending",
+                "color": "ededed"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "c31127d6fa135f40753ea2c1f5df6606ca3ad738",
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          },
+          "stack": null,
+          "stackEntry": null,
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "PR_kwDOVqHLzs8AAAABORhKPQ",
+          "number": 27,
+          "title": "Bump chalk from 2.4.2 to 6.0.1",
+          "url": "https://github.com/bojanrajkovic/hermes-playground/pull/27",
+          "isDraft": false,
+          "createdAt": "2026-11-11T02:47:14Z",
+          "updatedAt": "2026-11-11T02:47:18Z",
+          "headRefName": "dependabot/npm_and_yarn/chalk-6.0.1",
+          "baseRefName": "main",
+          "headRefOid": "166f15ca4bd917b8474eac4ce78fb1c3a3dcd0ca",
+          "reviewDecision": null,
+          "additions": 1,
+          "deletions": 1,
+          "changedFiles": 1,
+          "mergeable": "MERGEABLE",
+          "repository": {
+            "name": "hermes-playground",
+            "owner": {
+              "login": "bojanrajkovic"
+            }
+          },
+          "author": {
+            "__typename": "Bot",
+            "avatarUrl": "https://avatars.githubusercontent.com/in/29110?v=4",
+            "login": "dependabot"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "color": "0366d6",
+                "name": "dependencies"
+              },
+              {
+                "color": "168700",
+                "name": "javascript"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "166f15ca4bd917b8474eac4ce78fb1c3a3dcd0ca",
+                  "statusCheckRollup": {
+                    "state": "FAILURE"
+                  }
+                }
+              }
+            ]
+          },
+          "stack": null,
+          "stackEntry": null,
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        }
+      ]
+    }
+  }
+}

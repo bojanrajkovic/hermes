@@ -1,0 +1,60 @@
+{
+  "data": {
+    "repository": {
+      "object": {
+        "statusCheckRollup": {
+          "contexts": {
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "Nw"
+            },
+            "nodes": [
+              {
+                "__typename": "CheckRun",
+                "databaseId": 130274795380,
+                "name": "Lint and test",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+                "startedAt": "2026-11-11T02:15:36Z",
+                "completedAt": "2026-11-11T02:16:09Z",
+                "detailsUrl": "https://github.com/bojanrajkovic/airway/actions/runs/42944768580/job/130274795380",
+                "checkSuite": {
+                  "app": {
+                    "name": "GitHub Actions"
+                  },
+                  "workflowRun": {
+                    "databaseId": 42944768580,
+                    "workflow": {
+                      "name": "CI"
+                    }
+                  }
+                }
+              },
+              {
+                "__typename": "CheckRun",
+                "databaseId": 130274795332,
+                "name": "PR title",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+                "startedAt": "2026-11-11T02:15:38Z",
+                "completedAt": "2026-11-11T02:15:45Z",
+                "detailsUrl": "https://github.com/bojanrajkovic/airway/actions/runs/42944768634/job/130274795332",
+                "checkSuite": {
+                  "app": {
+                    "name": "GitHub Actions"
+                  },
+                  "workflowRun": {
+                    "databaseId": 42944768634,
+                    "workflow": {
+                      "name": "PR title"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
