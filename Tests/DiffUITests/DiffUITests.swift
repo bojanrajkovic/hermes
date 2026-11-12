@@ -206,6 +206,25 @@ struct ModelTests {
         )
     }
 
+    @Test func markingTheCurrentFileViewedMovesToTheNextFile() async {
+        let model = model()
+        await model.show(text: sample)
+        let (first, second) = (model.files[0], model.files[1])
+        model.scroll.scroll(to: first.id)
+
+        model.setViewed(true, for: first)
+        #expect(first.isCollapsed)
+        #expect(model.scroll.request?.row == RowID(file: second.id, item: .header))
+
+        // A file that is not the current one collapses where it is.
+        let serial = model.scroll.request?.serial
+        model.setViewed(true, for: model.files[2])
+        #expect(model.scroll.request?.serial == serial)
+        // Unmarking does not move the list.
+        model.setViewed(false, for: second)
+        #expect(model.scroll.request?.serial == serial)
+    }
+
     @Test func aReloadKeepsUnchangedFilesAndTheirState() async {
         let model = model()
         await model.show(text: sample)

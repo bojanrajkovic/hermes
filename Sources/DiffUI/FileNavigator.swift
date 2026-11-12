@@ -19,6 +19,7 @@ struct FileNavigator: View {
                 FileTreeList(
                     nodes: fileTree(files.map { ($0.id, $0.diff.path) }),
                     files: Dictionary(files.map { ($0.id, $0) }) { first, _ in first },
+                    model: model,
                     scroll: model.scroll,
                     collapsed: $collapsed
                 )
@@ -52,13 +53,14 @@ struct FileNavigator: View {
 private struct FileTreeList: View {
     let nodes: [FileTreeNode]
     let files: [FileDiff.ID: FileModel]
+    let model: DiffModel
     let scroll: DiffScrollState
     @Binding var collapsed: Set<FileTreeNode.ID>
 
     var body: some View {
         ScrollViewReader { proxy in
             List(selection: selection) {
-                FileTreeRows(nodes: nodes, files: files, collapsed: $collapsed)
+                FileTreeRows(nodes: nodes, files: files, model: model, collapsed: $collapsed)
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
@@ -84,6 +86,7 @@ private struct FileTreeList: View {
 private struct FileTreeRows: View {
     let nodes: [FileTreeNode]
     let files: [FileDiff.ID: FileModel]
+    let model: DiffModel
     @Binding var collapsed: Set<FileTreeNode.ID>
 
     var body: some View {
@@ -99,7 +102,7 @@ private struct FileTreeRows: View {
                     .opacity(node.children.isEmpty ? 0 : 1)
                     .accessibilityHidden(node.children.isEmpty)
                 if let fileID = node.fileID, let file = files[fileID] {
-                    FileNavigatorRow(name: node.name, file: file)
+                    FileNavigatorRow(name: node.name, file: file, model: model)
                 } else {
                     Label(node.name, systemImage: "folder")
                         .lineLimit(1)
@@ -124,6 +127,7 @@ private struct FileTreeRows: View {
 private struct FileNavigatorRow: View {
     let name: String
     let file: FileModel
+    let model: DiffModel
 
     var body: some View {
         HStack(spacing: 6) {
@@ -145,7 +149,7 @@ private struct FileNavigatorRow: View {
         }
         .help(file.diff.path)
         .contextMenu {
-            Button(file.isViewed ? "Mark as Unviewed" : "Mark as Viewed") { file.setViewed(!file.isViewed) }
+            Button(file.isViewed ? "Mark as Unviewed" : "Mark as Viewed") { model.setViewed(!file.isViewed, for: file) }
         }
     }
 }

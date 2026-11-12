@@ -303,3 +303,8 @@ symbols with one name both show up.
 layout, and code size. It reaches the visible diff through the
 `diffModel` focused value. The layout and the code font size are stored in
 user defaults under `DiffUI.layout` and `DiffUI.codeFontSize`.
+
+Marking a file viewed collapses it. When it is the file being read, the
+collapse would pull everything after it up past the top of the list, so
+`DiffModel.setViewed(_:for:)` scrolls to the next file's header instead. A file
+marked viewed elsewhere collapses in place.

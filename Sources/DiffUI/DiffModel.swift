@@ -493,7 +493,18 @@ final class DiffModel {
 
     func toggleCurrentFileViewed() {
         guard let file = currentFile else { return }
-        file.setViewed(!file.isViewed)
+        setViewed(!file.isViewed, for: file)
+    }
+
+    /// Marks a file viewed, which collapses it, or unviewed.
+    ///
+    /// Collapsing the file being read pulls everything after it up past the
+    /// top of the list, so the list moves to the top of the next file instead.
+    func setViewed(_ viewed: Bool, for file: FileModel) {
+        let isCurrent = file === currentFile
+        file.setViewed(viewed)
+        guard viewed, isCurrent, let index = files.firstIndex(where: { $0 === file }) else { return }
+        scroll.scroll(to: files[min(index + 1, files.count - 1)].id)
     }
 
     // MARK: Rendered Markdown

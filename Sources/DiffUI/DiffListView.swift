@@ -244,7 +244,7 @@ struct FileHeader: View {
                     .buttonStyle(.borderless)
                     .help("Open on GitHub")
             }
-            Toggle("Viewed", isOn: Binding { file.isViewed } set: { file.setViewed($0) })
+            Toggle("Viewed", isOn: Binding { file.isViewed } set: { model.setViewed($0, for: file) })
                 .toggleStyle(.checkbox)
                 .fixedSize()
         }
@@ -263,7 +263,7 @@ struct FileHeader: View {
                 Button("Open on GitHub") { openURL(gitHubURL) }
             }
             Divider()
-            Button(file.isViewed ? "Mark as Unviewed" : "Mark as Viewed") { file.setViewed(!file.isViewed) }
+            Button(file.isViewed ? "Mark as Unviewed" : "Mark as Viewed") { model.setViewed(!file.isViewed, for: file) }
             Button(file.isCollapsed ? "Expand File" : "Collapse File") { file.isCollapsed.toggle() }
         }
     }
