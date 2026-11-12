@@ -245,3 +245,20 @@ let issue = SessionOrigin.issue(
         #expect(settings.problem(addingEnvironment: "nope", name: "Two") != nil)
     }
 }
+
+@MainActor
+@Suite struct ClaudeAppSessionTests {
+    @Test func aSessionInTheClaudeAppHasNoTerminalAndNeverCountsAsRunning() {
+        let session = ClaudeSession(
+            origin: pullRequest, title: "In the app", environment: .local(remoteControl: false),
+            workingDirectory: nil, branch: "feature", baseRef: "origin/main",
+            commandLine: "open claude://code/new", runner: .claudeApp(URL(string: "claude://code/new")!), checkout: nil
+        )
+
+        #expect(session.state == .inClaudeApp)
+        #expect(session.terminal == nil)
+        // Closing it ends nothing, so its state stays.
+        session.terminate()
+        #expect(session.state == .inClaudeApp)
+    }
+}

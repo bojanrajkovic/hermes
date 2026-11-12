@@ -25,11 +25,19 @@ struct SessionScreen: View {
         VStack(spacing: 0) {
             header
             Divider()
-            HSplitView {
+            if session.state == .inClaudeApp {
+                // No terminal: the session's bar, then the worktree's diff at full width.
                 SessionTerminalView(session: session)
-                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    .fixedSize(horizontal: false, vertical: true)
                 diff
-                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HSplitView {
+                    SessionTerminalView(session: session)
+                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    diff
+                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
         .task {
@@ -49,7 +57,7 @@ struct SessionScreen: View {
                 .font(Theme.Fonts.paneHeading)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Badge(session.state == .running ? "Running" : "Exited")
+            Badge(session.state.label)
             Button {
                 Task { await model.open(session.origin.key) }
             } label: {

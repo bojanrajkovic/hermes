@@ -22,11 +22,16 @@ public struct SessionTerminalView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            TerminalHost(terminal: session.terminalView)
-                .accessibilityLabel("Terminal for \(session.title)")
-            if session.state == .exited {
+            if let terminal = session.terminal {
+                TerminalHost(terminal: terminal.view)
+                    .accessibilityLabel("Terminal for \(session.title)")
+                if session.state == .exited {
+                    Divider()
+                    exitedBar
+                }
+            } else {
                 Divider()
-                exitedBar
+                claudeAppBar
             }
         }
         .confirmationDialog("Close “\(session.title)”?", isPresented: $isConfirmingClose) {
@@ -133,12 +138,14 @@ public struct SessionTerminalView: View {
                 .help("Reveal the worktree in Finder")
             }
 
-            Button {
-                if session.state == .running { isConfirmingRestart = true } else { session.restart() }
-            } label: {
-                Label("Restart", systemImage: "arrow.clockwise")
+            if session.terminal != nil {
+                Button {
+                    if session.state == .running { isConfirmingRestart = true } else { session.restart() }
+                } label: {
+                    Label("Restart", systemImage: "arrow.clockwise")
+                }
+                .help("End the process and run the command again")
             }
-            .help("End the process and run the command again")
 
             Button {
                 isConfirmingClose = true
@@ -150,6 +157,21 @@ public struct SessionTerminalView: View {
         }
         .labelStyle(.iconOnly)
         .fixedSize()
+    }
+
+    /// In place of the terminal for a session opened in the Claude app.
+    private var claudeAppBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.up.forward.app")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Opened in the Claude app. Hermes shows the worktree's diff.")
+            Spacer(minLength: 8)
+            Button("Open in Claude App") { session.restart() }
+        }
+        .padding(.horizontal, SessionMetrics.barPaddingHorizontal)
+        .padding(.vertical, SessionMetrics.barPaddingVertical)
+        .background(.bar)
     }
 
     private var exitedBar: some View {
@@ -186,9 +208,9 @@ struct SessionStateBadge: View {
 
     var body: some View {
         Label {
-            Text(state == .running ? "Running" : "Exited")
+            Text(state.label)
         } icon: {
-            Image(systemName: state == .running ? "circle.fill" : "stop.circle")
+            Image(systemName: state == .running ? "circle.fill" : state.symbol)
                 .foregroundStyle(state == .running ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
                 .imageScale(.small)
         }

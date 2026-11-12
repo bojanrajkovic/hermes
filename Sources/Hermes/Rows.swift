@@ -325,10 +325,10 @@ struct SessionStateGlyph: View {
     let state: ClaudeSession.State
 
     var body: some View {
-        Image(systemName: state == .running ? "play.circle.fill" : "stop.circle")
+        Image(systemName: state.symbol)
             .foregroundStyle(state == .running ? Color.green : Color.secondary)
-            .help(state == .running ? "Running" : "Exited")
-            .accessibilityLabel(state == .running ? "Running" : "Exited")
+            .help(state.label)
+            .accessibilityLabel(state.label)
     }
 }
 

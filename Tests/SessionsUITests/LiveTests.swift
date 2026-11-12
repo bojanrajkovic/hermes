@@ -78,17 +78,17 @@ struct Stage {
 
 @MainActor
 func makeSession(script: String, directory: URL? = nil, origin: SessionOrigin = pullRequest) throws -> ClaudeSession {
-    try ClaudeSession(
+    ClaudeSession(
         origin: origin, title: origin.defaultSessionName, environment: .local(remoteControl: true),
         workingDirectory: directory, branch: origin.branchName, baseRef: "origin/main",
-        commandLine: "sh", script: script, processDirectory: directory, checkout: nil
+        commandLine: "sh", runner: .terminal(try SessionTerminal(script: script, id: UUID(), directory: directory)), checkout: nil
     )
 }
 
 /// Everything on the terminal's screen and scrollback, as text.
 @MainActor
 func screenText(of session: ClaudeSession) -> String {
-    guard let surface = session.terminalState.surface else { return "" }
+    guard let surface = session.terminal?.state.surface else { return "" }
     _ = surface.performBindingAction("select_all")
     defer { _ = surface.performBindingAction("clear_selection") }
     return surface.readSelection() ?? ""
@@ -117,7 +117,7 @@ struct LiveTerminalTests {
 
         // The process starts before any SwiftUI view shows the session.
         try await waitUntil("the process runs while parked") { ticks() > 5 }
-        let terminal = session.terminalView
+        let terminal = session.terminal!.view
         let pid = try #require(session.foregroundPid)
         #expect(isAlive(pid))
 
@@ -139,8 +139,8 @@ struct LiveTerminalTests {
 
         // Come back: the same view, the same process, the earlier output.
         stage.show(SessionTerminalView(session: session))
-        try await waitUntil("the terminal is back on stage") { session.terminalView.window === stage.window }
-        #expect(session.terminalView === terminal)
+        try await waitUntil("the terminal is back on stage") { session.terminal!.view.window === stage.window }
+        #expect(session.terminal!.view === terminal)
         #expect(session.foregroundPid == pid)
         #expect(screenText(of: session).contains("tick 3 "))
 
@@ -167,13 +167,13 @@ struct LiveTerminalTests {
         let stage = Stage(width: 900, height: 360, dark: true)
         stage.show(SessionTerminalView(session: session))
         try await Task.sleep(for: .milliseconds(500))
-        try stage.snapshot("terminal-exited-dark", terminal: session.terminalView)
+        try stage.snapshot("terminal-exited-dark", terminal: session.terminal!.view)
 
-        let old = session.terminalView
+        let old = session.terminal!.view
         session.restart()
         #expect(session.state == .running)
-        #expect(session.terminalView !== old)
-        try await waitUntil("the new terminal is on stage") { session.terminalView.window === stage.window }
+        #expect(session.terminal!.view !== old)
+        try await waitUntil("the new terminal is on stage") { session.terminal!.view.window === stage.window }
         try await waitUntil("the restarted process exits") { session.state == .exited }
         #expect(runs() == 2)
 
@@ -295,15 +295,15 @@ struct LiveClaudeTests {
         // A new folder asks for trust first, with "No, exit" selected.
         // Choose "Yes", so the session itself and Remote Control start.
         if screenText(of: session).contains("Yes, I trust this folder") {
-            try stage.snapshot("claude-trust-dark", terminal: session.terminalView)
-            session.terminalState.sendKey(.arrowDown)
+            try stage.snapshot("claude-trust-dark", terminal: session.terminal!.view)
+            session.terminal?.state.sendKey(.arrowDown)
             try await Task.sleep(for: .milliseconds(300))
-            session.terminalState.sendKey(.enter)
+            session.terminal?.state.sendKey(.enter)
             try await Task.sleep(for: .seconds(12))
         }
         let text = screenText(of: session)
         print("--- claude screen ---\n\(text)\n--- title: \(session.terminalTitle) ---")
-        try stage.snapshot("claude-running-dark", terminal: session.terminalView)
+        try stage.snapshot("claude-running-dark", terminal: session.terminal!.view)
         #expect(session.state == .running)
         let pid = try #require(session.foregroundPid)
         #expect(isAlive(pid))

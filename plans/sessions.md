@@ -55,9 +55,10 @@ documented. The link cannot name a Remote Control host, so the user picks the
 environment in the Claude app, whose picker lists every local, cloud, and
 Remote Control target.
 
-Hermes still lists the session. Its terminal runs `open` on the link and
-exits, and the session screen keeps showing the worktree's diff. The session
-reads "Exited", because Hermes cannot see the Claude app's session.
+Hermes opens the link itself and still lists the session, with no terminal.
+The session screen shows the worktree's diff at full width, under a bar with
+"Open in Claude App". The session reads "In Claude App" and never counts as
+running, because Hermes cannot see the Claude app's session.
 
 ## Command line
 
@@ -119,6 +120,10 @@ The terminal is libghostty, through `libghostty-spm`.
   starts with a minimal one, which would hide `claude`, `gh`, and `git`.
 - `ClaudeSession` owns its terminal view, so the process keeps running while
   another screen is shown.
+- The script writes its process ID to a file next to it. Hermes watches that
+  process and marks the session exited when it ends, as well as when the
+  terminal reports closing. The close report alone did not always arrive for a
+  terminal parked offscreen, which left sessions marked running.
 - libghostty only runs a surface whose view is in a window. A terminal that no
   screen shows sits in an offscreen window, `TerminalParking`. Without it the
   process would block on its next write.

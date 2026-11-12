@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GitHubKit
 import Observation
@@ -88,32 +89,27 @@ public final class SessionStore {
         var branch = plan?.branch
         if branch == nil, case let .pullRequest(_, _, _, headRefName, _, _) = origin { branch = headRefName }
 
-        // In the Claude app, the session's own terminal only opens the link and says so. The
-        // session entry stays, so the worktree's diff and the link to its pull request still work.
+        // A session in the Claude app gets no terminal: Hermes opens the link and keeps the entry,
+        // so the worktree's diff and the link to its pull request still work.
         let command: String
-        let script: String
+        let runner: ClaudeSession.Runner
         if inClaudeApp {
             guard let url = configuration.claudeAppURL else { throw WorkspaceError.noCheckout(origin.repoID) }
             command = "open \(shellQuoted(url.absoluteString))"
-            script = """
-                #!/bin/sh
-                /usr/bin/\(command)
-                printf 'Opened in the Claude app.\\nPick the environment there. This pane keeps the diff of the worktree.\\n'
-                # The terminal reports a command that ends within a quarter of a second as a failed launch.
-                sleep 1
-
-                """
+            NSWorkspace.shared.open(url)
+            runner = .claudeApp(url)
         } else {
             command = configuration.commandLine()
-            script = """
-                #!/bin/sh
+            let script = """
                 export PATH=\(shellQuoted(await Shell.path.value))
                 \(configuration.commandLine(executable: claude?.path ?? "claude"))
 
                 """
+            let id = UUID()
+            runner = .terminal(try SessionTerminal(script: script, id: id, directory: configuration.directory))
         }
 
-        let session = try ClaudeSession(
+        let session = ClaudeSession(
             origin: origin,
             title: configuration.name,
             environment: environment,
@@ -121,8 +117,7 @@ public final class SessionStore {
             branch: branch,
             baseRef: baseRef,
             commandLine: command,
-            script: script,
-            processDirectory: configuration.directory,
+            runner: runner,
             checkout: plan?.checkout
         )
         session.store = self
