@@ -100,7 +100,7 @@ import Testing
         func date(_ offset: TimeInterval) -> Date { Date(timeIntervalSince1970: offset) }
         let detail = PullRequestDetail(
             id: "PR", body: "",
-            comments: [Comment(id: "c1", author: user("alice"), body: "First", createdAt: date(10))],
+            comments: [Comment(id: "c1", databaseID: 1, author: user("alice"), body: "First", createdAt: date(10))],
             reviews: [
                 Review(id: "r1", author: user("bob"), state: .approved, body: "", submittedAt: date(30)),
                 Review(id: "r2", author: user("bob"), state: .commented, body: "", submittedAt: date(5)),

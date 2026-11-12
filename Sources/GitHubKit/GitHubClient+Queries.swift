@@ -1,7 +1,7 @@
 import Foundation
 
 private let userFields = "__typename login avatarUrl"
-private let commentFields = "id author { \(userFields) } body createdAt"
+private let commentFields = "id databaseId author { \(userFields) } body createdAt"
 
 // MARK: Profile
 
@@ -400,6 +400,18 @@ extension GitHubClient {
             cursor = page?.nextCursor
         } while cursor != nil
         return checks
+    }
+
+    /// The pull request numbers of a stack, from its bottom up.
+    ///
+    /// - Parameter number: The stack's number in the repository, as in `github.com/<owner>/<repo>/stack/<number>`.
+    /// - Throws: `GitHubError.http` with status 404 when the repository has no such stack.
+    public func stackPullRequests(repository: RepositoryRef, number: Int) async throws -> [Int] {
+        struct Stack: Decodable, Sendable {
+            struct Member: Decodable, Sendable { let number: Int }
+            let pull_requests: [Member]
+        }
+        return try await get("/repos/\(repository.owner)/\(repository.name)/stacks/\(number)", as: Stack.self).pull_requests.map(\.number)
     }
 
     /// Runs one GitHub Actions job again, with the jobs that depend on it.

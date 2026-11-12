@@ -61,6 +61,7 @@ struct IssueDetailView: View {
                                     author: comment.author, verb: "commented", date: comment.createdAt,
                                     markdown: comment.body, baseURL: issue.url
                                 )
+                                .id(comment.id)
                             }
                         }
                     }
@@ -69,6 +70,7 @@ struct IssueDetailView: View {
                 .frame(maxWidth: Theme.conversationMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
+            .modifier(ScrollsToLinkedComment(comments: detail.value?.comments))
         }
         .task(id: LoadID(updatedAt: issue.updatedAt, attempt: detail.attempt)) {
             await detail.load { try await model.client.issueDetail(repository: repository, number: issue.number) }

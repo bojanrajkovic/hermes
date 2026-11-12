@@ -315,6 +315,7 @@ final class DiffModel {
                     // A comment or a review, with no new commit.
                     // A failed read keeps the old date, so the next poll asks again.
                     if await review?.reloadThreads() != false { revisionDate = revision.updatedAt }
+                    goToPendingTarget()
                 }
             }
         case .workingTree(let directory, _):
@@ -343,6 +344,7 @@ final class DiffModel {
             head = fetched.head
             await show(text: fetched.text)
             let threadsLoaded = await review?.refresh(diff: diff, head: head) != false
+            goToPendingTarget()
             // The threads were read after this revision, so the next poll need not read them again.
             // When reading them failed, no date matches and the next poll reads them.
             revisionDate = threadsLoaded ? fetched.updatedAt : nil
@@ -568,6 +570,44 @@ final class DiffModel {
             }
         }
         return nil
+    }
+
+    /// Where a link asked the diff to go. It is kept until the diff, or for a
+    /// review comment the threads, have loaded enough to find it.
+    var pendingTarget: DeepLink.PullRequestTarget? {
+        didSet { goToPendingTarget() }
+    }
+
+    /// Goes to `pendingTarget` once it can be found, and forgets it.
+    func goToPendingTarget() {
+        guard let target = pendingTarget, phase == .loaded else { return }
+        switch target {
+        case .files, .comment:
+            break
+        case .file(let hash, let lines):
+            guard let file = files.first(where: { file in
+                [file.diff.newPath, file.diff.oldPath].contains { $0.map(DeepLink.pathHash) == hash }
+            }) else { break }
+            let side: DiffKit.DiffSide = lines?.side == .left ? .left : .right
+            if let lines, let line = file.diff.line(at: DiffPosition(side: side, line: lines.end)) {
+                reveal(RowID(file: file.id, item: .line(line.numbers)))
+            } else {
+                file.isCollapsed = false
+                scroll.scroll(to: file.id)
+            }
+        case .reviewComment(let id):
+            guard let review, let thread = review.threads.first(where: { $0.comments.contains { $0.databaseID == id } }) else {
+                // The threads may not have loaded yet. The next load tries again.
+                return
+            }
+            if let line = review.layout.line(of: thread.id) {
+                review.focusedLine = line
+            } else if let file = files.first(where: { $0.diff.path == thread.path }) {
+                // An outdated thread has no line in the diff. Its file is the nearest place.
+                scroll.scroll(to: file.id)
+            }
+        }
+        pendingTarget = nil
     }
 
     /// Opens the new version of a file in the definition pane, at its first change.

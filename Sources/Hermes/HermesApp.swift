@@ -1,5 +1,6 @@
 import AppKit
 import DiffUI
+import GitHubKit
 import HermesUI
 import SessionsUI
 import SwiftUI
@@ -54,7 +55,16 @@ struct HermesApp: App {
             RootView()
                 .environment(model)
                 .frame(minWidth: Theme.windowMinWidth, minHeight: Theme.windowMinHeight)
+                .onOpenURL { url in
+                    guard let link = DeepLink(url: url) else {
+                        model.resolveError = "Hermes can't open \(url.absoluteString)."
+                        return
+                    }
+                    Task { await model.open(link) }
+                }
         }
+        // A link opens in the one window instead of a new one.
+        .handlesExternalEvents(matching: ["*"])
         .defaultSize(width: Theme.windowDefaultWidth, height: Theme.windowDefaultHeight)
         .windowResizability(.contentMinSize)
         .commands {

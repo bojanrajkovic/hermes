@@ -54,6 +54,9 @@ What is built and works, and what is known not to work or is unverified.
   from the menu, or every failed job from the button under the list. Not yet
   tried against GitHub.
 
+- `hermes://` links open repositories, issues, pull requests, stacks,
+  comments, review threads, and file lines. They use GitHub's own paths.
+
 **Reviews**
 
 - Line and range comments from the gutter, replies to threads, and comments on

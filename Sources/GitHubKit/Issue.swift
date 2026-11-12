@@ -111,14 +111,21 @@ public struct IssuePage: Sendable, Hashable {
 public struct Comment: Sendable, Hashable, Identifiable, Decodable {
     /// The GraphQL node ID.
     public let id: String
+    /// The REST ID, which GitHub's links to the comment use: `#issuecomment-<id>` or `#discussion_r<id>`.
+    public let databaseID: Int
     /// Nil when the author's account was deleted.
     public let author: User?
     /// Markdown.
     public let body: String
     public let createdAt: Date
 
-    public init(id: String, author: User?, body: String, createdAt: Date) {
+    private enum CodingKeys: String, CodingKey {
+        case id, databaseID = "databaseId", author, body, createdAt
+    }
+
+    public init(id: String, databaseID: Int, author: User?, body: String, createdAt: Date) {
         self.id = id
+        self.databaseID = databaseID
         self.author = author
         self.body = body
         self.createdAt = createdAt

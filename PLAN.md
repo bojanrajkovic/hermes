@@ -14,6 +14,7 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 - [plans/architecture.md](plans/architecture.md): the targets, what each owns, and how state and data flow.
 - [plans/github.md](plans/github.md): authentication through `gh`, the API client, and how the lists load.
 - [plans/diff-viewer.md](plans/diff-viewer.md): loading, rendering, and refreshing a diff; review comments; go to definition.
+- [plans/deep-links.md](plans/deep-links.md): the `hermes://` links and what each opens.
 - [plans/sessions.md](plans/sessions.md): launching Claude Code sessions, worktrees, and the embedded terminal.
 - [plans/design-system.md](plans/design-system.md): the type scale, layout metrics, and shared views in `HermesUI`.
 - [plans/build-system.md](plans/build-system.md): how `make` and `build.sh` turn the package into a signed app, and the test switches.

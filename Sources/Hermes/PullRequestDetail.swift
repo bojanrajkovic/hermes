@@ -127,7 +127,10 @@ struct PullRequestDetailView: View {
         case .conversation:
             ConversationView(pullRequest: pullRequest, detail: detail)
         case .files:
-            DiffScreen(source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache)
+            DiffScreen(
+                source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
+                target: Binding { model.diffTarget } set: { model.diffTarget = $0 }
+            )
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
@@ -472,6 +475,7 @@ struct ConversationView: View {
                                 author: entry.author, verb: entry.kind.verb, date: entry.date, markdown: entry.body,
                                 baseURL: pullRequest.url, badge: entry.kind.badge
                             )
+                            .id(entry.id)
                         }
                     }
                     PaneSection(value.commits.count == 1 ? "1 Commit" : "\(value.commits.count) Commits") {
@@ -491,6 +495,7 @@ struct ConversationView: View {
             .frame(maxWidth: Theme.conversationMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .modifier(ScrollsToLinkedComment(comments: detail.value?.comments))
     }
 
     private func reviewers(_ reviewers: [RequestedReviewer]) -> some View {
@@ -528,6 +533,26 @@ extension TimelineEntry.Kind {
         case .review(.approved): ("person.fill.checkmark", .green)
         case .review(.changesRequested): ("person.fill.xmark", .red)
         default: nil
+        }
+    }
+}
+
+/// Scrolls to the comment a link named (`AppModel.commentToShow`) once the
+/// comments are loaded. Each comment's view must have its node ID as its `id`.
+struct ScrollsToLinkedComment: ViewModifier {
+    let comments: [Comment]?
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content.onChange(of: [model.commentToShow, comments?.count], initial: true) {
+                guard let id = model.commentToShow, let comments else { return }
+                // A comment that is not here, such as a deleted one, leaves the view where it is.
+                if let node = comments.first(where: { $0.databaseID == id })?.id {
+                    withAnimation { proxy.scrollTo(node, anchor: .top) }
+                }
+                model.commentToShow = nil
+            }
         }
     }
 }

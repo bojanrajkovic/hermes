@@ -129,6 +129,12 @@ final class AppModel {
     }
     /// The check picked in a checks summary, shown first on the Checks tab.
     var checkToOpen: Check?
+    /// Where a link asked the open pull request's diff to go. The Files tab takes it.
+    var diffTarget: DeepLink.PullRequestTarget?
+    /// The comment a link asked the open conversation to scroll to, by its REST ID. The conversation takes it.
+    var commentToShow: Int?
+    /// A link that arrived before the accounts were loaded.
+    var pendingLink: DeepLink?
     /// Tree nodes the user opened or closed, by node ID. Other nodes use their default.
     var expansion: [String: Bool] = [:]
     /// The row the lists should scroll to. `serial` makes a repeated request a new value.
@@ -171,6 +177,10 @@ final class AppModel {
             account = viewer.accounts.first { $0.login == remembered } ?? viewer.accounts.first
             for account in viewer.accounts {
                 Task { _ = await AvatarCache.shared.image(for: account.avatarURL) }
+            }
+            if let link = pendingLink {
+                pendingLink = nil
+                Task { await open(link) }
             }
             await refresh()
         } catch {

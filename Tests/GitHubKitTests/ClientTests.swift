@@ -165,7 +165,7 @@ actor TokenCounter {
 
     @Test func pullRequestDetailLoadsEveryPageOfCommentsReviewsAndThreads() async throws {
         @Sendable func comment(_ id: String) -> String {
-            #"{"id": "\#(id)", "author": null, "body": "", "createdAt": "2026-01-01T00:00:00Z"}"#
+            #"{"id": "\#(id)", "databaseId": 1, "author": null, "body": "", "createdAt": "2026-01-01T00:00:00Z"}"#
         }
         @Sendable func thread(_ id: String) -> String {
             """
@@ -364,6 +364,13 @@ actor TokenCounter {
         await #expect(throws: GitHubError.logsUnavailable) {
             try await client.jobLogs(repository: repository, jobID: 7)
         }
+    }
+
+    @Test func aStackListsItsPullRequestsFromTheBottomUp() async throws {
+        let client = client { _ in .init(body: #"{"number": 97, "pull_requests": [{"number": 94}, {"number": 95}, {"number": 96}]}"#) }
+
+        #expect(try await client.stackPullRequests(repository: repository, number: 97) == [94, 95, 96])
+        #expect(StubProtocol.requests.withLock { $0.map(\.path) } == ["/repos/\(repository.owner)/\(repository.name)/stacks/97"])
     }
 
     @Test func rerunsPostToTheJobAndTheRun() async throws {

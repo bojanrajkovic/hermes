@@ -23,12 +23,17 @@ public struct DiffScreen: View {
     private let source: DiffSource
     private let client: GitHubClient
     private let repoCache: RepoCache
+    /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
+    @Binding private var target: DeepLink.PullRequestTarget?
 
     @State private var model: DiffModel?
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
-    public init(source: DiffSource, client: GitHubClient, repoCache: RepoCache) {
+    public init(
+        source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil)
+    ) {
+        _target = target
         self.source = source
         self.client = client
         self.repoCache = repoCache
@@ -60,14 +65,24 @@ public struct DiffScreen: View {
             }
         }
         .onChange(of: layout) { model?.layout = layout }
+        .onChange(of: target) { takeTarget() }
         // The task ends when the screen goes off screen, which stops the
         // polling. Coming back reuses the model, so the diff reloads in place.
         .task(id: source.key) {
             if model?.source.key != source.key {
                 model = DiffModel(source: source, client: client, repoCache: repoCache, layout: layout)
             }
+            takeTarget()
             await model?.run()
         }
+    }
+}
+
+extension DiffScreen {
+    private func takeTarget() {
+        guard let target, let model else { return }
+        model.pendingTarget = target
+        self.target = nil
     }
 }
 
