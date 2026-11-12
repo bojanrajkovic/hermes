@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A GitHub API client for github.com.
 ///
@@ -105,19 +106,71 @@ public actor GitHubClient {
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("Hermes", forHTTPHeaderField: "User-Agent")
 
+        let started = ContinuousClock.now
         let data: Data, urlResponse: URLResponse
         do {
             (data, urlResponse) = try await session.data(for: request)
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
+        } catch {
+            Self.log.error("\(Self.describe(original), privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            throw error
         }
         guard let response = urlResponse as? HTTPURLResponse else {
             throw GitHubError.http(status: 0, message: "Not an HTTP response")
         }
 
         if response.statusCode == 401 { token = nil }
-        if let error = Self.error(for: response, body: data, now: .now) { throw error }
+        let error = Self.error(for: response, body: data, now: .now)
+        Self.logResponse(original, response, data: data, elapsed: ContinuousClock.now - started, error: error)
+        if let error { throw error }
         return (data, response)
+    }
+
+    // MARK: Logging
+
+    private static let log = Logger(subsystem: "com.coderinserepeat.hermes", category: "github")
+
+    /// One line per request: what it was, its status, size, and time, and the rate limit headers.
+    /// Watch with `log stream --predicate 'subsystem == "com.coderinserepeat.hermes" AND category == "github"'`.
+    private static func logResponse(
+        _ request: URLRequest, _ response: HTTPURLResponse, data: Data, elapsed: Duration, error: GitHubError?
+    ) {
+        func header(_ name: String) -> String { response.value(forHTTPHeaderField: name) ?? "-" }
+        let milliseconds = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
+        let line = "\(describe(request)) → \(response.statusCode), \(data.count) bytes, \(milliseconds) ms; "
+            + "\(header("x-ratelimit-resource")) used \(header("x-ratelimit-used")), remaining \(header("x-ratelimit-remaining"))"
+            + (response.value(forHTTPHeaderField: "retry-after").map { ", retry-after \($0)s" } ?? "")
+        if let error {
+            log.error("\(line, privacy: .public) — \(String(describing: error), privacy: .public)")
+        } else {
+            log.notice("\(line, privacy: .public)")
+        }
+    }
+
+    /// The method and path, and for GraphQL the start of the query and its search string or IDs count.
+    private static func describe(_ request: URLRequest) -> String {
+        let method = request.httpMethod ?? "GET"
+        let path = request.url.map { $0.path + ($0.query.map { "?\($0)" } ?? "") } ?? "?"
+        guard let body = request.httpBody, let graphQL = try? JSONDecoder().decode(LoggedGraphQL.self, from: body) else {
+            return "\(method) \(path)"
+        }
+        let query = graphQL.query.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        var detail = String(query.prefix(70))
+        if let search = graphQL.variables?.q { detail += " q=\"\(search)\"" }
+        if let ids = graphQL.variables?.ids { detail += " ids=\(ids.count)" }
+        if let after = graphQL.variables?.after { detail += " after=\(after)" }
+        return "GraphQL \(detail)"
+    }
+
+    private struct LoggedGraphQL: Decodable {
+        struct Variables: Decodable {
+            let q: String?
+            let ids: [String]?
+            let after: String?
+        }
+        let query: String
+        let variables: Variables?
     }
 
     /// Concurrent first calls share one read of the token: reading it starts
