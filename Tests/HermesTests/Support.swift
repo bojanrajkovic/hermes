@@ -32,7 +32,6 @@ func issue(_ number: Int, title: String) -> Issue {
 
 func repository(_ ref: RepositoryRef, issues: Int = 0) -> Repository {
     Repository(
-        ref: ref, url: URL(string: "https://github.com/\(ref)")!, isPrivate: false, openIssueCount: issues,
-        openPullRequestCount: 0
+        ref: ref, url: URL(string: "https://github.com/\(ref)")!, isPrivate: false, openIssueCount: issues
     )
 }

@@ -63,13 +63,27 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     }
 
     @Test func repositoriesDecodeOpenCounts() throws {
-        let repositories = try graphQLFixture("repositories", as: OwnerData.self).repositoryOwner.repositories.nodes
+        let repositories = try graphQLFixture("repositories", as: RepositoryOwnerFixture.self).repositoryOwner.repositories.nodes
 
         #expect(repositories.count == 4)
         #expect(repositories[0].ref == RepositoryRef(owner: "bojanrajkovic", name: "hermes"))
         #expect(repositories[0].isPrivate)
         #expect(repositories[0].openIssueCount == 0)
-        #expect(repositories.contains { $0.openIssueCount > 0 || $0.openPullRequestCount > 0 })
+        #expect(repositories.contains { $0.openIssueCount > 0 })
+    }
+
+    @Test(arguments: [
+        (#"{"id": "PR_1", "repository": {"viewerPermission": "WRITE"}}"#, true),
+        (#"{"id": "PR_1", "repository": {"viewerPermission": "MAINTAIN"}}"#, true),
+        (#"{"id": "PR_1", "repository": {"viewerPermission": "ADMIN"}}"#, true),
+        (#"{"id": "PR_1", "repository": {"viewerPermission": "TRIAGE"}}"#, false),
+        (#"{"id": "PR_1", "repository": {"viewerPermission": "READ"}}"#, false),
+        (#"{"id": "PR_1", "repository": {"viewerPermission": null}}"#, false),
+    ])
+    func searchHitsKnowWhetherTheViewerCanPush(json: String, canPush: Bool) throws {
+        let hit = try JSONDecoder().decode(PullRequestHit.self, from: Data(json.utf8))
+
+        #expect(hit == PullRequestHit(id: "PR_1", canPush: canPush))
     }
 
     @Test func issuesDecodePageAndLinkedPullRequests() throws {
@@ -268,4 +282,10 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
             if case GitHubError.decoding = error { true } else { false }
         }
     }
+}
+
+/// The shape of the `repositories` fixture: a page of repositories with their counts.
+private struct RepositoryOwnerFixture: Decodable {
+    struct Owner: Decodable { let repositories: Connection<Repository> }
+    let repositoryOwner: Owner
 }

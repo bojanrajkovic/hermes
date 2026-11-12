@@ -125,27 +125,25 @@ public struct GitHubLabel: Sendable, Hashable, Decodable {
     }
 }
 
-/// A repository with its open issue and pull request counts.
+/// A repository with its open issue count.
 public struct Repository: Sendable, Hashable, Identifiable {
     public let ref: RepositoryRef
     public let url: URL
     public let isPrivate: Bool
     public let openIssueCount: Int
-    public let openPullRequestCount: Int
 
     public var id: RepositoryRef { ref }
 
-    public init(ref: RepositoryRef, url: URL, isPrivate: Bool, openIssueCount: Int, openPullRequestCount: Int) {
+    public init(ref: RepositoryRef, url: URL, isPrivate: Bool, openIssueCount: Int) {
         self.ref = ref
         self.url = url
         self.isPrivate = isPrivate
         self.openIssueCount = openIssueCount
-        self.openPullRequestCount = openPullRequestCount
     }
 }
 
 extension Repository: Decodable {
-    private enum CodingKeys: String, CodingKey { case url, isPrivate, issues, pullRequests }
+    private enum CodingKeys: String, CodingKey { case url, isPrivate, issues }
     private struct Count: Decodable { let totalCount: Int }
 
     public init(from decoder: any Decoder) throws {
@@ -154,6 +152,18 @@ extension Repository: Decodable {
         url = try container.decode(URL.self, forKey: .url)
         isPrivate = try container.decode(Bool.self, forKey: .isPrivate)
         openIssueCount = try container.decode(Count.self, forKey: .issues).totalCount
-        openPullRequestCount = try container.decode(Count.self, forKey: .pullRequests).totalCount
+    }
+}
+
+/// The viewer's permission on a repository, from GitHub's `viewerPermission`.
+public enum RepositoryPermission: String, Decodable, Sendable {
+    case admin = "ADMIN", maintain = "MAINTAIN", write = "WRITE", triage = "TRIAGE", read = "READ"
+
+    /// Write or better: the repositories Hermes loads in full.
+    public var canPush: Bool {
+        switch self {
+        case .admin, .maintain, .write: true
+        case .triage, .read: false
+        }
     }
 }

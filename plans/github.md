@@ -54,14 +54,15 @@ sequenceDiagram
     Note over App,API: First load of an account
     App->>API: search involves:@me, review-requested:@me (scoped to the account)
     App->>C: pullRequests(ids), then the lists show
-    App->>API: search every open pull request, IDs only
+    App->>API: search every open pull request: IDs and the viewer's repository permission
+    Note over App,API: only pull requests in repositories the viewer can push to load
     App->>C: pullRequests(ids not loaded yet)
 
     loop every refresh
         App->>API: search updated:>=last refresh (open), (closed), review-requested:@me
         App->>C: pullRequests(changed ids)
     end
-    App->>C: repositories(owner) on ⌘R or when 10 minutes old
+    App->>C: repositories(owner) on ⌘R or 10 minutes after the last try
 
     Note over App,API: When a pull request opens
     App->>C: pullRequestDetail, pullRequestDiff, checks
@@ -73,10 +74,10 @@ sequenceDiagram
 | Call | Source | Notes |
 |------|--------|-------|
 | `viewer()` | REST `/user` and GraphQL | The profile comes from REST because GraphQL's `email` needs a scope `gh` does not request. |
-| `pullRequestIDs(matching:)` | GraphQL search | The IDs a search finds, 100 per page and at most 1,000. `PullRequestSearch` builds the queries. |
+| `pullRequestHits(matching:)` | GraphQL search | The pull requests a search finds, each with whether the viewer can push to its repository, 100 per page and at most 1,000. `pullRequestIDs(matching:)` returns only the IDs. `PullRequestSearch` builds the queries. |
 | `pullRequests(ids:)` | GraphQL | Pull request fields by ID, 10 per request and up to 8 requests at once. |
 | `openPullRequests(owner:)` | GraphQL search | Both of the above for every open pull request in the account's non-archived repositories. |
-| `repositories(owner:)` | GraphQL | Non-archived repositories the account owns, with open issue counts. |
+| `repositories(owner:)` | GraphQL | Non-archived repositories the account owns that the viewer can push to (write, maintain, or admin), with open issue counts. Pages every repository with only its permission, then counts issues for the ones kept. |
 | `issues(repository:pageSize:after:)` | GraphQL | One page of a repository's open issues. Loaded when the list is shown. |
 | `pullRequestDetail` | GraphQL | Description, comments, reviews, requested reviewers, commits, review threads. |
 | `pullRequestRevision` | GraphQL | Head commit and update time. The cheap call for polling. |
@@ -142,3 +143,26 @@ otherwise reads it from the working directory.
 
 Writes are submitting a review and merging. `GitHubClient` has no other mutation.
 Live tests that write use `bojanrajkovic/hermes-playground` only.
+
+## Rate limits
+
+GitHub has an hourly quota of points and a secondary limit on bursts, which
+also caps the server time GraphQL queries use per minute. A large
+organization trips the secondary limit long before the quota, so Hermes:
+
+- loads pull requests and issue counts only for repositories the viewer can
+  push to. Pull requests that involve the viewer or ask for their review load
+  from any repository, and anything opens on demand from a link or ⌘K.
+- loads pull request details 2 requests at a time.
+- keeps a first load's progress when it fails part way, and continues from
+  there on the next refresh.
+- pauses every request when GitHub sends `retry-after` of five minutes or
+  less, and retries reads once the pause ends.
+
+Every request logs one line under the `com.coderinserepeat.hermes` subsystem,
+category `github`: what it was, its status, size, time, and rate limit
+headers.
+
+```bash
+/usr/bin/log stream --predicate 'subsystem == "com.coderinserepeat.hermes" AND category == "github"'
+```

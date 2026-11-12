@@ -30,7 +30,7 @@ extension GitHubClient {
         query($q: String!, $after: String) {
           search(query: $q, type: ISSUE, first: 100, after: $after) {
             pageInfo { hasNextPage endCursor }
-            nodes { ... on PullRequest { id } }
+            nodes { ... on PullRequest { id repository { viewerPermission } } }
           }
         }
         """
@@ -69,20 +69,29 @@ extension GitHubClient {
     ///
     /// - Parameter query: A search query, usually from `PullRequestSearch`.
     public func pullRequestIDs(matching query: String) async throws -> [String] {
-        var ids: [String] = []
+        try await pullRequestHits(matching: query).map(\.id)
+    }
+
+    /// The pull requests a search finds, in its order, without repeats, each
+    /// with whether the viewer can push to its repository. Stops at GitHub's
+    /// limit of 1,000 results.
+    ///
+    /// - Parameter query: A search query, usually from `PullRequestSearch`.
+    public func pullRequestHits(matching query: String) async throws -> [PullRequestHit] {
+        var hits: [PullRequestHit] = []
         var seen: Set<String> = []
         var cursor: String?
         repeat {
             let variables: [String: JSONValue] = ["q": .string(query), "after": JSONValue(cursor)]
             let page = try await retryingReads {
-                try await self.graphQL(Self.pullRequestIDsQuery, variables: variables, as: SearchData<NodeID>.self).search
+                try await self.graphQL(Self.pullRequestIDsQuery, variables: variables, as: SearchData<PullRequestHit>.self).search
             }
             // A pull request opened while the pages load shifts the results by
             // one, so the next page repeats the last entry of this one.
-            ids += page.nodes.map(\.id).filter { seen.insert($0).inserted }
+            hits += page.nodes.filter { seen.insert($0.id).inserted }
             cursor = page.nextCursor
         } while cursor != nil
-        return ids
+        return hits
     }
 
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no
@@ -261,13 +270,18 @@ extension GitHubClient {
 // MARK: Repositories and issues
 
 extension GitHubClient {
-    /// Loads every non-archived repository a user or an organization owns,
-    /// most recently pushed first, with open issue and pull request counts.
+    /// Loads the non-archived repositories a user or an organization owns that
+    /// the viewer can push to, most recently pushed first, with open issue counts.
+    ///
+    /// The list pages through every repository with only its ID and the
+    /// viewer's permission, which is cheap. Issue counts load only for the
+    /// repositories kept, 100 to a request: counting for hundreds of read-only
+    /// repositories in a large organization trips GitHub's secondary rate limit.
     ///
     /// - Parameter owner: The login of the user or organization.
     /// - Throws: `GitHubError.decoding` when no account has that login.
     public func repositories(owner: String) async throws -> [Repository] {
-        let query = """
+        let listQuery = """
             query($login: String!, $after: String) {
               repositoryOwner(login: $login) {
                 repositories(
@@ -275,25 +289,37 @@ extension GitHubClient {
                   orderBy: { field: PUSHED_AT, direction: DESC }
                 ) {
                   pageInfo { hasNextPage endCursor }
-                  nodes {
-                    name owner { login } url isPrivate
-                    issues(states: OPEN) { totalCount }
-                    pullRequests(states: OPEN) { totalCount }
-                  }
+                  nodes { id viewerPermission }
                 }
               }
             }
             """
+        let countsQuery = """
+            query($ids: [ID!]!) {
+              nodes(ids: $ids) {
+                ... on Repository { name owner { login } url isPrivate issues(states: OPEN) { totalCount } }
+              }
+            }
+            """
 
-        var repositories: [Repository] = []
+        var ids: [String] = []
         var cursor: String?
         repeat {
-            let page = try await graphQL(
-                query, variables: ["login": .string(owner), "after": JSONValue(cursor)], as: OwnerData.self
-            ).repositoryOwner.repositories
-            repositories += page.nodes
+            let variables: [String: JSONValue] = ["login": .string(owner), "after": JSONValue(cursor)]
+            let page = try await retryingReads {
+                try await self.graphQL(listQuery, variables: variables, as: OwnerData.self).repositoryOwner.repositories
+            }
+            ids += page.nodes.filter { $0.viewerPermission?.canPush == true }.map(\.id)
             cursor = page.nextCursor
         } while cursor != nil
+
+        var repositories: [Repository] = []
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            let chunk = ids[start..<min(start + 100, ids.count)].map(JSONValue.string)
+            repositories += try await retryingReads {
+                try await self.graphQL(countsQuery, variables: ["ids": .array(chunk)], as: RepositoryNodes.self).nodes
+            }
+        }
         return repositories
     }
 
@@ -503,13 +529,45 @@ struct NodeID: Decodable, Sendable {
     let id: String
 }
 
+/// A pull request a search found.
+public struct PullRequestHit: Sendable, Hashable {
+    public let id: String
+    /// Whether the viewer can push to the pull request's repository.
+    public let canPush: Bool
+
+    public init(id: String, canPush: Bool) {
+        self.id = id
+        self.canPush = canPush
+    }
+}
+
+extension PullRequestHit: Decodable {
+    private enum CodingKeys: String, CodingKey { case id, repository }
+    private struct Repository: Decodable { let viewerPermission: RepositoryPermission? }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        canPush = try container.decodeIfPresent(Repository.self, forKey: .repository)?.viewerPermission?.canPush ?? false
+    }
+}
+
 struct NodesData: Decodable, Sendable {
     let nodes: [PullRequest]
 }
 
 struct OwnerData: Decodable, Sendable {
-    struct Owner: Decodable, Sendable { let repositories: Connection<Repository> }
+    struct Listing: Decodable, Sendable {
+        let id: String
+        /// Nil when GitHub does not say, which Hermes treats as read only.
+        let viewerPermission: RepositoryPermission?
+    }
+    struct Owner: Decodable, Sendable { let repositories: Connection<Listing> }
     let repositoryOwner: Owner
+}
+
+struct RepositoryNodes: Decodable, Sendable {
+    let nodes: [Repository]
 }
 
 struct RepositoryData<Fields: Decodable & Sendable>: Decodable, Sendable {

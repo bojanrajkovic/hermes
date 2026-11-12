@@ -14,6 +14,8 @@ public actor GitHubClient {
     private let session: URLSession
     private let tokenProvider: @Sendable () async throws -> String
     private var token: Task<String, any Error>?
+    /// Set when GitHub asks for a back-off of a few minutes or less. Every request waits for it.
+    private var pausedUntil: Date?
 
     /// - Parameters:
     ///   - session: The session used for every request.
@@ -104,6 +106,10 @@ public actor GitHubClient {
     // MARK: Transport
 
     private func send(_ original: URLRequest) async throws -> (data: Data, response: HTTPURLResponse) {
+        // GitHub asks clients to send nothing until a secondary limit's retry-after passes.
+        while let pausedUntil, pausedUntil > .now {
+            try await Task.sleep(for: .seconds(pausedUntil.timeIntervalSinceNow))
+        }
         var request = original
         request.setValue("Bearer \(try await currentToken())", forHTTPHeaderField: "Authorization")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
@@ -126,6 +132,9 @@ public actor GitHubClient {
         if response.statusCode == 401 { token = nil }
         let error = Self.error(for: response, body: data, now: .now)
         Self.logResponse(original, response, data: data, elapsed: ContinuousClock.now - started, error: error)
+        if case .rateLimited(let resetAt) = error, resetAt.timeIntervalSinceNow <= 300 {
+            pausedUntil = max(pausedUntil ?? resetAt, resetAt)
+        }
         if let error { throw error }
         return (data, response)
     }

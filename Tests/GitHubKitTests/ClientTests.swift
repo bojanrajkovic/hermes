@@ -179,6 +179,29 @@ actor TokenCounter {
         #expect(pullRequests.count == 25)
     }
 
+    @Test func repositoriesKeepOnlyThoseTheViewerCanPushTo() async throws {
+        let client = client { request in
+            guard request.body.contains("nodes(ids:") else {
+                return .init(body: """
+                    {"data": {"repositoryOwner": {"repositories": {"pageInfo": {"hasNextPage": false, "endCursor": null},
+                      "nodes": [{"id": "R_write", "viewerPermission": "WRITE"}, {"id": "R_read", "viewerPermission": "READ"},
+                                {"id": "R_admin", "viewerPermission": "ADMIN"}, {"id": "R_triage", "viewerPermission": "TRIAGE"}]}}}}
+                    """)
+            }
+            let nodes = request.body.matches(of: /"(R_[a-z]+)"/).map { match in
+                #"{"name": "\#(match.1)", "owner": {"login": "o"}, "url": "https://github.com/o/\#(match.1)", "isPrivate": false, "issues": {"totalCount": 3}}"#
+            }
+            return .init(body: #"{"data": {"nodes": [\#(nodes.joined(separator: ","))]}}"#)
+        }
+
+        let repositories = try await client.repositories(owner: "o")
+
+        #expect(repositories.map(\.ref.name) == ["R_write", "R_admin"])
+        #expect(repositories.allSatisfy { $0.openIssueCount == 3 })
+        // One page of the list, then one request for the counts of the two kept.
+        #expect(StubProtocol.requests.withLock { $0.count } == 2)
+    }
+
     @Test func pullRequestDetailLoadsEveryPageOfCommentsReviewsAndThreads() async throws {
         @Sendable func comment(_ id: String) -> String {
             #"{"id": "\#(id)", "databaseId": 1, "author": null, "body": "", "createdAt": "2026-01-01T00:00:00Z"}"#

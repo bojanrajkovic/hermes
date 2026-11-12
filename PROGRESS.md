@@ -24,7 +24,7 @@ What is built and works, and what is known not to work or is unverified.
 - The lists refresh on a timer (30 seconds to 5 minutes, 1 minute by default),
   when the app becomes active, and on ⌘R. The first load shows the viewer's own
   pull requests before the rest of the account; later refreshes fetch only what
-  changed.
+  changed. Only repositories the viewer can push to load in full.
 - First-run setup: a sheet confirms the signed-in account and asks where
   checkouts live.
 - The command palette: fuzzy search over repositories, pull requests, and

@@ -31,7 +31,7 @@ final class AccountData {
     private(set) var isRefreshing = false
     /// When the last pull request load started. Nil until the first finishes.
     private var pullRequestsLoadedAt: Date?
-    private var repositoriesLoadedAt: Date?
+    private var repositoriesTriedAt: Date?
 
     init(login: String, client: GitHubClient) {
         self.login = login
@@ -55,7 +55,9 @@ final class AccountData {
         defer { isRefreshing = false }
 
         let started = Date.now
-        let reposAreStale = repositoriesLoadedAt.map { started.timeIntervalSince($0) > 600 } ?? true
+        // Tried, not loaded: a failed load waits as long as a good one, so it does not retry every refresh.
+        let reposAreStale = repositoriesTriedAt.map { started.timeIntervalSince($0) > 600 } ?? true
+        if everything || reposAreStale { repositoriesTriedAt = started }
         async let loadedRepositories = everything || reposAreStale ? client.repositories(owner: login) : nil
         do {
             if let pullRequestsLoadedAt {
@@ -64,10 +66,7 @@ final class AccountData {
                 try await loadEverything()
             }
             pullRequestsLoadedAt = started
-            if let repositories = try await loadedRepositories {
-                self.repositories = repositories
-                repositoriesLoadedAt = started
-            }
+            if let repositories = try await loadedRepositories { self.repositories = repositories }
             listError = nil
             lastRefresh = .now
         } catch {
@@ -78,31 +77,43 @@ final class AccountData {
     }
 
     /// The viewer's pull requests first, so their lists show while the rest of the account loads.
+    /// The rest is only what is in repositories the viewer can push to. A load that fails part
+    /// way keeps what it fetched, and the next refresh fetches only what is still missing.
     private func loadEverything() async throws {
         let queries = PullRequestSearch.involvingViewer(owner: login)
         async let involved = client.pullRequestIDs(matching: queries[0])
         async let requested = client.pullRequestIDs(matching: queries[1])
         let (involvedIDs, requestedIDs) = try await (involved, requested)
         reviewRequested = Set(requestedIDs)
-        let mine = Array(Set(involvedIDs + requestedIDs))
-        pullRequests = PullRequestChanges.apply(to: [], changed: try await client.pullRequests(ids: mine), closed: [])
+        try await loadMissing(Array(Set(involvedIDs + requestedIDs)))
         hasLoaded = true
 
+        let rest = try await client.pullRequestHits(matching: PullRequestSearch.open(owner: login)).filter(\.canPush)
+        try await loadMissing(rest.map(\.id))
+    }
+
+    /// Loads the pull requests not held yet, 50 at a time, adding each batch as it arrives.
+    private func loadMissing(_ ids: [String]) async throws {
         let held = Set(pullRequests.map(\.id))
-        let rest = try await client.pullRequestIDs(matching: PullRequestSearch.open(owner: login)).filter { !held.contains($0) }
-        pullRequests = PullRequestChanges.apply(to: pullRequests, changed: try await client.pullRequests(ids: rest), closed: [])
+        let missing = ids.filter { !held.contains($0) }
+        for start in stride(from: 0, to: missing.count, by: 50) {
+            let batch = try await client.pullRequests(ids: Array(missing[start..<min(start + 50, missing.count)]))
+            pullRequests = PullRequestChanges.apply(to: pullRequests, changed: batch, closed: [])
+        }
     }
 
     /// The pull requests updated since the last refresh, and the current review requests.
     // shortcut: a repository archived since the first load keeps its pull requests until relaunch; reload everything if that matters.
     private func loadChanges(since: Date) async throws {
-        async let open = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: true))
+        async let open = client.pullRequestHits(matching: PullRequestSearch.updated(owner: login, since: since, open: true))
         async let closed = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: false))
         async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
-        let (openIDs, closedIDs, requestedIDs) = try await (open, closed, requested)
+        let (openHits, closedIDs, requestedIDs) = try await (open, closed, requested)
 
+        // A read-only repository's pull request loads only when the viewer already holds it or is asked to review it.
         // A review request does not update the pull request, so one not held yet loads here.
         let held = Set(pullRequests.map(\.id))
+        let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || requestedIDs.contains($0.id) }.map(\.id)
         let changed = try await client.pullRequests(ids: Array(Set(openIDs + requestedIDs.filter { !held.contains($0) })))
         let reloaded = PullRequestChanges.apply(to: pullRequests, changed: changed, closed: Set(closedIDs))
         keepLeaving(pullRequests: reloaded)
