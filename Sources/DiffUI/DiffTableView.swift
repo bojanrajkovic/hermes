@@ -62,8 +62,6 @@ private struct HostedRow: View {
             // A code line is a `NativeLineCell`.
             case .unified, .split: EmptyView()
             }
-        case .attachments(let line):
-            LineAttachments(file: row.file, line: line)
         case .rendered:
             RenderedMarkdown(file: row.file, model: model)
         case .spacer:
@@ -225,6 +223,10 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     /// The identifier a press started on. A release on it looks it up.
     private var pressedIdentifier: String?
     private let popover = LinePopover()
+    /// The line whose badge a press started on. A release on it opens the line's comments.
+    private var pressedBadge: ReviewModel.LineRef?
+    /// The line whose comments the popover shows.
+    private var popoverLine: ReviewModel.LineRef?
 
     private var request: DiffScrollState.Request?
     /// The last request, held in place while rows around it get their real heights. The user's own scrolling ends it.
@@ -287,6 +289,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             )
         }
         observeReview()
+        observeFocus()
     }
 
     /// Scrolls down and back up at 120 steps a second for six seconds and writes how long the steps
@@ -330,6 +333,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             self.request = request
             tableView.reloadData()
             observeReview()
+            observeFocus()
         }
         if metrics != self.metrics {
             self.metrics = metrics
@@ -348,6 +352,8 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             if let request, request.anchor == .center { highlight(request) }
         }
         layoutPinnedHeader()
+        // A focused line in a collapsed or rendered file has a row now.
+        showFocusedLine()
     }
 
     /// Marks a revealed line for a moment, so the eye finds it.
@@ -439,7 +445,6 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         let identifier = switch item.kind {
         case .header: NSUserInterfaceItemIdentifier("header")
         case .line: NSUserInterfaceItemIdentifier("line")
-        case .attachments: NSUserInterfaceItemIdentifier("attachments")
         case .rendered: NSUserInterfaceItemIdentifier("rendered")
         case .spacer: NSUserInterfaceItemIdentifier("spacer")
         }
@@ -469,7 +474,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         switch row.kind {
         case .header: false
         case .line(let line, _): if case .hunk = line.kind { false } else { true }
-        case .attachments, .rendered, .spacer: true
+        case .rendered, .spacer: true
         }
     }
 
@@ -696,7 +701,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             switch row.kind {
             case .spacer: continue
             case .header: ids.append(row.id)
-            case .line, .attachments, .rendered:
+            case .line, .rendered:
                 if tableView.rect(ofRow: index).maxY > visible.minY + covered { ids.append(row.id) }
             }
         }
@@ -772,7 +777,9 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     /// A press on a code line: on its "+" it starts a gutter drag, on an identifier it arms a lookup.
     private func pointerDown(_ event: NSEvent) -> Bool {
         guard let hit = lineCell(at: tableView.convert(event.locationInWindow, from: nil)) else { return false }
-        if let review = model.review, let file = hit.cell.file, let line = hit.cell.plusLine(at: hit.point) {
+        if let file = hit.cell.file, let line = hit.cell.badgeLine(at: hit.point) {
+            pressedBadge = ReviewModel.LineRef(file: file.id, line: line.numbers)
+        } else if let review = model.review, let file = hit.cell.file, let line = hit.cell.plusLine(at: hit.point) {
             isDraggingGutter = true
             review.beginDrag(file: file.id, line: line)
         } else {
@@ -802,12 +809,18 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             dragGutter(to: event)
             // A shift-click extends the open comment's range to the clicked line.
             model.review?.endDrag(extendsSelection: event.modifierFlags.contains(.shift))
+        } else if let badge = pressedBadge, let hit = lineCell(at: tableView.convert(event.locationInWindow, from: nil)),
+                  hit.cell.file?.id == badge.file, hit.cell.badgeLine(at: hit.point)?.numbers == badge.line
+        {
+            // A popover shown before the release would take the release as a click outside it.
+            model.review?.focusedLine = badge
         } else if let name = pressedIdentifier, let hit = lineCell(at: tableView.convert(event.locationInWindow, from: nil)),
                   hit.cell.identifier(at: hit.point)?.name == name, let file = hit.cell.file
         {
             showDefinition(of: name, from: file.diff.path, at: hit.cell.identifierRect(at: hit.point).map { hit.cell.convert($0, to: tableView) })
         }
         pressedIdentifier = nil
+        pressedBadge = nil
     }
 
     // MARK: Popover
@@ -825,5 +838,61 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         popover.show(
             content, size: DiffMetrics.definitionPopoverSize, relativeTo: rect ?? .zero, of: tableView
         ) { peek.isOpen = false }
+    }
+
+    /// Shows the popover for the review's focused line whenever it or the lines with comments change.
+    private func observeFocus() {
+        withObservationTracking {
+            _ = model.review?.focusedLine
+            _ = model.review?.attachedLines
+        } onChange: { [weak self] in
+            RunLoop.main.perform(inModes: [.common]) {
+                MainActor.assumeIsolated {
+                    self?.observeFocus()
+                    self?.showFocusedLine()
+                }
+            }
+        }
+    }
+
+    /// Opens the popover over the focused line, closes it when nothing is focused, or when the line has nothing left to show.
+    private func showFocusedLine() {
+        guard let review = model.review else { return }
+        guard let focus = review.focusedLine, review.attachedLines[focus.file]?.contains(focus.line) == true else {
+            if popoverLine != nil { popover.close() }
+            if review.focusedLine != nil { review.focusedLine = nil }
+            return
+        }
+        guard focus != popoverLine || !popover.isShown else { return }
+        let found = rows.indices.lazy.compactMap { index -> (index: Int, side: Int, line: DiffLine)? in
+            guard self.rows[index].file.id == focus.file, let cells = self.rows[index].codeLine?.row.cells,
+                  let side = cells.firstIndex(where: { $0.line.numbers == focus.line })
+            else { return nil }
+            return (index, cells.count == 2 ? side : 0, cells[side].line)
+        }.first
+        guard let found else {
+            // The line is in a collapsed or rendered file. `update` calls this again once its rows are in.
+            model.reveal(RowID(file: focus.file, item: .line(focus.line)))
+            return
+        }
+        let file = rows[found.index].file
+        tableView.scrollRowToVisible(found.index)
+        let row = tableView.rect(ofRow: found.index)
+        let sideWidth = row.width / CGFloat(rows[found.index].codeLine?.row.cells.count ?? 1)
+        // The badge's end of the line's side: where the popover's arrow points.
+        let anchor = CGRect(x: row.minX + sideWidth * CGFloat(found.side + 1) - 40, y: row.minY, width: 32, height: min(row.height, metrics.lineHeight + 2 * DiffMetrics.rowPadding))
+        let content = ScrollView {
+            LineAttachments(file: file, line: found.line)
+        }
+        .frame(maxHeight: ReviewMetrics.popoverMaxHeight)
+        .environment(\.diffMetrics, metrics)
+        .environment(review)
+        .environment(model.definitions)
+        popoverLine = focus
+        popover.show(content, size: nil, relativeTo: anchor, of: tableView) { [weak self, weak review] in
+            guard let self, popoverLine == focus else { return }
+            popoverLine = nil
+            if review?.focusedLine == focus { review?.focusedLine = nil }
+        }
     }
 }

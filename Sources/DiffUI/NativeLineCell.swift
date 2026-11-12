@@ -130,6 +130,43 @@ final class NativeLineCell: NSView {
         )
     }
 
+    /// The capsule a line's comment badge is drawn in and takes clicks in: the trailing end of its side.
+    private func badgeRect(_ side: LineSide, _ badge: LineBadge) -> CGRect {
+        let width = ReviewMetrics.badgeIconWidth + (badge.count > 0 ? badgeCount(badge).size().width + 4 : 0) + 10
+        let height = metrics.lineHeight
+        return CGRect(x: side.x + side.width - width - 6, y: DiffMetrics.rowPadding, width: width, height: height).integral
+    }
+
+    private func badgeCount(_ badge: LineBadge) -> NSAttributedString {
+        let font = NSFont.systemFont(ofSize: metrics.nsFont.pointSize - 1, weight: .semibold)
+        return NSAttributedString(string: String(badge.count), attributes: [.font: font, .foregroundColor: NSColor.white])
+    }
+
+    private func drawBadge(_ badge: LineBadge, in rect: CGRect) {
+        let color: NSColor = switch badge.style {
+        case .open: .controlAccentColor
+        case .resolved: .systemGray
+        case .draft: .systemOrange
+        }
+        color.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+        let configuration = NSImage.SymbolConfiguration(pointSize: metrics.nsFont.pointSize - 2, weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        let name = badge.count == 0 ? "pencil" : badge.style == .resolved ? "checkmark" : "bubble.left.fill"
+        if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) {
+            let size = image.size
+            image.draw(
+                in: CGRect(x: rect.minX + 5 + (ReviewMetrics.badgeIconWidth - size.width) / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height),
+                from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil
+            )
+        }
+        if badge.count > 0 {
+            let count = badgeCount(badge)
+            let size = count.size()
+            count.draw(at: CGPoint(x: rect.minX + 5 + ReviewMetrics.badgeIconWidth + 4, y: rect.midY - size.height / 2))
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let row else { return }
         let sides = sides
@@ -192,6 +229,7 @@ final class NativeLineCell: NSView {
                     respectFlipped: true, hints: nil
                 )
             }
+            if let badge = marks.badge { drawBadge(badge, in: badgeRect(side, badge)) }
             // The "+" stays on the line a drag started from while the pointer is over other rows.
             if model?.review != nil, hover?.side == index || marks.isDragOrigin { drawPlus(in: plusRect(side)) }
             if let hover, hover.side == index, let underline = hover.underline, let layout = layout(side: index) {
@@ -306,6 +344,14 @@ final class NativeLineCell: NSView {
     /// The line whose "+" is at `point`. `nil` away from the "+", and for a diff that takes no comments.
     func plusLine(at point: CGPoint) -> DiffLine? {
         guard model?.review != nil, let index = sideIndex(at: point), plusRect(sides[index]).contains(point) else { return nil }
+        return sides[index].cell?.line
+    }
+
+    /// The line whose comment badge is at `point`. `nil` away from a badge.
+    func badgeLine(at point: CGPoint) -> DiffLine? {
+        guard let index = sideIndex(at: point), marks.indices.contains(index), let badge = marks[index].badge,
+              badgeRect(sides[index], badge).contains(point)
+        else { return nil }
         return sides[index].cell?.line
     }
 

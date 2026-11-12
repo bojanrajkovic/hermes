@@ -183,7 +183,7 @@ struct DiffList: View {
         // The table does not observe the models. Reading the rows and the
         // scroll request here makes SwiftUI update it when they change.
         DiffTableView(
-            model: model, rows: tableRows(files: model.files, attached: model.review?.attachedLines ?? [:]), metrics: metrics,
+            model: model, rows: tableRows(files: model.files), metrics: metrics,
             request: model.scroll.request
         )
             .safeAreaInset(edge: .bottom, spacing: 0) {

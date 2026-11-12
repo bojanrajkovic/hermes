@@ -84,9 +84,9 @@ struct RenderedMarkdown: View {
                     model.isReadOnlyNoticeShown = true
                 }
             } onSelectMarker: { line in
-                // The threads are shown under the file's lines.
+                // The threads open in a popover over the file's line, so the file shows its lines.
                 if let row = file.diff.line(at: DiffPosition(side: .right, line: line)) {
-                    model.reveal(RowID(file: file.id, item: .line(row.numbers)))
+                    model.review?.focusedLine = ReviewModel.LineRef(file: file.id, line: row.numbers)
                 }
             }
             // The web view is one point tall until it has rendered, and it only renders while it is

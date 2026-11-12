@@ -39,7 +39,10 @@ What is built and works, and what is known not to work or is unverified.
 - Context expansion around hunks.
 - Rendered Markdown diffs with Mermaid.
 - Go to definition for Swift, TypeScript, TSX, JavaScript, Go, Rust, C#,
-  Python, Ruby, Bash, and HCL.
+  Python, Ruby, Bash, and HCL, in a popover over the identifier that can move
+  into a docked pane.
+- A file header's name opens the whole file in the docked pane at its first
+  change.
 - A pull request's diff reloads in place when the head commit changes, and
   keeps the scroll position.
 - A diff that GitHub refuses to render is computed from a local bare clone.
@@ -50,6 +53,8 @@ What is built and works, and what is known not to work or is unverified.
 
 - Line and range comments from the gutter, replies to threads, and comments on
   blocks of a rendered Markdown file.
+- A line with comments shows a badge. The line's threads, drafts, and composer
+  open in a popover over it, so the diff has no rows of its own for comments.
 - Drafts are saved on disk per pull request and survive quitting.
 - Finishing a review sends every draft as one review. Submitting with the
   Comment verdict is verified against `bojanrajkovic/hermes-playground`.

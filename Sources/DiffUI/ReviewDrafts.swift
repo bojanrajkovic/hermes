@@ -118,6 +118,22 @@ extension DiffKit.DiffSide {
 }
 
 /// What sits under one line of the diff.
+/// The mark in the diff for a line that has comments.
+struct LineBadge: Hashable, Sendable {
+    enum Style: Hashable, Sendable {
+        /// An unresolved thread, and nothing of the user's.
+        case open
+        /// Only resolved threads.
+        case resolved
+        /// A pending comment of the user's, or the comment being written.
+        case draft
+    }
+
+    /// Threads and new-thread drafts. 0 for a line with only the comment being written.
+    let count: Int
+    let style: Style
+}
+
 struct LineItems: Hashable, Sendable {
     var threads: [ReviewThread] = []
     var drafts: [DraftComment] = []
@@ -184,6 +200,52 @@ struct ReviewLayout: Hashable, Sendable {
         }
         let outdated = Set(outdatedDrafts.map(\.id))
         submittable = drafts.filter { !outdated.contains($0.id) }
+    }
+
+    /// The badge each line with comments gets in the diff.
+    ///
+    /// - Parameter writing: The line the comment being written belongs to: its new thread's line, the line of
+    ///   the thread it replies to, or the line of the draft it edits.
+    func badges(writing: ReviewModel.LineRef?) -> [FileDiff.ID: [DiffLine.Numbers: LineBadge]] {
+        var badges: [FileDiff.ID: [DiffLine.Numbers: LineBadge]] = [:]
+        for (file, items) in lines {
+            for (line, item) in items {
+                let hasDraft = !item.drafts.isEmpty || item.threads.contains { replies[$0.id] != nil }
+                let style: LineBadge.Style = if hasDraft || writing == ReviewModel.LineRef(file: file, line: line) {
+                    .draft
+                } else if item.threads.contains(where: { !$0.isResolved }) {
+                    .open
+                } else {
+                    .resolved
+                }
+                badges[file, default: [:]][line] = LineBadge(count: item.threads.count + item.drafts.count, style: style)
+            }
+        }
+        if let writing, badges[writing.file]?[writing.line] == nil {
+            badges[writing.file, default: [:]][writing.line] = LineBadge(count: 0, style: .draft)
+        }
+        return badges
+    }
+
+    /// The line a thread is shown at.
+    func line(of thread: String) -> ReviewModel.LineRef? {
+        for (file, items) in lines {
+            if let line = items.first(where: { $0.value.threads.contains { $0.id == thread } })?.key {
+                return ReviewModel.LineRef(file: file, line: line)
+            }
+        }
+        return nil
+    }
+
+    /// The line a new-thread draft is shown at.
+    func line(ofDraft draft: DraftComment.ID) -> ReviewModel.LineRef? {
+        for (file, items) in lines {
+            if let line = items.first(where: { $0.value.drafts.contains { $0.id == draft } })?.key {
+                return ReviewModel.LineRef(file: file, line: line)
+            }
+        }
+        if let thread = replies.first(where: { $0.value.contains { $0.id == draft } })?.key { return line(of: thread) }
+        return nil
     }
 
     /// Comment counts by new-file line number, for the rendered Markdown view's badges.

@@ -8,8 +8,6 @@ struct DiffTableRow: Identifiable, Equatable {
         case header
         /// A diff row and the digits its gutter fits.
         case line(DiffRow, digits: Int)
-        /// The threads, drafts, notice, and composer under a code line.
-        case attachments(DiffLine)
         case rendered
         case spacer
     }
@@ -34,11 +32,8 @@ struct DiffTableRow: Identifiable, Equatable {
 
 /// The rows of the diff table, top to bottom: per file its header, then its
 /// lines or its rendered Markdown unless the file is collapsed, then a spacer.
-///
-/// - Parameter attached: The lines with comments under them (`ReviewModel.attachedLines`). Each gets a
-///   row after its line. A split row with comments on both sides gets the old side's row first.
 @MainActor
-func tableRows(files: [FileModel], attached: [FileDiff.ID: Set<DiffLine.Numbers>] = [:]) -> [DiffTableRow] {
+func tableRows(files: [FileModel]) -> [DiffTableRow] {
     var rows: [DiffTableRow] = []
     rows.reserveCapacity(files.reduce(0) { $0 + $1.rows.count + 2 })
     for file in files {
@@ -50,13 +45,8 @@ func tableRows(files: [FileModel], attached: [FileDiff.ID: Set<DiffLine.Numbers>
             rows.append(row(.rendered, .rendered))
         } else if !file.isCollapsed {
             let digits = file.gutterDigits
-            let attached = attached[file.id] ?? []
             for line in file.rows {
                 rows.append(DiffTableRow(id: line.id, kind: .line(line, digits: digits), file: file))
-                guard !attached.isEmpty else { continue }
-                for cell in line.cells where attached.contains(cell.line.numbers) {
-                    rows.append(row(.attachments(cell.line.numbers), .attachments(cell.line)))
-                }
             }
         }
         rows.append(row(.spacer, .spacer))
@@ -96,8 +86,6 @@ struct RowHeightEstimator: Equatable {
     let hunkHeight: CGFloat
     let expandableHunkHeight: CGFloat
     let noticeHeight: CGFloat
-    /// One short comment. Most rows of comments are taller.
-    static let attachmentsHeight: CGFloat = 120
 
     /// Measures the heights that follow the code font by laying out one row of each kind.
     @MainActor
@@ -122,7 +110,6 @@ struct RowHeightEstimator: Equatable {
         case .header: DiffMetrics.headerHeight
         case .spacer: DiffMetrics.fileSpacing
         case .rendered: DiffMetrics.renderedMinHeight + 16
-        case .attachments: Self.attachmentsHeight
         case .line(let row, let digits):
             switch row.kind {
             case .hunk(let header): header.hidden > 0 ? expandableHunkHeight : hunkHeight

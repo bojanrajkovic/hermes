@@ -43,7 +43,6 @@ struct DiffTableRowTests {
             switch row.kind {
             case .header: "header \(row.id.file)"
             case .line(let line, _): if case .hunk = line.kind { "hunk" } else if case .notice = line.kind { "notice" } else { "line" }
-            case .attachments: "attachments"
             case .rendered: "rendered"
             case .spacer: "spacer"
             }
@@ -99,47 +98,6 @@ struct DiffTableRowTests {
         let ids = tableRows(files: files).map(\.id)
         #expect(rowChanges(from: ids, to: ids.reversed()) == nil)
         #expect(rowChanges(from: ids, to: ids + [ids[0]]) == nil)
-    }
-}
-
-@MainActor
-struct AttachmentRowTests {
-    private func outline(_ rows: [DiffTableRow]) -> [String] {
-        rows.map { row in
-            switch row.kind {
-            case .header: "header"
-            case .line(let line, _): line.cells.isEmpty ? "other" : "line"
-            case .attachments(let line): "attachments \(line.text.trimmingCharacters(in: .whitespaces))"
-            case .rendered: "rendered"
-            case .spacer: "spacer"
-            }
-        }
-    }
-
-    @Test func commentsAreARowAfterTheirLine() {
-        let file = FileModel(diff: Diff(parsing: sample).files[1], layout: .unified)
-        let attached: [FileDiff.ID: Set<DiffLine.Numbers>] = [file.id: [.deletion(old: 2), .context(old: 1, new: 1)], "other.swift": [.addition(new: 2)]]
-        let rows = tableRows(files: [file], attached: attached)
-        #expect(outline(rows) == ["header", "other", "line", "attachments # Title", "line", "attachments old", "line", "spacer"])
-        #expect(rows[3].id == RowID(file: file.id, item: .attachments(.context(old: 1, new: 1))))
-        #expect(Set(rows.map(\.id)).count == rows.count)
-        // Without comments the rows are the lines alone.
-        #expect(outline(tableRows(files: [file])) == ["header", "other", "line", "line", "line", "spacer"])
-    }
-
-    @Test func aSplitRowHasARowOfCommentsPerSide() {
-        let file = FileModel(diff: Diff(parsing: sample).files[1], layout: .split)
-        let all: Set<DiffLine.Numbers> = [.context(old: 1, new: 1), .deletion(old: 2), .addition(new: 2)]
-        // The context line is one cell on both sides and gets one row. The paired row gets the old side's comments first.
-        #expect(outline(tableRows(files: [file], attached: [file.id: all])) == [
-            "header", "other", "line", "attachments # Title", "line", "attachments old", "attachments new", "spacer",
-        ])
-    }
-
-    @Test func aCollapsedFileShowsNoComments() {
-        let file = FileModel(diff: Diff(parsing: sample).files[1], layout: .unified)
-        file.isCollapsed = true
-        #expect(outline(tableRows(files: [file], attached: [file.id: [.addition(new: 2)]])) == ["header", "spacer"])
     }
 }
 

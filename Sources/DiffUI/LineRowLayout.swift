@@ -140,6 +140,8 @@ struct LineMarks: Equatable {
     var isInRange = false
     /// A gutter drag started on the line, so it keeps its "+" while the pointer is elsewhere.
     var isDragOrigin = false
+    /// The line has comments, which open in a popover.
+    var badge: LineBadge?
 }
 
 /// The review state that the gutters of code lines show.
@@ -149,6 +151,7 @@ struct ReviewMarks: Equatable {
     var rangeLines: [FileDiff.ID: Set<DiffLine.Numbers>] = [:]
     var dragFile: FileDiff.ID?
     var dragLine: DiffLine?
+    var badges: [FileDiff.ID: [DiffLine.Numbers: LineBadge]] = [:]
 
     init() {}
 
@@ -160,13 +163,15 @@ struct ReviewMarks: Equatable {
         rangeLines = review.layout.rangeLines
         dragFile = review.dragOrigin?.file
         dragLine = review.dragOrigin?.line
+        badges = review.layout.badges(writing: review.writingLine)
     }
 
     func marks(of line: DiffLine, in file: FileDiff.ID) -> LineMarks {
         LineMarks(
             isSelected: selectionFile == file && selectionLines.contains(line.numbers),
             isInRange: rangeLines[file]?.contains(line.numbers) == true,
-            isDragOrigin: dragFile == file && dragLine == line
+            isDragOrigin: dragFile == file && dragLine == line,
+            badge: badges[file]?[line.numbers]
         )
     }
 }

@@ -18,8 +18,6 @@ struct RowID: Hashable, Sendable {
         /// A code line. A split row uses its new-side line, or the old-side
         /// line when it has no new side, so most IDs are the same in both layouts.
         case line(DiffLine.Numbers)
-        /// The comments under a code line.
-        case attachments(DiffLine.Numbers)
         /// The header above the hunk that starts at these lines.
         case hunk(oldStart: Int, newStart: Int)
         /// The expander after the last hunk.

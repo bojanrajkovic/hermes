@@ -11,9 +11,14 @@ enum ReviewMetrics {
     static let cardPadding: CGFloat = 10
     static let avatarSize: CGFloat = 20
     static let plusWidth: CGFloat = 16
+    /// The room for the symbol in a line's comment badge.
+    static let badgeIconWidth: CGFloat = 12
+    /// The width of the popover that shows a line's comments.
+    static let popoverWidth: CGFloat = 560
+    /// Above this height the popover's comments scroll.
+    static let popoverMaxHeight: CGFloat = 560
     /// Comments stay near a comfortable reading width in wide windows.
     static let attachmentMaxWidth: CGFloat = 780
-    static let attachmentLeading: CGFloat = 44
     static let composerMinHeight: CGFloat = 90
     static let composerMaxHeight: CGFloat = 260
 }
@@ -29,18 +34,6 @@ func lineRangeLabel(_ anchor: CommentAnchor) -> String {
 }
 
 extension View {
-    /// Places comments under a line: indented past the gutter, on a quiet band as wide as the list.
-    func attachmentInset() -> some View {
-        frame(maxWidth: ReviewMetrics.attachmentMaxWidth, alignment: .leading)
-            .padding(.leading, ReviewMetrics.attachmentLeading)
-            .padding(.trailing, 16)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .overlay(alignment: .top) { Divider() }
-            .overlay(alignment: .bottom) { Divider() }
-    }
-
     /// Styles a form's main button: prominent while it can be pressed.
     ///
     /// A disabled prominent button keeps its filled bezel and still reads as
@@ -61,7 +54,7 @@ extension View {
 
 // MARK: Under a line
 
-/// The threads, pending comments, and composer under one line of the diff. They are a table row of their own.
+/// The threads, pending comments, notice, and composer of one line of the diff, in the popover over the line.
 struct LineAttachments: View {
     let file: FileModel
     let line: DiffLine
@@ -88,7 +81,9 @@ struct LineAttachments: View {
                         CommentComposer(review: review, title: "Comment on \(lineRangeLabel(composing))")
                     }
                 }
-                .attachmentInset()
+                .padding(12)
+                .frame(width: ReviewMetrics.popoverWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -20,6 +20,12 @@ final class ReviewModel {
         var text = ""
     }
 
+    /// A line of a file.
+    struct LineRef: Hashable {
+        let file: FileDiff.ID
+        let line: DiffLine.Numbers
+    }
+
     /// A message shown under a line (or under a file's rendered Markdown when `line` is `nil`).
     struct Notice: Equatable {
         let file: FileDiff.ID
@@ -39,9 +45,11 @@ final class ReviewModel {
     private(set) var layout = ReviewLayout() {
         didSet { updateAttachedLines() }
     }
-    /// The lines that show threads, drafts, a notice, or the composer under them.
-    /// The diff list gives each of them a row. Set only when it changes, so typing in the composer does not rebuild the list.
+    /// The lines that have threads, drafts, a notice, or the composer. Set only when it changes,
+    /// so typing in the composer does not wake what watches it.
     private(set) var attachedLines: [FileDiff.ID: Set<DiffLine.Numbers>] = [:]
+    /// The line whose comments the popover shows. `nil` while the popover is closed.
+    var focusedLine: LineRef?
     /// Why the threads could not be loaded. Drafts still work without them.
     private(set) var threadsError: String?
     /// Saved with the drafts as it changes, so its text is still there after
@@ -167,6 +175,9 @@ final class ReviewModel {
         guard let composer, case .thread(let id, _, let anchor) = composer.target else { return }
         let file = file(id)
         if let end = file?.line(at: anchor.end), anchor.start.map({ file?.line(at: $0) != nil }) ?? true {
+            if case .thread(_, let under, _) = composer.target, focusedLine == LineRef(file: id, line: under) {
+                focusedLine = LineRef(file: id, line: end.numbers)
+            }
             self.composer?.target = .thread(file: id, under: end.numbers, anchor: anchor)
             selection = (id, lines(of: anchor, in: id))
             return
@@ -238,6 +249,7 @@ final class ReviewModel {
             start(anchor, file: file, under: end)
         } catch {
             notice = Notice(file: id, line: last.numbers, text: explanation(for: error))
+            focusedLine = LineRef(file: id, line: last.numbers)
             selection = nil
         }
     }
@@ -306,8 +318,9 @@ final class ReviewModel {
         var text = ""
         if case .edit(let id) = target { text = draft(id)?.body ?? "" }
         composer = target.map { Composer(target: $0, text: text) }
-        if case .thread(let file, _, let anchor) = target {
+        if case .thread(let file, let under, let anchor) = target {
             selection = (file, lines(of: anchor, in: file))
+            focusedLine = LineRef(file: file, line: under)
         } else {
             selection = nil
         }
@@ -321,6 +334,16 @@ final class ReviewModel {
     }
 
     func dismissNotice() { notice = nil }
+
+    /// The line the comment being written belongs to. `nil` when nothing is being written.
+    var writingLine: LineRef? {
+        switch composer?.target {
+        case .thread(let file, let under, _): LineRef(file: file, line: under)
+        case .reply(let threadID): layout.line(of: threadID)
+        case .edit(let id): layout.line(ofDraft: id)
+        case nil: nil
+        }
+    }
 
     private func updateAttachedLines() {
         var lines = layout.lines.mapValues { Set($0.keys) }
@@ -377,8 +400,10 @@ final class ReviewModel {
             composer = Composer(target: .thread(file: id, under: under, anchor: anchor), text: text)
             selection = (id, lines(of: anchor, in: id))
             notice = nil
+            focusedLine = LineRef(file: id, line: under)
         } catch {
             notice = Notice(file: id, line: last.numbers, text: explanation(for: error))
+            focusedLine = LineRef(file: id, line: last.numbers)
         }
     }
 

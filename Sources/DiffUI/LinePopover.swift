@@ -15,14 +15,21 @@ final class LinePopover: NSObject, NSPopoverDelegate {
 
     /// Shows `content` next to `rect` of `view`.
     ///
-    /// - Parameter onClose: Called once the popover closes, however it closes.
-    func show(_ content: some View, size: CGSize, relativeTo rect: CGRect, of view: NSView, onClose: @escaping () -> Void) {
+    /// - Parameters:
+    ///   - size: The popover's size. `nil` sizes it to the content as the content changes.
+    ///   - onClose: Called once the popover closes, however it closes.
+    func show(_ content: some View, size: CGSize?, relativeTo rect: CGRect, of view: NSView, onClose: @escaping () -> Void) {
         close()
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = false
-        popover.contentSize = size
-        popover.contentViewController = NSHostingController(rootView: content)
+        let controller = NSHostingController(rootView: content)
+        if let size {
+            popover.contentSize = size
+        } else {
+            controller.sizingOptions = .preferredContentSize
+        }
+        popover.contentViewController = controller
         popover.delegate = self
         self.popover = popover
         self.onClose = onClose

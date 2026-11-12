@@ -94,12 +94,10 @@ flowchart TD
     K["ReviewModel selection, ranges, drag"] -->|"observed by the coordinator"| N
 ```
 
-- **Rows.** `tableRows(files:attached:)` flattens the files into table rows:
-  per file a header, then its diff rows or one row of rendered Markdown, then a
-  spacer. A collapsed file has only the header and the spacer. The threads,
-  drafts, notice, and composer under a line are a row of their own after it.
-  `ReviewModel.attachedLines` names the lines that have one. It changes only
-  when that set changes, so typing in the composer does not rebuild the rows.
+- **Rows.** `tableRows(files:)` flattens the files into table rows: per file a
+  header, then its diff rows or one row of rendered Markdown, then a spacer. A
+  collapsed file has only the header and the spacer. Comments are not rows:
+  they open in a popover over their line (see Review comments).
 - **Updates.** The table does not observe the models. `DiffList.body` reads
   them and passes the rows in. `rowChanges` compares the old and new row IDs,
   and the table removes and inserts those indexes without animation. It
@@ -126,8 +124,7 @@ flowchart TD
   the list, that edge is held instead.
 - **Scroll requests.** `DiffScrollState.request` names a row and where it
   goes. A jump to a file or a line puts it at the top, a line just below its
-  file's pinned header. "Show in Diff" and a comment marker in rendered
-  Markdown put the line in the middle of the space below the header. The
+  file's pinned header. "Show in Diff" puts the line in the middle of the space below the header. The
   table holds the row there while the rows around it get their real heights,
   until the user scrolls. Any scroll the table did not make itself counts as
   the user's.
@@ -208,9 +205,18 @@ headers get controls that reveal them. For a pull request the text comes from
 `ReviewModel` holds a pull request's threads from GitHub, the user's drafts,
 and the one comment being written.
 
+- A line with threads or drafts has a badge at the end of its row: blue for
+  an unresolved thread, gray when every thread is resolved, orange when it has
+  a draft of the user's or the comment being written. `ReviewLayout.badges`
+  works them out, and `NativeLineCell` draws them.
+- The line's threads, drafts, notice, and composer open in a popover over the
+  line. `ReviewModel.focusedLine` is the line the popover shows: a click on a
+  badge sets it, and so do starting a comment and a notice. The table watches
+  it and shows or closes the popover. Closing the popover keeps the comment
+  being written, which is saved with the drafts.
 - Dragging in the gutter selects a range. GitHub accepts a range only when
-  both ends are lines of the same hunk. Other selections show the reason under
-  the line.
+  both ends are lines of the same hunk. Other selections show the reason in
+  the popover.
 - A finished comment becomes a `DraftComment`. Drafts and the review summary
   are saved to
   `~/Library/Application Support/Hermes/drafts/<owner>/<repo>/<number>.json`.

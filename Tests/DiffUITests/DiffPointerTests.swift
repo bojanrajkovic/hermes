@@ -73,7 +73,7 @@ struct DiffPointerTests {
 
     /// The table row of a line. Row 0 is the file header and row 1 the hunk header.
     private func row(of line: DiffLine) -> Int {
-        tableRows(files: model.files, attached: model.review?.attachedLines ?? [:]).firstIndex { $0.id == RowID(file: model.files[0].id, item: .line(line.numbers)) }!
+        tableRows(files: model.files).firstIndex { $0.id == RowID(file: model.files[0].id, item: .line(line.numbers)) }!
     }
 
     /// The "+" of a unified row: the last 16 points of the gutter.
@@ -121,23 +121,41 @@ struct DiffPointerTests {
         #expect(under == lines[5].numbers)
         #expect(anchor.start == lines[3].commentPosition)
         #expect(anchor.end == lines[5].commentPosition)
-        // The composer is a row of its own, after the range's last line.
+        // The composer opens in the popover over the range's last line. The table gets no row for it.
+        #expect(review.focusedLine == ReviewModel.LineRef(file: model.files[0].id, line: lines[5].numbers))
         try await settle()
-        #expect(table.numberOfRows == 2 + lines.count + 1 + 1)
-        #expect(!(table.view(atColumn: 0, row: row(of: lines[5]) + 1, makeIfNecessary: false) is NativeLineCell))
-        try write("pointer-composer.png")
+        #expect(table.numberOfRows == 2 + lines.count + 1)
     }
 
     @Test func aShiftClickExtendsTheOpenComment() async throws {
         let review = try #require(model.review)
         review.startComment(file: model.files[0].id, from: lines[3], to: lines[3])
         review.composer?.text = "kept"
-        // The composer's row pushes the lines below it down.
         try await settle()
         cell(of: lines[5]).mouseDown(with: event(.leftMouseDown, x: plusX, line: lines[5], flags: .shift))
         table.mouseUp(with: event(.leftMouseUp, x: plusX, line: lines[5], flags: .shift))
         #expect(review.composer?.text == "kept")
         #expect(review.selection?.lines == Set(lines[3...5].map(\.numbers)))
+    }
+
+    @Test func aClickOnALinesBadgeFocusesIt() async throws {
+        let review = try #require(model.review)
+        review.startComment(file: model.files[0].id, from: lines[4], to: lines[4])
+        review.composer?.text = "a note"
+        review.addComposerToReview()
+        review.focusedLine = nil
+        try await settle()
+        let native = try #require(cell(of: lines[4]) as? NativeLineCell)
+        let y = native.bounds.midY
+        let badgeX = try #require(stride(from: native.bounds.maxX, to: native.bounds.maxX - 80, by: -2).first {
+            native.badgeLine(at: CGPoint(x: $0, y: y)) != nil
+        })
+        #expect(native.badgeLine(at: CGPoint(x: badgeX, y: y)) == lines[4])
+        #expect(native.badgeLine(at: CGPoint(x: 40, y: y)) == nil)
+
+        table.mouseDown(with: event(.leftMouseDown, x: badgeX, line: lines[4]))
+        table.mouseUp(with: event(.leftMouseUp, x: badgeX, line: lines[4]))
+        #expect(review.focusedLine == ReviewModel.LineRef(file: model.files[0].id, line: lines[4].numbers))
     }
 
     @Test func aPressAwayFromThePlusStartsNothing() throws {

@@ -121,6 +121,29 @@ struct ReviewLayoutTests {
         #expect(layout.submittable.count == 2)
     }
 
+    @Test func eachLineWithCommentsGetsABadge() {
+        let resolved = ReviewThread(
+            id: "r", path: "docs/guide.md", line: 6, startLine: nil, diffSide: .right, startDiffSide: nil,
+            isResolved: true, isOutdated: false, comments: []
+        )
+        let layout = ReviewLayout(
+            diff: diff, threads: [thread("t1", line: 5), resolved, thread("t2", line: 4, side: .left)],
+            drafts: [draft(5), DraftComment(target: .reply(threadID: "t2"), body: "reply")]
+        )
+        let writing = ReviewModel.LineRef(file: file, line: .context(old: 2, new: 2))
+        let badges = layout.badges(writing: writing)[file] ?? [:]
+        // A line's own draft, or a reply to one of its threads, makes it a draft line.
+        #expect(badges[.addition(new: 5)] == LineBadge(count: 2, style: .draft))
+        #expect(badges[.deletion(old: 4)] == LineBadge(count: 1, style: .draft))
+        #expect(badges[.context(old: 5, new: 6)] == LineBadge(count: 1, style: .resolved))
+        // The comment being written marks a line that has nothing else.
+        #expect(badges[.context(old: 2, new: 2)] == LineBadge(count: 0, style: .draft))
+        #expect(badges.count == 4)
+
+        let open = ReviewLayout(diff: diff, threads: [thread("t1", line: 5)], drafts: []).badges(writing: nil)[file]
+        #expect(open == [.addition(new: 5): LineBadge(count: 1, style: .open)])
+    }
+
     @Test func whatHasNoLineInTheDiffIsSetAside() {
         let reply = DraftComment(target: .reply(threadID: "gone"), body: "reply")
         let kept = DraftComment(target: .reply(threadID: "t1"), body: "reply")
