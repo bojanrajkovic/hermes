@@ -159,4 +159,19 @@ extension Check {
 
     /// The Actions job behind the check, when there is one.
     var jobID: Int? { run?.workflow == nil ? nil : run?.databaseID }
+
+    /// Whether GitHub can run the check again: an Actions job that failed or was cancelled.
+    /// Other apps' checks and legacy statuses are run again by their own service.
+    var canRerun: Bool { jobID != nil && [.failed, .cancelled].contains(state) }
+}
+
+extension CheckList {
+    /// The workflow runs that have a job to run again, each once, in list order.
+    static func rerunnableRuns(_ checks: [Check]) -> [Int] {
+        var seen = Set<Int>()
+        return checks.compactMap { check in
+            guard check.canRerun, let id = check.run?.workflow?.runID, seen.insert(id).inserted else { return nil }
+            return id
+        }
+    }
 }

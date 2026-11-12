@@ -8,13 +8,16 @@ struct CheckDetailView: View {
     let check: Check
     let repository: RepositoryRef
     let client: GitHubClient
+    let isRerunning: Bool
+    /// Runs the job again. `nil` when it cannot run again.
+    let rerun: (() -> Void)?
 
     @State private var model = CheckDetailModel()
     @State private var retryCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            CheckDetailHeader(check: check)
+            CheckDetailHeader(check: check, isRerunning: isRerunning, rerun: rerun)
             Divider()
             CheckDetailContent(check: check, content: model.content) { retryCount += 1 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -29,6 +32,8 @@ struct CheckDetailView: View {
 
 struct CheckDetailHeader: View {
     let check: Check
+    var isRerunning = false
+    var rerun: (() -> Void)?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -53,6 +58,11 @@ struct CheckDetailHeader: View {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: Metrics.rowSpacing)
+            if let rerun {
+                Button(action: rerun) { Label("Re-run Job", systemImage: "arrow.clockwise") }
+                    .disabled(isRerunning)
+                    .help("Run this job again, with the jobs that depend on it")
+            }
             if let url = check.url {
                 Button {
                     openURL(url)

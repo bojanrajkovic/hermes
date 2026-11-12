@@ -76,6 +76,7 @@ extension TimingText {
 struct CheckListView: View {
     let groups: [CheckGroup]
     @Binding var selection: Check.ID?
+    let rerun: (ChecksModel.Rerun) -> Void
 
     var body: some View {
         List(selection: $selection) {
@@ -85,7 +86,7 @@ struct CheckListView: View {
                         CheckRow(check: check)
                             .tag(check.id)
                             .listRowSeparator(.hidden)
-                            .contextMenu { CheckMenu(check: check) }
+                            .contextMenu { CheckMenu(check: check, rerun: rerun) }
                     }
                 }
             }
@@ -99,9 +100,16 @@ struct CheckListView: View {
 /// The right-click menu of a check.
 struct CheckMenu: View {
     let check: Check
+    /// `nil` where the list cannot follow the rerun, such as the overview's summary.
+    var rerun: ((ChecksModel.Rerun) -> Void)?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        if let rerun, check.canRerun, let job = check.jobID, let workflow = check.run?.workflow {
+            Button("Re-run Job") { rerun(.job(job)) }
+            Button("Re-run Failed Jobs in \(workflow.name)") { rerun(.failedJobs(runs: [workflow.runID])) }
+            Divider()
+        }
         if let url = check.url {
             Button("Open on GitHub") { openURL(url) }
             Button("Copy Link") {
@@ -145,6 +153,9 @@ struct CheckRow: View {
 struct CheckListFooter: View {
     let rollup: String
     var refreshError: String?
+    /// Runs every failed job again. `nil` when none can run again.
+    let rerunFailed: (() -> Void)?
+    let isRerunning: Bool
     let refresh: () -> Void
 
     var body: some View {
@@ -161,6 +172,12 @@ struct CheckListFooter: View {
             .lineLimit(1)
             .truncationMode(.tail)
             Spacer()
+            if let rerunFailed {
+                Button("Re-run Failed", action: rerunFailed)
+                    .controlSize(.small)
+                    .disabled(isRerunning)
+                    .help("Run the failed and cancelled jobs again")
+            }
             Button(action: refresh) {
                 Image(systemName: "arrow.clockwise")
             }

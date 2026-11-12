@@ -11,6 +11,7 @@ final class StubProtocol: URLProtocol {
     }
 
     struct Recorded: Sendable {
+        let method: String
         let path: String
         let authorization: String?
         let body: String
@@ -42,6 +43,7 @@ final class StubProtocol: URLProtocol {
             stream.close()
         }
         let recorded = Recorded(
+            method: request.httpMethod ?? "GET",
             path: request.url!.path,
             authorization: request.value(forHTTPHeaderField: "Authorization"),
             body: String(decoding: body, as: UTF8.self),
@@ -361,6 +363,26 @@ actor TokenCounter {
 
         await #expect(throws: GitHubError.logsUnavailable) {
             try await client.jobLogs(repository: repository, jobID: 7)
+        }
+    }
+
+    @Test func rerunsPostToTheJobAndTheRun() async throws {
+        let client = client { _ in .init(status: 201) }
+
+        try await client.rerunJob(repository: repository, jobID: 7)
+        try await client.rerunFailedJobs(repository: repository, runID: 9)
+        let sent = StubProtocol.requests.withLock { $0.map { "\($0.method) \($0.path)" } }
+        #expect(sent == [
+            "POST /repos/\(repository.owner)/\(repository.name)/actions/jobs/7/rerun",
+            "POST /repos/\(repository.owner)/\(repository.name)/actions/runs/9/rerun-failed-jobs",
+        ])
+    }
+
+    @Test func aRefusedRerunSaysWhy() async throws {
+        let client = client { _ in .init(status: 403, body: #"{"message":"Resource not accessible by integration"}"#) }
+
+        await #expect(throws: GitHubError.http(status: 403, message: "Resource not accessible by integration")) {
+            try await client.rerunJob(repository: repository, jobID: 7)
         }
     }
 

@@ -79,9 +79,9 @@ func snapshot(
     @Test func list() async throws {
         let checks = everyState
         try await snapshot("list", size: CGSize(width: 300, height: 620)) {
-            CheckListView(groups: CheckList.grouped(checks), selection: .constant(checks[1].id))
+            CheckListView(groups: CheckList.grouped(checks), selection: .constant(checks[1].id), rerun: { _ in })
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    CheckListFooter(rollup: CheckList.rollup(checks)) {}
+                    CheckListFooter(rollup: CheckList.rollup(checks), rerunFailed: {}, isRerunning: false) {}
                 }
         }
     }
@@ -105,7 +105,7 @@ func snapshot(
         let check = run("tests", .inProgress, nil, started: start)
         try await snapshot("steps", size: CGSize(width: 560, height: 360)) {
             VStack(spacing: 0) {
-                CheckDetailHeader(check: check)
+                CheckDetailHeader(check: check, rerun: check.canRerun ? {} : nil)
                 Divider()
                 CheckDetailContent(check: check, content: .steps(steps), retry: {})
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

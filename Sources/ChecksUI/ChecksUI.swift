@@ -29,19 +29,23 @@ public struct ChecksScreen: View {
     public var body: some View {
         HSplitView {
             ChecksLoadingView(model: model, retry: { refreshCount += 1 }) {
-                CheckListView(groups: CheckList.grouped(model.checks), selection: $model.selection)
+                CheckListView(groups: CheckList.grouped(model.checks), selection: $model.selection, rerun: rerun)
             }
             // Under every state, so the list can be refreshed when it is empty or failed to load.
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CheckListFooter(
-                    rollup: model.isLoaded ? CheckList.rollup(model.checks) : "", refreshError: model.refreshError
+                    rollup: model.isLoaded ? CheckList.rollup(model.checks) : "", refreshError: model.refreshError,
+                    rerunFailed: rerunFailed, isRerunning: model.isRerunning
                 ) { refreshCount += 1 }
             }
             .frame(minWidth: Metrics.listMinWidth, idealWidth: Metrics.listIdealWidth, maxWidth: Metrics.listMaxWidth)
 
             Group {
                 if let check = model.selectedCheck {
-                    CheckDetailView(check: check, repository: repository, client: client)
+                    CheckDetailView(
+                        check: check, repository: repository, client: client, isRerunning: model.isRerunning,
+                        rerun: check.jobID.flatMap { id in check.canRerun ? { rerun(.job(id)) } : nil }
+                    )
                 } else {
                     ContentUnavailableView(
                         "No Check Selected", systemImage: "checklist",
@@ -58,6 +62,29 @@ public struct ChecksScreen: View {
         }
         .onChange(of: initiallySelected) { _, selected in
             if let selected { model.selection = selected }
+        }
+        .alert(
+            "Couldn't Re-run the Jobs",
+            isPresented: Binding { model.rerunError != nil } set: { if !$0 { model.rerunError = nil } }
+        ) {
+            Button("OK") { model.rerunError = nil }
+        } message: {
+            Text(model.rerunError ?? "")
+        }
+    }
+
+    /// Runs the failed jobs of every workflow run again. `nil` when no job can run again.
+    private var rerunFailed: (() -> Void)? {
+        let runs = CheckList.rerunnableRuns(model.checks)
+        return runs.isEmpty ? nil : { rerun(.failedJobs(runs: runs)) }
+    }
+
+    private func rerun(_ request: ChecksModel.Rerun) {
+        Task {
+            guard await model.rerun(request, repository: repository, client: client) else { return }
+            // GitHub queues the new attempt a moment after it answers. The reload then follows it.
+            try? await Task.sleep(for: ChecksModel.rerunSettle)
+            refreshCount += 1
         }
     }
 }

@@ -30,6 +30,28 @@ func run(
         #expect(Set(CheckState.allCases.map(\.symbol)).count == CheckState.allCases.count)
     }
 
+    @Test func failedOrCancelledActionsJobsCanRunAgain() {
+        #expect(run("a", .completed, .failure).canRerun)
+        #expect(run("a", .completed, .timedOut).canRerun)
+        #expect(run("a", .completed, .cancelled).canRerun)
+        #expect(!run("a").canRerun)
+        #expect(!run("a", .inProgress, nil).canRerun)
+        // Another app's check, and a legacy status, are not GitHub Actions jobs.
+        #expect(!run("a", .completed, .failure, workflow: nil, app: "Vercel").canRerun)
+        #expect(!Check.status(.init(context: "c", state: .failure, targetURL: nil, description: nil)).canRerun)
+    }
+
+    @Test func eachRunWithAFailedJobIsRunAgainOnce() {
+        func job(_ name: String, _ conclusion: CheckRun.Conclusion, runID: Int) -> Check {
+            .run(CheckRun(
+                databaseID: abs(name.hashValue), name: name, status: .completed, conclusion: conclusion, startedAt: nil,
+                completedAt: nil, detailsURL: nil, appName: "GitHub Actions", workflow: .init(name: "ci", runID: runID)
+            ))
+        }
+        let checks = [job("a", .failure, runID: 2), job("b", .success, runID: 3), job("c", .cancelled, runID: 2), job("d", .failure, runID: 1)]
+        #expect(CheckList.rerunnableRuns(checks) == [2, 1])
+    }
+
     @Test func groupsByWorkflowWithTheRestLast() {
         let status = Check.status(.init(context: "ci/legacy", state: .success, targetURL: nil, description: nil))
         let groups = CheckList.grouped([

@@ -14,10 +14,24 @@ final class ChecksModel {
     /// shown are current whenever this is nil.
     private(set) var refreshError: String?
     var selection: Check.ID?
+    /// A rerun request is on its way to GitHub.
+    private(set) var isRerunning = false
+    /// Why GitHub refused the last rerun.
+    var rerunError: String?
+
+    /// What to run again.
+    enum Rerun: Equatable {
+        /// One job, with the jobs that depend on it.
+        case job(Int)
+        /// The failed and cancelled jobs of these workflow runs.
+        case failedJobs(runs: [Int])
+    }
 
     @ObservationIgnored private var loadedCommit: String?
 
     nonisolated static let refreshInterval = Duration.seconds(10)
+    /// How long after a rerun request the list reloads, so the queued attempt is in it.
+    nonisolated static let rerunSettle = Duration.seconds(3)
 
     /// How long an empty list keeps reloading. GitHub creates a commit's
     /// checks a few seconds after the push, so an empty list right after one
@@ -74,6 +88,28 @@ final class ChecksModel {
                 delay = Self.reloadDelay(after: error, now: .now)
             }
             try? await Task.sleep(for: delay)
+        }
+    }
+}
+
+extension ChecksModel {
+    /// Asks GitHub to run jobs again.
+    ///
+    /// - Returns: Whether GitHub took every request. On failure `rerunError` says why.
+    func rerun(_ rerun: Rerun, repository: RepositoryRef, client: GitHubClient) async -> Bool {
+        isRerunning = true
+        defer { isRerunning = false }
+        do {
+            switch rerun {
+            case .job(let id): try await client.rerunJob(repository: repository, jobID: id)
+            case .failedJobs(let runs):
+                for run in runs { try await client.rerunFailedJobs(repository: repository, runID: run) }
+            }
+            rerunError = nil
+            return true
+        } catch {
+            rerunError = ChecksError.message(for: error)
+            return false
         }
     }
 }

@@ -78,6 +78,8 @@ sequenceDiagram
 | `pullRequestDiff` | REST | Unified diff text. Throws `diffTooLarge` when GitHub refuses to render it. |
 | `checks(repository:commitOID:)` | GraphQL | Check runs and legacy commit statuses of a commit. |
 | `jobLogs(repository:jobID:)` | REST | The log of a GitHub Actions job. |
+| `rerunJob(repository:jobID:)` | REST | Runs a failed GitHub Actions job again, with the jobs that depend on it. |
+| `rerunFailedJobs(repository:runID:)` | REST | Runs the failed and cancelled jobs of a workflow run again. |
 | `submitReview` | GraphQL mutations | See [diff-viewer.md](diff-viewer.md). |
 | `mergeReadiness(repository:number:)` | GraphQL | GitHub's merge state for a pull request, the methods its repository allows, the viewer's default method, and whether the viewer can push. |
 | `mergePullRequest(pullRequestID:method:expectedHeadOID:)` | GraphQL mutation | Merges one pull request that is not in a stack. GitHub refuses it when the head has moved. |

@@ -402,6 +402,23 @@ extension GitHubClient {
         return checks
     }
 
+    /// Runs one GitHub Actions job again, with the jobs that depend on it.
+    ///
+    /// - Parameter jobID: `CheckRun.databaseID` of a run whose `workflow` is not nil.
+    /// - Throws: `GitHubError.http` with GitHub's reason, for example when the
+    ///   viewer may not run workflows in the repository or the run is too old.
+    public func rerunJob(repository: RepositoryRef, jobID: Int) async throws {
+        try await post("/repos/\(repository.owner)/\(repository.name)/actions/jobs/\(jobID)/rerun")
+    }
+
+    /// Runs the failed and cancelled jobs of a workflow run again, with the jobs that depend on them.
+    ///
+    /// - Parameter runID: `CheckRun.Workflow.runID`.
+    /// - Throws: As `rerunJob(repository:jobID:)`.
+    public func rerunFailedJobs(repository: RepositoryRef, runID: Int) async throws {
+        try await post("/repos/\(repository.owner)/\(repository.name)/actions/runs/\(runID)/rerun-failed-jobs")
+    }
+
     /// Downloads the log of a GitHub Actions job as text.
     ///
     /// - Parameter jobID: `CheckRun.databaseID` of a run whose `workflow` is not nil.

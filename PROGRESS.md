@@ -49,6 +49,11 @@ What is built and works, and what is known not to work or is unverified.
 - Local diffs: a session's worktree against its base, and one branch of a
   local stack against its parent.
 
+- Failed or cancelled GitHub Actions jobs can be run again from the Checks
+  tab: one job from its header or right-click menu, a workflow's failed jobs
+  from the menu, or every failed job from the button under the list. Not yet
+  tried against GitHub.
+
 **Reviews**
 
 - Line and range comments from the gutter, replies to threads, and comments on
