@@ -22,6 +22,12 @@ final class AppStore {
     private let defaults: UserDefaults
 
     private(set) var startup: Startup = .loading
+    /// The window that was key last. Links open there.
+    @ObservationIgnored weak var frontmost: WindowModel?
+    /// Opens a window. Set by the first window, since only a view can open one.
+    @ObservationIgnored var openWindow: ((WindowState) -> Void)?
+    /// Links that arrived before any window was up.
+    @ObservationIgnored private var waitingLinks: [URL] = []
     // Filled in while a view reads it, so it is not observed. The entries are, and an entry is never replaced.
     @ObservationIgnored private var accounts: [String: AccountData] = [:]
 
@@ -74,6 +80,31 @@ final class AppStore {
         } catch {
             startup = .failed(StartupProblem(error))
         }
+    }
+
+    /// Opens a link in the frontmost window, or in a new window when it ends in `?window=new`
+    /// or no window is up. A link Hermes can't read is reported in the frontmost window.
+    func open(_ url: URL) {
+        guard let link = DeepLink(url: url) else {
+            frontmost?.resolveError = "Hermes can't open \(url.absoluteString)."
+            return
+        }
+        let asksForWindow = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .contains { $0.name == "window" && $0.value == "new" } == true
+        if let frontmost, !asksForWindow {
+            Task { await frontmost.open(link) }
+        } else if let openWindow {
+            openWindow(WindowState(url: url))
+        } else {
+            waitingLinks.append(url)
+        }
+    }
+
+    /// Called by a window once it is up, to open the links that came first.
+    func windowIsUp() {
+        let links = waitingLinks
+        waitingLinks = []
+        for url in links { open(url) }
     }
 
     /// The account with this login, when the viewer has it.

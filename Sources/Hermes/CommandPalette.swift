@@ -33,6 +33,14 @@ struct CommandPalette: View {
                         .textFieldStyle(.plain)
                         .focused($isFocused)
                         .onSubmit { if let current { run(current) } }
+                        .onKeyPress(.return, phases: .down) { press in
+                            guard press.modifiers.contains(.option), let current, let url = windowURL(for: current.action) else {
+                                return .ignored
+                            }
+                            model.isPaletteShown = false
+                            model.openWindow(showing: url)
+                            return .handled
+                        }
                         .onKeyPress(.downArrow) { move(1, in: items, from: current) }
                         .onKeyPress(.upArrow) { move(-1, in: items, from: current) }
                         .onKeyPress(.escape) {
@@ -75,6 +83,7 @@ struct CommandPalette: View {
                 HStack(spacing: 14) {
                     Keycap("↑↓", "to move")
                     Keycap("↩", "to open")
+                    Keycap("⌥↩", "in a new window")
                     Keycap("esc", "to close")
                     Spacer()
                     Text(verbatim: "repo#123 opens any pull request or issue")
@@ -111,6 +120,18 @@ struct CommandPalette: View {
         guard let current, let index = items.firstIndex(of: current) else { return .handled }
         selected = items[min(max(index + offset, 0), items.count - 1)].action
         return .handled
+    }
+
+    /// A link to what a row opens, for opening it in a new window. Nil for commands.
+    private func windowURL(for action: PaletteAction) -> URL? {
+        let path: String? = switch action {
+        case .show(.pullRequest(let key)), .open(let key): "\(key.repository)/pull/\(key.number)"
+        case .show(.issue(let key)): "\(key.repository)/issues/\(key.number)"
+        case .repository(let repository): "\(repository)"
+        case .link(let link): link.path
+        case .show(.session), .account, .refresh, .toggleBots, .settings: nil
+        }
+        return path.flatMap { URL(string: "hermes://\($0)") }
     }
 
     private func run(_ item: PaletteItem) {

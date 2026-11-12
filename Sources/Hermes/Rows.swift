@@ -361,6 +361,13 @@ struct PullRequestRows: View {
                     StackRow(stack: stack)
                 }
                 .selectionDisabled()
+                .contextMenu {
+                    if let repository = stack.pullRequests.first?.repository {
+                        Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                            model.openWindow(showing: URL(string: "hermes://\(repository)/stack/\(stack.number)"))
+                        }
+                    }
+                }
                 if isExpanded.wrappedValue {
                     ForEach(stack.pullRequests) { row($0).padding(.leading, 18) }
                 }
@@ -445,6 +452,8 @@ struct ItemMenu: View {
     let model: WindowModel
 
     var body: some View {
+        // Hermes reads github.com links, so the item's own URL names it for the new window.
+        Button("Open in New Window", systemImage: "macwindow.badge.plus") { model.openWindow(showing: url) }
         Button("Open on GitHub", systemImage: "safari") { NSWorkspace.shared.open(url) }
         Button("Copy Link", systemImage: "link") {
             NSPasteboard.general.clearContents()

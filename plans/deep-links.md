@@ -36,6 +36,13 @@ through associated domains, so Hermes cannot claim them. A link router such as
 Finicky, Velja or Switchbar can send them to Hermes by rule, and Hermes reads
 github.com URLs the same as `hermes://` ones.
 
+## Windows
+
+A link opens in the frontmost window. A link that ends in `?window=new` opens
+in a window of its own, and so does a link that arrives when no window is up.
+The app delegate takes every link (`AppStore.open(_:)`), and the window group
+handles none itself, so SwiftUI makes no window of its own for a link.
+
 ## Accounts
 
 When the link's owner is the viewer or one of their organizations, Hermes

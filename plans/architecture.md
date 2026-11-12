@@ -74,6 +74,14 @@ The `Hermes` target splits its state in three:
 - `WindowModel`, one per window: the account the window shows and what it
   shows of it, such as the selection, the scope, and the tab.
 
+Each window is a `WindowGroup` window whose value is a `WindowState`: its
+account and a `hermes://` link to what it shows, kept current as the window
+changes. macOS saves it with the window, so when the system setting "Close
+windows when quitting an application" is off, a relaunch brings each window
+back on its account and page. New windows come from File ▸ New Window (⇧⌘N),
+File ▸ Open Link in New Window… (⌥⌘O), ⌥↩ in the command palette, Open in New
+Window on list rows, and links that end in `?window=new`.
+
 ```mermaid
 graph LR
     S[AppStore] --> A1["AccountData (you)"]

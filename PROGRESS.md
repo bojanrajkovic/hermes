@@ -57,6 +57,10 @@ What is built and works, and what is known not to work or is unverified.
 - `hermes://` links open repositories, issues, pull requests, stacks,
   comments, review threads, and file lines. They use GitHub's own paths.
 
+- Several windows, each on its own account. New windows come from ⇧⌘N, Open
+  Link in New Window… (⌥⌘O), ⌥↩ in ⌘K, row menus, and `?window=new` links.
+  Windows come back after a relaunch when macOS keeps windows on quit.
+
 **Reviews**
 
 - Line and range comments from the gutter, replies to threads, and comments on

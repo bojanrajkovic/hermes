@@ -100,6 +100,20 @@ private func issuesPage(_ numbers: [Int]) -> String {
         #expect(model.issue(key(1))?.state == .closed)
     }
 
+    @Test func windowsOnOneAccountShareItsDataAndKeepTheirOwnPlace() async {
+        StubProtocol.enqueue(item(pullRequestJSON(7)))
+        let other = WindowModel(store: model.store)
+
+        await model.open(key(7))
+        // The other window sees the loaded pull request without loading it again, and stays where it was.
+        #expect(other.data === model.data)
+        #expect(other.pullRequest(key(7))?.number == 7)
+        #expect(model.destination == .pullRequest(key(7)))
+        #expect(other.destination == nil)
+        #expect(model.placeURL == URL(string: "hermes://bojan/airway/pull/7"))
+        #expect(other.placeURL == nil)
+    }
+
     @Test func slowOpenByNumberDoesNotOverrideLaterNavigation() async {
         StubProtocol.enqueue(item(pullRequestJSON(7)), delay: 0.2)
 

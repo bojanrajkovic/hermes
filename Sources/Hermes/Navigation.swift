@@ -3,6 +3,15 @@ import GitHubKit
 import HermesUI
 
 /// A pull request or issue, named by repository and number.
+/// What a window was opened with, kept current as it changes: the window's
+/// account, and a `hermes://` link to what it shows. macOS saves it with the
+/// window, so a relaunch restores both.
+struct WindowState: Codable, Hashable {
+    var id = UUID()
+    var login: String?
+    var url: URL?
+}
+
 struct ItemKey: Hashable, Sendable, CustomStringConvertible {
     let repository: RepositoryRef
     let number: Int

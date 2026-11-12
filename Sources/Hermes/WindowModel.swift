@@ -120,6 +120,8 @@ final class WindowModel {
     /// The row the lists should scroll to. `serial` makes a repeated request a new value.
     private(set) var scrollRequest: (target: AnyHashable, serial: Int)?
     var isPaletteShown = false
+    /// The sheet that asks for a link to open in a new window.
+    var isOpenLinkShown = false
     /// The origin of the session the launch sheet is about to start.
     var launching: SessionOrigin?
     /// A pull request or issue number the palette is loading.
@@ -346,6 +348,22 @@ final class WindowModel {
             resolving = nil
             resolveError = "Could not open \(key): \(describe(error))"
         }
+    }
+
+    /// A `hermes://` link to what the window shows, which a restored window opens again.
+    var placeURL: URL? {
+        let path: String? = switch destination {
+        case .pullRequest(let key): "\(key.repository)/pull/\(key.number)"
+        case .issue(let key): "\(key.repository)/issues/\(key.number)"
+        // Sessions end with the app, so a restored window can't show one.
+        case .session, nil: if case .repository(let repository) = scope { "\(repository)" } else { nil }
+        }
+        return path.flatMap { URL(string: "hermes://\($0)") }
+    }
+
+    /// Opens a window of its own on the same account, showing `link`, or the account's lists when it is nil.
+    func openWindow(showing url: URL? = nil) {
+        store.openWindow?(WindowState(login: account?.login, url: url))
     }
 
     /// The origin a session starts from for the open pull request or issue.

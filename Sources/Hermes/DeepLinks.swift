@@ -64,6 +64,16 @@ extension DeepLink {
         }
     }
 
+    /// The link's path after `hermes://`, without what it points at inside the page.
+    var path: String {
+        switch self {
+        case .repository(let repository): "\(repository)"
+        case .issue(let repository, let number, _): "\(repository)/issues/\(number)"
+        case .pullRequest(let repository, let number, _): "\(repository)/pull/\(number)"
+        case .stack(let repository, let number): "\(repository)/stack/\(number)"
+        }
+    }
+
     /// The repository the link is in.
     var repository: RepositoryRef {
         switch self {

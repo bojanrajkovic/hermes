@@ -18,15 +18,15 @@ enum Main {
     }
 }
 
-/// Owns the app's state, so it can ask before a quit ends running sessions.
+/// Owns the app's state, so it can ask before a quit ends running sessions,
+/// and sends each link to a window.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = WindowModel()
+    let store = AppStore()
 
     /// Asks before quitting while Claude sessions run: they do not survive it.
-    /// Closing the window also quits the app, and comes through here too.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let running = model.sessions.sessions.count { $0.state == .running }
+        let running = store.sessions.sessions.count { $0.state == .running }
         guard running > 0 else { return .terminateNow }
 
         let alert = NSAlert()
@@ -37,6 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// A link opens in the frontmost window, or in a new one when it asks for one with `?window=new`.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { store.open(url) }
     }
 }
 
@@ -50,83 +58,121 @@ struct HermesApp: App {
     }
 
     var body: some Scene {
-        let model = delegate.model
-        Window("Hermes", id: "main") {
-            RootView()
-                .environment(model)
+        let store = delegate.store
+        // Each window's value is what it shows. macOS saves it, so windows come back after a relaunch.
+        WindowGroup("Hermes", for: WindowState.self) { $state in
+            WindowRoot(store: store, state: $state)
                 .frame(minWidth: Theme.windowMinWidth, minHeight: Theme.windowMinHeight)
-                .onOpenURL { url in
-                    guard let link = DeepLink(url: url) else {
-                        model.resolveError = "Hermes can't open \(url.absoluteString)."
-                        return
-                    }
-                    Task { await model.open(link) }
-                }
+        } defaultValue: {
+            WindowState()
         }
-        // A link opens in the one window instead of a new one.
-        .handlesExternalEvents(matching: ["*"])
+        // Links go through the app delegate, which picks the window. Without this a window group makes a window per link.
+        .handlesExternalEvents(matching: [])
         .defaultSize(width: Theme.windowDefaultWidth, height: Theme.windowDefaultHeight)
         .windowResizability(.contentMinSize)
         .commands {
-            HermesCommands(model: model)
+            HermesCommands(store: store)
             DiffCommands()
         }
 
         Settings {
-            SettingsView().environment(model)
+            SettingsView().environment(store)
         }
     }
 }
 
+/// One window: its own `WindowModel`, made from the state the window was opened or restored with.
+struct WindowRoot: View {
+    @Binding var state: WindowState
+    @State private var model: WindowModel
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.controlActiveState) private var activeState
+
+    init(store: AppStore, state: Binding<WindowState>) {
+        _state = state
+        _model = State(initialValue: WindowModel(store: store))
+    }
+
+    var body: some View {
+        RootView()
+            .environment(model)
+            .focusedSceneValue(model)
+            .task {
+                model.store.openWindow = { openWindow(value: $0) }
+                model.store.frontmost = model.store.frontmost ?? model
+                model.store.windowIsUp()
+                if let url = state.url, let link = DeepLink(url: url) { model.pendingLink = link }
+                await model.start(login: state.login)
+            }
+            .onChange(of: activeState, initial: true) {
+                if activeState == .key { model.store.frontmost = model }
+            }
+            // Kept current, so a restored window shows its account and what it showed.
+            .onChange(of: WindowState(id: state.id, login: model.account?.login, url: model.placeURL)) { _, new in
+                state = new
+            }
+    }
+}
+
 /// The menu bar: every action in the window has an entry here with its shortcut.
+/// Window commands act on the focused window.
 struct HermesCommands: Commands {
-    @Bindable var model: WindowModel
+    let store: AppStore
+    @FocusedValue(WindowModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("Start Claude Session…") { model.launching = model.launchableOrigin }
+            Button("New Window") { openWindow(value: WindowState(login: model?.account?.login)) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("Open Link in New Window…") { model?.isOpenLinkShown = true }
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(model?.viewer == nil)
+            Divider()
+            Button("Start Claude Session…") { model?.launching = model?.launchableOrigin }
                 .keyboardShortcut("n", modifiers: .command)
-                .disabled(model.launchableOrigin == nil)
+                .disabled(model?.launchableOrigin == nil)
         }
 
         CommandGroup(before: .sidebar) {
             ForEach(PullRequestTab.allCases) { tab in
-                Button(tab.title) { model.pullRequestTab = tab }
+                Button(tab.title) { model?.pullRequestTab = tab }
                     .keyboardShortcut(KeyEquivalent(Character("\(tab.rawValue + 1)")), modifiers: .command)
-                    .disabled(!model.isShowingPullRequest || (tab == .sessions && !model.openPullRequestHasSessions))
+                    .disabled(model?.isShowingPullRequest != true || (tab == .sessions && model?.openPullRequestHasSessions != true))
             }
             Divider()
-            Toggle("Show All Bot Pull Requests", isOn: $model.showingAllBots)
+            Toggle("Show All Bot Pull Requests", isOn: Binding { store.showingAllBots } set: { store.showingAllBots = $0 })
                 .keyboardShortcut("b", modifiers: [.command, .shift])
-            Button("Refresh") { Task { await model.refresh() } }
+            Button("Refresh") { Task { await model?.refresh() } }
                 .keyboardShortcut("r", modifiers: .command)
+                .disabled(model == nil)
             Divider()
         }
 
         CommandMenu("Go") {
-            Button("Command Palette…") { model.isPaletteShown.toggle() }
+            Button("Command Palette…") { model?.isPaletteShown.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
-                .disabled(model.viewer == nil)
+                .disabled(model?.viewer == nil)
             Divider()
-            Button("Down the Stack") { model.moveInStack(by: -1) }
+            Button("Down the Stack") { model?.moveInStack(by: -1) }
                 .keyboardShortcut("[", modifiers: .command)
-                .disabled(!model.canMoveDownStack)
-            Button("Up the Stack") { model.moveInStack(by: 1) }
+                .disabled(model?.canMoveDownStack != true)
+            Button("Up the Stack") { model?.moveInStack(by: 1) }
                 .keyboardShortcut("]", modifiers: .command)
-                .disabled(!model.canMoveUpStack)
+                .disabled(model?.canMoveUpStack != true)
             Divider()
             Button("Open on GitHub") {
-                if let url = model.destinationURL { NSWorkspace.shared.open(url) }
+                if let url = model?.destinationURL { NSWorkspace.shared.open(url) }
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
-            .disabled(model.destinationURL == nil)
+            .disabled(model?.destinationURL == nil)
         }
 
         CommandMenu("Account") {
-            ForEach(model.viewer?.accounts ?? []) { account in
+            ForEach(model?.viewer?.accounts ?? []) { account in
                 Toggle(
                     account.name ?? account.login,
-                    isOn: Binding(get: { model.account == account }, set: { _ in model.select(account) })
+                    isOn: Binding(get: { model?.account == account }, set: { _ in model?.select(account) })
                 )
             }
         }
@@ -145,10 +191,10 @@ extension WindowModel {
 }
 
 struct SettingsView: View {
-    @Environment(WindowModel.self) private var model
+    @Environment(AppStore.self) private var store
 
     var body: some View {
-        @Bindable var model = model
+        @Bindable var model = store
         TabView {
             Tab("General", systemImage: "gearshape") {
                 Form {

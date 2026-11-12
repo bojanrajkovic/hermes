@@ -29,6 +29,9 @@ struct MainView: View {
         .overlay {
             if model.isPaletteShown { CommandPalette() }
         }
+        .sheet(isPresented: Binding(get: { model.isOpenLinkShown }, set: { model.isOpenLinkShown = $0 })) {
+            OpenLinkSheet()
+        }
         .sheet(isPresented: Binding(get: { model.launching != nil }, set: { if !$0 { model.launching = nil } })) {
             if let origin = model.launching {
                 SessionLaunchSheet(origin: origin, store: model.sessions) { session in
