@@ -16,7 +16,7 @@ struct SessionScreen: View {
     }
 
     let session: ClaudeSession
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @State private var checkout: Checkout?
     @State private var branches: [LocalStack.Branch] = []
     @State private var scope: DiffScope = .workingTree

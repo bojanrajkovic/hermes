@@ -54,65 +54,45 @@ func describe(_ error: any Error) -> String {
     }
 }
 
-/// The app's state: who is signed in, the selected account's pull requests,
-/// repositories and issues, and what the window shows.
+/// One window's state: the account it shows and what it shows of it. The
+/// data comes from the `AppStore` every window shares.
 @Observable
 @MainActor
-final class AppModel {
-    enum Startup: Equatable {
-        case loading
-        case failed(StartupProblem)
-        case ready(ViewerProfile)
-    }
+final class WindowModel {
+    typealias Startup = AppStore.Startup
 
-    static let issuePageSize = 30
-
-    let client: GitHubClient
-    let repoCache: RepoCache
-    let sessions: SessionStore
-    let checkouts = CheckoutFinder()
-    private let defaults: UserDefaults
+    let store: AppStore
 
     // MARK: Account
 
-    private(set) var startup: Startup = .loading
     private(set) var account: Account?
+    /// The account's lists, shared with the other windows that show it.
+    var data: AccountData { store.data(for: account?.login ?? "") }
 
-    var viewer: ViewerProfile? {
-        if case .ready(let viewer) = startup { viewer } else { nil }
-    }
+    var client: GitHubClient { store.client }
+    var repoCache: RepoCache { store.repoCache }
+    var sessions: SessionStore { store.sessions }
+    var checkouts: CheckoutFinder { store.checkouts }
+    var startup: Startup { store.startup }
+    var viewer: ViewerProfile? { store.viewer }
 
     // MARK: Lists
 
-    private(set) var pullRequests: [PullRequest] = []
-    private(set) var repositories: [Repository] = []
-    /// Node IDs of the open pull requests that ask for the viewer's review.
-    private(set) var reviewRequested: Set<String> = []
-    private(set) var issueLists: [RepositoryRef: IssueList] = [:]
-    /// Pull requests and issues loaded one at a time, by number, because they
-    /// are not in the lists above: closed ones, or ones in another account.
-    private(set) var fetchedPullRequests: [ItemKey: PullRequest] = [:]
-    private(set) var fetchedIssues: [ItemKey: Issue] = [:]
-    private var fetchedStates: [ItemKey: LinkedPullRequest.State] = [:]
-
-    /// True once the selected account's lists have loaded at least once.
-    private(set) var hasLoaded = false
-    private(set) var listError: String?
-    private(set) var lastRefresh: Date?
-    private var refreshingLogin: String?
-    /// The lists each account showed last, by login. Switching back to an
-    /// account shows them at once while they reload.
-    private var remembered: [String: (pullRequests: [PullRequest], repositories: [Repository])] = [:]
-    var isRefreshing: Bool { refreshingLogin != nil }
+    var pullRequests: [PullRequest] { data.pullRequests }
+    var repositories: [Repository] { data.repositories }
+    var hasLoaded: Bool { data.hasLoaded }
+    var listError: String? { data.listError }
+    var isRefreshing: Bool { data.isRefreshing }
 
     // MARK: Settings
 
     var showingAllBots: Bool {
-        didSet { defaults.set(showingAllBots, forKey: Keys.showingAllBots) }
+        get { store.showingAllBots }
+        set { store.showingAllBots = newValue }
     }
-    /// Seconds between automatic reloads of the lists.
     var refreshInterval: TimeInterval {
-        didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
+        get { store.refreshInterval }
+        set { store.refreshInterval = newValue }
     }
 
     // MARK: Navigation
@@ -146,62 +126,38 @@ final class AppModel {
     private(set) var resolving: ItemKey?
     var resolveError: String?
 
-    private enum Keys {
-        static let account = "selectedAccount"
-        static let showingAllBots = "showingAllBots"
-        static let refreshInterval = "refreshInterval"
+    init(store: AppStore) {
+        self.store = store
     }
 
-    init(
+    /// Makes a window model with its own store, for tests and snapshots.
+    convenience init(
         client: GitHubClient = GitHubClient(), repoCache: RepoCache = RepoCache(),
         sessions: SessionStore = SessionStore(), defaults: UserDefaults = .standard
     ) {
-        self.client = client
-        self.repoCache = repoCache
-        self.sessions = sessions
-        self.defaults = defaults
-        showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
-        let interval = defaults.double(forKey: Keys.refreshInterval)
-        refreshInterval = interval > 0 ? interval : 60
+        self.init(store: AppStore(client: client, repoCache: repoCache, sessions: sessions, defaults: defaults))
     }
 
     // MARK: Startup and accounts
 
-    /// Loads the viewer, picks the remembered account, and loads its lists.
-    func start() async {
-        startup = .loading
-        do {
-            let viewer = try await client.viewer()
-            startup = .ready(viewer)
-            let remembered = defaults.string(forKey: Keys.account)
-            account = viewer.accounts.first { $0.login == remembered } ?? viewer.accounts.first
-            for account in viewer.accounts {
-                Task { _ = await AvatarCache.shared.image(for: account.avatarURL) }
-            }
-            if let link = pendingLink {
-                pendingLink = nil
-                Task { await open(link) }
-            }
-            await refresh()
-        } catch {
-            startup = .failed(StartupProblem(error))
+    /// Signs in when no window has yet, picks the window's account, and loads its lists.
+    ///
+    /// - Parameter login: The account to show. Nil shows the account picked last.
+    func start(login: String? = nil) async {
+        if store.viewer == nil { await store.start() }
+        guard let viewer = store.viewer else { return }
+        if account == nil { account = store.account(login ?? store.lastLogin) ?? viewer.accounts.first }
+        if let link = pendingLink {
+            pendingLink = nil
+            Task { await open(link) }
         }
+        await refresh()
     }
 
     func select(_ account: Account) {
         guard account != self.account else { return }
         self.account = account
-        defaults.set(account.login, forKey: Keys.account)
-
-        let known = remembered[account.login]
-        pullRequests = known?.pullRequests ?? []
-        repositories = known?.repositories ?? []
-        issueLists = [:]
-        fetchedPullRequests = [:]
-        fetchedIssues = [:]
-        fetchedStates = [:]
-        hasLoaded = known != nil
-        listError = nil
+        store.lastLogin = account.login
         destination = nil
         scope = .filter(.needsReview)
         expansion = [:]
@@ -210,159 +166,15 @@ final class AppModel {
 
     // MARK: Loading
 
-    /// Reloads the selected account's pull requests, repositories, and the
-    /// issue lists that are open. Rows keep their identity, so selection and
-    /// scroll position stay where they are.
-    func refresh() async {
-        guard let login = account?.login, refreshingLogin != login else { return }
-        refreshingLogin = login
-        defer { if refreshingLogin == login { refreshingLogin = nil } }
-
-        async let loadedPullRequests = client.openPullRequests(owner: login)
-        async let loadedRepositories = client.repositories(owner: login)
-        async let requested = try? reviewRequestedIDs()
-        do {
-            let (pullRequests, repositories) = try await (loadedPullRequests, loadedRepositories)
-            guard account?.login == login else { return }
-            keepOpenPullRequest(missingFrom: pullRequests)
-            self.pullRequests = pullRequests
-            self.repositories = repositories
-            remembered[login] = (pullRequests, repositories)
-            listError = nil
-            hasLoaded = true
-            lastRefresh = .now
-        } catch {
-            guard account?.login == login else { return }
-            listError = describe(error)
-        }
-        if let requested = await requested, account?.login == login { reviewRequested = requested }
-
-        for repository in issueLists.keys { await reloadIssues(of: repository) }
-    }
-
-    /// Reloads when the lists are older than a few seconds, for app activation.
-    func refreshIfStale() async {
-        if let lastRefresh, Date.now.timeIntervalSince(lastRefresh) < 10 { return }
-        await refresh()
-    }
-
-    /// Keeps the pull request in the detail pane readable after it leaves the
-    /// open list, and loads whether it was merged or closed.
-    private func keepOpenPullRequest(missingFrom reloaded: [PullRequest]) {
-        guard case .pullRequest(let key) = destination, fetchedPullRequests[key] == nil,
-              let open = pullRequests.first(where: { $0.key == key }),
-              !reloaded.contains(where: { $0.key == key }) else { return }
-        fetchedPullRequests[key] = open
-        Task { await refetch(key) }
-    }
-
-    /// Loads one pull request or issue again and replaces the copy the app
-    /// holds: the one in its list, or the one loaded by number. A pull request
-    /// that is no longer open is also stored by number, with its state, so it
-    /// stays readable after it leaves the open list.
-    func refetch(_ key: ItemKey) async {
-        let login = account?.login
-        guard let item = try? await client.item(key), account?.login == login else { return }
-        switch item {
-        case .pullRequest(let pullRequest, let state):
-            let listed = pullRequests.firstIndex { $0.key == key }
-            if let listed { pullRequests[listed] = pullRequest }
-            if listed == nil || state != .open {
-                fetchedPullRequests[key] = pullRequest
-                fetchedStates[key] = state
-            }
-        case .issue(let issue):
-            if let listed = issueLists[key.repository]?.items.firstIndex(where: { $0.number == key.number }) {
-                issueLists[key.repository]?.items[listed] = issue
-            } else {
-                fetchedIssues[key] = issue
-            }
-        }
-    }
-
-    private func reviewRequestedIDs() async throws -> Set<String> {
-        struct Data: Decodable, Sendable {
-            struct Search: Decodable, Sendable { let nodes: [Node] }
-            struct Node: Decodable, Sendable { let id: String? }
-            let search: Search
-        }
-        // shortcut: the first 100 requests; upgrade to paging if someone has more waiting.
-        let query = """
-            { search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 100) {
-                nodes { ... on PullRequest { id } }
-            } }
-            """
-        return Set(try await client.graphQL(query, as: Data.self).search.nodes.compactMap(\.id))
-    }
+    func refresh() async { await data.refresh() }
+    func refreshIfStale() async { await data.refreshIfStale() }
+    func refetch(_ key: ItemKey) async { await data.refetch(key) }
 
     // MARK: Issues
 
-    func issueList(of repository: RepositoryRef) -> IssueList {
-        issueLists[repository] ?? IssueList()
-    }
-
-    /// Loads the next page of a repository's issues. Does nothing while a page
-    /// is loading or when every issue is loaded.
-    func loadMoreIssues(of repository: RepositoryRef) async {
-        var list = issueList(of: repository)
-        guard !list.isLoading, list.hasNextPage else { return }
-        list.isLoading = true
-        list.error = nil
-        issueLists[repository] = list
-
-        do {
-            let page = try await client.issues(
-                repository: repository, pageSize: Self.issuePageSize, after: list.endCursor
-            )
-            guard var current = issueLists[repository] else { return }
-            let known = Set(current.items.map(\.id))
-            current.items += page.items.filter { !known.contains($0.id) }
-            current.endCursor = page.endCursor ?? current.endCursor
-            current.hasNextPage = page.hasNextPage
-            current.totalCount = page.totalCount
-            current.isLoading = false
-            issueLists[repository] = current
-        } catch {
-            guard var current = issueLists[repository] else { return }
-            current.isLoading = false
-            current.error = describe(error)
-            issueLists[repository] = current
-        }
-    }
-
-    /// Loads again as many issues as are loaded now, in pages of up to 100.
-    func reloadIssues(of repository: RepositoryRef) async {
-        guard let existing = issueLists[repository], !existing.isLoading, !existing.items.isEmpty else { return }
-        var reloaded = IssueList()
-        do {
-            repeat {
-                let page = try await client.issues(
-                    repository: repository, pageSize: min(100, max(Self.issuePageSize, existing.items.count - reloaded.items.count)),
-                    after: reloaded.endCursor
-                )
-                reloaded.items += page.items
-                reloaded.endCursor = page.endCursor
-                reloaded.hasNextPage = page.hasNextPage
-                reloaded.totalCount = page.totalCount
-            } while reloaded.hasNextPage && reloaded.items.count < existing.items.count
-        } catch {
-            return
-        }
-        // Skip the result when the user loaded more pages or switched account meanwhile.
-        guard let current = issueLists[repository], !current.isLoading, current.items.count == existing.items.count else { return }
-        keepOpenIssue(in: repository, missingFrom: reloaded.items)
-        issueLists[repository] = reloaded
-    }
-
-    /// Keeps the issue in the detail pane readable after it leaves the loaded
-    /// part of its list, and loads whether it was closed.
-    private func keepOpenIssue(in repository: RepositoryRef, missingFrom reloaded: [Issue]) {
-        guard case .issue(let key) = destination, key.repository == repository,
-              let open = issueLists[repository]?.items.first(where: { $0.number == key.number }),
-              !reloaded.contains(where: { $0.number == key.number }) else { return }
-        fetchedIssues[key] = open
-        Task { await refetch(key) }
-    }
+    func issueList(of repository: RepositoryRef) -> IssueList { data.issueList(of: repository) }
+    func loadMoreIssues(of repository: RepositoryRef) async { await data.loadMoreIssues(of: repository) }
+    func reloadIssues(of repository: RepositoryRef) async { await data.reloadIssues(of: repository) }
 
     // MARK: Lookups
 
@@ -389,26 +201,18 @@ final class AppModel {
 
     private func matcher(_ filter: InboxFilter) -> (PullRequest) -> Bool {
         let viewer = viewer?.login ?? ""
-        let reviewRequested = reviewRequested
+        let reviewRequested = data.reviewRequested
         let showingAllBots = showingAllBots
         return { filter.matches($0, viewer: viewer, reviewRequested: reviewRequested, showingAllBots: showingAllBots) }
     }
 
-    func pullRequest(_ key: ItemKey) -> PullRequest? {
-        pullRequests.first { $0.number == key.number && $0.repository == key.repository } ?? fetchedPullRequests[key]
-    }
+    func pullRequest(_ key: ItemKey) -> PullRequest? { data.pullRequest(key) }
 
     /// Merged or closed, for a pull request that is not in the open list. Nil when unknown.
-    func closedState(of key: ItemKey) -> LinkedPullRequest.State? {
-        fetchedStates[key]
-    }
+    func closedState(of key: ItemKey) -> LinkedPullRequest.State? { data.closedState(of: key) }
 
-    func issue(_ key: ItemKey) -> Issue? {
-        issueLists[key.repository]?.items.first { $0.number == key.number } ?? fetchedIssues[key]
-    }
+    func issue(_ key: ItemKey) -> Issue? { data.issue(key) }
 
-    /// Every loaded pull request of `pullRequest`'s stack, bottom first. Empty
-    /// when it is not in a stack.
     /// The pull requests a merge of `pullRequest` lands: itself, and for a
     /// stacked one every member below it, bottom first.
     func mergeSet(of pullRequest: PullRequest) -> [PullRequest] {
@@ -427,12 +231,8 @@ final class AppModel {
         await refresh()
     }
 
-    func stack(of pullRequest: PullRequest) -> [PullRequest] {
-        guard let stackID = pullRequest.stack?.stackID else { return [] }
-        return pullRequests
-            .filter { $0.stack?.stackID == stackID }
-            .sorted { ($0.stack?.position ?? 0) < ($1.stack?.position ?? 0) }
-    }
+    /// Every loaded pull request of `pullRequest`'s stack, bottom first. Empty when it is not in a stack.
+    func stack(of pullRequest: PullRequest) -> [PullRequest] { data.stack(of: pullRequest) }
 
     /// The repository the user is looking at: the open item's, or the listed one.
     var currentRepository: RepositoryRef? {
@@ -536,14 +336,10 @@ final class AppModel {
             let item = try await client.item(key)
             // The user went elsewhere or switched account meanwhile.
             guard resolving == key else { return }
+            data.store(item, for: key)
             switch item {
-            case .pullRequest(let pullRequest, let state):
-                fetchedPullRequests[key] = pullRequest
-                fetchedStates[key] = state
-                navigate(to: .pullRequest(key), tab: .files)
-            case .issue(let issue):
-                fetchedIssues[key] = issue
-                navigate(to: .issue(key))
+            case .pullRequest: navigate(to: .pullRequest(key), tab: .files)
+            case .issue: navigate(to: .issue(key))
             }
         } catch {
             guard resolving == key else { return }

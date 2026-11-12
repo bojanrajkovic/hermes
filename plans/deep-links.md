@@ -48,7 +48,7 @@ arrives while Hermes starts waits for the accounts to load.
 ```mermaid
 graph LR
     U[hermes:// URL] --> P["DeepLink(url:)"]
-    P --> A["AppModel.open(link)"]
+    P --> A["WindowModel.open(link)"]
     A -->|owner is an account| S["select(account)"]
     A -->|stack| R["GET /repos/…/stacks/N"] --> O
     A --> O["open(ItemKey)"]
@@ -58,8 +58,8 @@ graph LR
 
 - `DeepLink` (GitHubKit) parses the link. It reads `https://github.com` URLs
   too.
-- The conversation and issue views take `AppModel.commentToShow` once their
+- The conversation and issue views take `WindowModel.commentToShow` once their
   comments load.
-- The diff takes `AppModel.diffTarget` as `DiffModel.pendingTarget`. A thread
+- The diff takes `WindowModel.diffTarget` as `DiffModel.pendingTarget`. A thread
   link waits until the threads load, since they come after the diff.
 - The scheme is registered in `Resources/Info.plist` (`CFBundleURLTypes`).

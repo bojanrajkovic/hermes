@@ -21,7 +21,7 @@ enum Main {
 /// Owns the app's state, so it can ask before a quit ends running sessions.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model = WindowModel()
 
     /// Asks before quitting while Claude sessions run: they do not survive it.
     /// Closing the window also quits the app, and comes through here too.
@@ -80,7 +80,7 @@ struct HermesApp: App {
 
 /// The menu bar: every action in the window has an entry here with its shortcut.
 struct HermesCommands: Commands {
-    @Bindable var model: AppModel
+    @Bindable var model: WindowModel
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -133,7 +133,7 @@ struct HermesCommands: Commands {
     }
 }
 
-extension AppModel {
+extension WindowModel {
     var isShowingPullRequest: Bool {
         if case .pullRequest = destination { true } else { false }
     }
@@ -145,7 +145,7 @@ extension AppModel {
 }
 
 struct SettingsView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         @Bindable var model = model

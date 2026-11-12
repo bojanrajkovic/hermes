@@ -37,7 +37,7 @@ enum Snapshots {
 
         /// - Parameter act: Runs once the view is on screen, for what a user would do next.
         func scene(
-            _ name: String, size: NSSize = size, settle: Duration = .seconds(3), _ view: some View, model: AppModel,
+            _ name: String, size: NSSize = size, settle: Duration = .seconds(3), _ view: some View, model: WindowModel,
             act: (NSWindow) -> Void = { _ in }
         ) async throws {
             guard wanted?.contains(where: name.hasPrefix) ?? true else { return }
@@ -50,7 +50,7 @@ enum Snapshots {
 
         let defaults = UserDefaults(suiteName: "hermes-snapshots")!
         defaults.removePersistentDomain(forName: "hermes-snapshots")
-        let model = AppModel(defaults: defaults)
+        let model = WindowModel(defaults: defaults)
         await model.start()
         guard let viewer = model.viewer else {
             if case .failed(let problem) = model.startup {

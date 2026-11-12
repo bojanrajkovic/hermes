@@ -1,7 +1,7 @@
 import Foundation
 import GitHubKit
 
-extension AppModel {
+extension WindowModel {
     /// Shows what a `hermes://` link names. When the link's owner is one of
     /// the viewer's accounts, that account is selected first.
     func open(_ link: DeepLink) async {

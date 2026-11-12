@@ -76,7 +76,7 @@ func timeline(of detail: PullRequestDetail) -> [TimelineEntry] {
 
 struct PullRequestDetailView: View {
     let pullRequest: PullRequest
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @State private var detail = Loader<PullRequestDetail>()
     /// Tabs stay mounted once opened, so the diff keeps its scroll position
     /// while the user looks at the checks.
@@ -155,7 +155,7 @@ struct PullRequestHeader: View {
     let pullRequest: PullRequest
     let tabs: [PullRequestTab]
     let current: PullRequestTab
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -285,7 +285,7 @@ struct BranchChips: View {
 /// repository's default method; its menu offers the other allowed ones.
 struct MergeButton: View {
     let pullRequest: PullRequest
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @State private var readiness: MergeReadiness?
     /// The method waiting for the user's confirmation.
     @State private var pending: MergeMethod?
@@ -370,7 +370,7 @@ struct MergeButton: View {
 
 struct StackSwitcher: View {
     let pullRequest: PullRequest
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         let stack = model.stack(of: pullRequest)
@@ -408,7 +408,7 @@ struct StackSwitcher: View {
 struct ConversationView: View {
     let pullRequest: PullRequest
     let detail: Loader<PullRequestDetail>
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         ScrollView {
@@ -537,11 +537,11 @@ extension TimelineEntry.Kind {
     }
 }
 
-/// Scrolls to the comment a link named (`AppModel.commentToShow`) once the
+/// Scrolls to the comment a link named (`WindowModel.commentToShow`) once the
 /// comments are loaded. Each comment's view must have its node ID as its `id`.
 struct ScrollsToLinkedComment: ViewModifier {
     let comments: [Comment]?
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     func body(content: Content) -> some View {
         ScrollViewReader { proxy in
@@ -623,7 +623,7 @@ struct CommentCard: View {
 struct SessionSummaryRow: View {
     let session: ClaudeSession
     var showsPullRequest = true
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         HStack(spacing: 8) {

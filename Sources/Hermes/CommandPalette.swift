@@ -5,7 +5,7 @@ import SwiftUI
 /// The ⌘K panel: a search field over keyboard-driven results, floating above
 /// the window's content.
 struct CommandPalette: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @State private var query: String
     @State private var selected: PaletteAction?
@@ -185,12 +185,12 @@ private struct Keycap: View {
     }
 }
 
-extension AppModel {
+extension WindowModel {
     var paletteContext: PaletteContext {
         PaletteContext(
             repositories: sections.map(\.ref),
             pullRequests: pullRequests,
-            issues: issueLists.flatMap { repository, list in list.items.map { (repository, $0) } },
+            issues: data.issueLists.flatMap { repository, list in list.items.map { (repository, $0) } },
             sessions: sessions.sessions.map {
                 PaletteContext.Session(id: $0.id, title: $0.title, subtitle: "\($0.origin.repository.name)#\($0.origin.number)")
             },

@@ -338,7 +338,7 @@ struct SessionStateGlyph: View {
 /// open to their pull requests in order.
 struct PullRequestRows: View {
     let section: RepositorySection
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         ForEach(section.groups) { group in
@@ -393,7 +393,7 @@ struct PullRequestRows: View {
 /// loads the next page when it scrolls into view or is clicked.
 struct IssueRows: View {
     let repository: RepositoryRef
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         let list = model.issueList(of: repository)
@@ -442,7 +442,7 @@ struct IssueRows: View {
 struct ItemMenu: View {
     let url: URL
     let origin: SessionOrigin
-    let model: AppModel
+    let model: WindowModel
 
     var body: some View {
         Button("Open on GitHub", systemImage: "safari") { NSWorkspace.shared.open(url) }
@@ -457,7 +457,7 @@ struct ItemMenu: View {
 
 /// Scrolls a list to the row the model asks for, when the list has that row.
 struct ScrollsToRequestedRow: ViewModifier {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     func body(content: Content) -> some View {
         ScrollViewReader { proxy in
@@ -478,7 +478,7 @@ struct ScrollsToRequestedRow: ViewModifier {
     }
 }
 
-extension AppModel {
+extension WindowModel {
     /// A binding to one tree node's open state.
     func expansionBinding(_ node: String, default defaultValue: Bool) -> Binding<Bool> {
         Binding(

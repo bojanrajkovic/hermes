@@ -8,7 +8,7 @@ import SwiftUI
 /// The dropdown at the top of the sidebar that switches between the personal
 /// account and the viewer's organizations.
 struct AccountPicker: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         Menu {
@@ -131,7 +131,7 @@ struct ProfileCard: View {
 /// The parts every sidebar shares: the account picker above the list, the
 /// profile below it, and the loading and error states of the lists.
 struct SidebarFrame<Content: View>: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -186,7 +186,7 @@ struct SidebarFrame<Content: View>: View {
 
 /// The sidebar: the cross-repository filters, then the repositories with their counts.
 struct ScopeSidebar: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     /// The list's own selection, which follows the model's scope a moment
     /// late. A sidebar list that has a selected row in its first frame keeps
     /// that row's title bold after the selection moves to another row.

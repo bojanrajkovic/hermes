@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct RootView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         Group {
@@ -19,8 +19,8 @@ struct RootView: View {
                 MainView()
             }
         }
-        // Closing and reopening the window must not sign in again.
-        .task { if model.viewer == nil { await model.start() } }
+        // Signs in once for the app. Each window then picks its account and loads it.
+        .task { await model.start() }
     }
 }
 

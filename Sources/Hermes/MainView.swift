@@ -8,7 +8,7 @@ import SwiftUI
 /// navigation style, the detail pane, the command palette, and the session
 /// launch sheet.
 struct MainView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         Group {
@@ -62,7 +62,7 @@ struct MainView: View {
 
 /// The middle column of the Columns and Inbox styles.
 struct ListColumn: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         switch model.scope {
@@ -84,7 +84,7 @@ struct ListColumn: View {
 /// Pull requests that match an Inbox filter, grouped by repository.
 struct FilterList: View {
     let filter: InboxFilter
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         let sections = model.sections(for: filter)
@@ -161,7 +161,7 @@ extension LabelStyle where Self == CompactCountLabelStyle {
 /// One repository's pull requests or issues, with a control to switch.
 struct RepositoryColumn: View {
     let repository: RepositoryRef
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
@@ -214,7 +214,7 @@ struct RepositoryColumn: View {
 // MARK: Detail
 
 struct DetailPane: View {
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         content
@@ -292,7 +292,7 @@ struct DetailPane: View {
     }
 }
 
-extension AppModel {
+extension WindowModel {
     /// Shows a scope in the middle column. A repository with no pull requests
     /// opens on its issues.
     func show(_ scope: Scope, list: RepositoryList? = nil) {

@@ -33,14 +33,14 @@ every model that needs it.
   gateway gave up.
 
 Every method throws `GitHubError`. `describe(_:)` in
-`Sources/Hermes/AppModel.swift` and `DiffLoader.message(for:)` turn an error
+`Sources/Hermes/WindowModel.swift` and `DiffLoader.message(for:)` turn an error
 into a sentence for the user.
 
 ## What is loaded, and when
 
 ```mermaid
 sequenceDiagram
-    participant App as AppModel
+    participant App as WindowModel
     participant C as GitHubClient
     participant gh as gh CLI
     participant API as api.github.com
@@ -92,9 +92,11 @@ passes 10 seconds. Loading IDs first lets those requests run side by side.
 ## Accounts
 
 `ViewerProfile.accounts` is the personal account followed by the viewer's
-organizations, sorted by login. `AppModel` loads the lists of one account at a
-time and remembers each account's last lists in memory, so switching back
-shows them at once while they reload.
+organizations, sorted by login. Each window shows one account. The account's
+lists live in an `AccountData` that every window showing it shares, and it
+stays in memory, so switching back to an account shows its lists at once
+while they reload. A pull request or issue that leaves a list is kept by
+number and loaded again, since a window may be showing it.
 
 ## Bot filter
 
@@ -112,7 +114,7 @@ ordered by position, so a list shows a stack as one node.
 ## Items outside the lists
 
 A closed pull request, or one in another account, is not in the lists.
-`GitHubClient.item(_:)` in `Sources/Hermes/AppModel.swift` loads a pull
+`GitHubClient.item(_:)` in `Sources/Hermes/WindowModel.swift` loads a pull
 request or an issue by number in any state. The command palette uses it for
 `repo#123`, and the detail pane uses it to keep showing a pull request after
 it is merged or closed.

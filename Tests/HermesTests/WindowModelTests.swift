@@ -59,15 +59,15 @@ private func issuesPage(_ numbers: [Int]) -> String {
 }
 
 /// One suite, run in order, because the stub's queue of answers is shared.
-@Suite(.serialized) @MainActor struct AppModelTests {
-    private let model: AppModel
+@Suite(.serialized) @MainActor struct WindowModelTests {
+    private let model: WindowModel
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        model = AppModel(
+        model = WindowModel(
             client: GitHubClient(session: URLSession(configuration: configuration), token: { "token" }),
-            defaults: UserDefaults(suiteName: "AppModelTests-\(UUID().uuidString)")!
+            defaults: UserDefaults(suiteName: "WindowModelTests-\(UUID().uuidString)")!
         )
     }
 

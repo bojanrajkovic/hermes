@@ -7,7 +7,7 @@ import SwiftUI
 struct IssueDetailView: View {
     let issue: Issue
     let repository: RepositoryRef
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
     @State private var detail = Loader<IssueDetail>()
 
     private var key: ItemKey { ItemKey(repository: repository, number: issue.number) }
@@ -146,7 +146,7 @@ struct IssueDetailView: View {
 struct LinkedPullRequestRow: View {
     let linked: LinkedPullRequest
     let repository: RepositoryRef
-    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var model
 
     var body: some View {
         let key = ItemKey(repository: repository, number: linked.number)

@@ -64,6 +64,25 @@ values as parameters or through `@Environment`. There is no `ObservableObject`.
 `GitHubClient` is an `actor`. One instance is created at launch and passed to
 the models that need it.
 
+The `Hermes` target splits its state in three:
+
+- `AppStore`, one for the app: the signed-in user, Claude sessions, settings,
+  and one `AccountData` per account.
+- `AccountData`, one per account: its pull requests, repositories, issues, and
+  items loaded by number. Every window that shows the account reads the same
+  copy, so each list loads once.
+- `WindowModel`, one per window: the account the window shows and what it
+  shows of it, such as the selection, the scope, and the tab.
+
+```mermaid
+graph LR
+    S[AppStore] --> A1["AccountData (you)"]
+    S --> A2["AccountData (org)"]
+    W1[WindowModel] --> A1
+    W2[WindowModel] --> A1
+    W3[WindowModel] --> A2
+```
+
 ## Data flow
 
 ```mermaid
