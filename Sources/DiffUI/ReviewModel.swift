@@ -260,13 +260,14 @@ final class ReviewModel {
         switch markdownAnchor(file: file, lines: newLines) {
         case .success(let anchor):
             guard let location = file.location(of: anchor.end) else { return }
-            start(anchor, file: file, under: file.hunks[location.hunkIndex].lines[location.lineIndex].numbers)
+            // Its composer is docked under the rendered file, so no line's popover opens.
+            start(anchor, file: file, under: file.hunks[location.hunkIndex].lines[location.lineIndex].numbers, focuses: false)
         case .failure(let reason):
             notice = Notice(file: id, line: nil, text: reason.text)
         }
     }
 
-    private func start(_ anchor: CommentAnchor, file: FileDiff, under line: DiffLine.Numbers) {
+    private func start(_ anchor: CommentAnchor, file: FileDiff, under line: DiffLine.Numbers, focuses: Bool = true) {
         notice = nil
         if let draft = reanchoring, let index = pending.comments.firstIndex(where: { $0.id == draft }) {
             pending.comments[index].target = DraftComment(anchor: anchor, body: "").target
@@ -276,6 +277,7 @@ final class ReviewModel {
             return
         }
         open(.thread(file: file.id, under: line, anchor: anchor))
+        if !focuses, focusedLine == LineRef(file: file.id, line: line) { focusedLine = nil }
     }
 
     /// Opens the composer for `target`. Asks first when that discards text.

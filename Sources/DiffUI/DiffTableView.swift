@@ -864,23 +864,26 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             return
         }
         guard focus != popoverLine || !popover.isShown else { return }
-        let found = rows.indices.lazy.compactMap { index -> (index: Int, side: Int, line: DiffLine)? in
-            guard self.rows[index].file.id == focus.file, let cells = self.rows[index].codeLine?.row.cells,
-                  let side = cells.firstIndex(where: { $0.line.numbers == focus.line })
+        let found = rows.indices.lazy.compactMap { index -> (index: Int, line: DiffLine)? in
+            guard self.rows[index].file.id == focus.file,
+                  let cell = self.rows[index].codeLine?.row.cells.first(where: { $0.line.numbers == focus.line })
             else { return nil }
-            return (index, cells.count == 2 ? side : 0, cells[side].line)
+            return (index, cell.line)
         }.first
         guard let found else {
-            // The line is in a collapsed or rendered file. `update` calls this again once its rows are in.
-            model.reveal(RowID(file: focus.file, item: .line(focus.line)))
+            // A collapsed or rendered file shows its lines once revealed, and `update` calls this again.
+            // Any other file, such as a large one behind its notice, has no row for the line to point at.
+            if let file = model.files.first(where: { $0.id == focus.file }), file.isCollapsed || file.showsRendered {
+                model.reveal(RowID(file: focus.file, item: .line(focus.line)))
+            } else {
+                review.focusedLine = nil
+            }
             return
         }
         let file = rows[found.index].file
         tableView.scrollRowToVisible(found.index)
-        let row = tableView.rect(ofRow: found.index)
-        let sideWidth = row.width / CGFloat(rows[found.index].codeLine?.row.cells.count ?? 1)
-        // The badge's end of the line's side: where the popover's arrow points.
-        let anchor = CGRect(x: row.minX + sideWidth * CGFloat(found.side + 1) - 40, y: row.minY, width: 32, height: min(row.height, metrics.lineHeight + 2 * DiffMetrics.rowPadding))
+        let cell = tableView.view(atColumn: 0, row: found.index, makeIfNecessary: true) as? NativeLineCell
+        let anchor = cell?.badgeRect(of: found.line).map { cell!.convert($0, to: tableView) } ?? tableView.rect(ofRow: found.index)
         let content = ScrollView {
             LineAttachments(file: file, line: found.line)
         }

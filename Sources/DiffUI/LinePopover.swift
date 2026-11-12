@@ -42,7 +42,12 @@ final class LinePopover: NSObject, NSPopoverDelegate {
     }
 
     nonisolated func popoverDidClose(_ notification: Notification) {
-        MainActor.assumeIsolated { finish() }
+        let closed = ObjectIdentifier(notification.object as AnyObject)
+        MainActor.assumeIsolated {
+            // A popover this one replaced can report its close after the new one is up.
+            guard let popover, ObjectIdentifier(popover) == closed else { return }
+            finish()
+        }
     }
 
     private func finish() {

@@ -83,7 +83,7 @@ final class DefinitionModel {
     /// Opens a whole file on a new page, at a zero-based line.
     func openFile(_ path: String, line: Int) {
         let page = push(name: (path as NSString).lastPathComponent, phase: .searching(fetchStatus))
-        run(on: page) { [tree] model in
+        run(on: page, failure: "Couldn't Open the File") { [tree] model in
             model.update(page, try await Self.load(path: path, line: line, from: try await tree()))
         }
     }
@@ -102,16 +102,18 @@ final class DefinitionModel {
         return nextID
     }
 
-    private func run(on page: Int, _ body: @escaping @MainActor (DefinitionModel) async throws -> Void) {
+    private func run(
+        on page: Int, failure: String = "Couldn't Look Up the Definition", _ body: @escaping @MainActor (DefinitionModel) async throws -> Void
+    ) {
         work?.cancel()
         work = Task { [weak self] in
             guard let self else { return }
             do {
                 try await body(self)
             } catch is CancellationError {
-                update(page, .message(title: "Lookup Cancelled", detail: "Another lookup started before this one finished."))
+                update(page, .message(title: "Cancelled", detail: "Something else opened before this finished."))
             } catch {
-                update(page, .message(title: "Couldn't Look Up the Definition", detail: DiffLoader.message(for: error)))
+                update(page, .message(title: failure, detail: DiffLoader.message(for: error)))
             }
         }
     }

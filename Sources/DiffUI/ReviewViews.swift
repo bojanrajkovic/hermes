@@ -13,6 +13,12 @@ enum ReviewMetrics {
     static let plusWidth: CGFloat = 16
     /// The room for the symbol in a line's comment badge.
     static let badgeIconWidth: CGFloat = 12
+    /// Inside a badge, before its symbol and after its count.
+    static let badgePadding: CGFloat = 5
+    /// Between a badge's symbol and its count.
+    static let badgeGap: CGFloat = 4
+    /// From a badge to the end of its row.
+    static let badgeInset: CGFloat = 6
     /// The width of the popover that shows a line's comments.
     static let popoverWidth: CGFloat = 560
     /// Above this height the popover's comments scroll.

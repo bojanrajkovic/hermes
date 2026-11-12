@@ -132,9 +132,19 @@ final class NativeLineCell: NSView {
 
     /// The capsule a line's comment badge is drawn in and takes clicks in: the trailing end of its side.
     private func badgeRect(_ side: LineSide, _ badge: LineBadge) -> CGRect {
-        let width = ReviewMetrics.badgeIconWidth + (badge.count > 0 ? badgeCount(badge).size().width + 4 : 0) + 10
-        let height = metrics.lineHeight
-        return CGRect(x: side.x + side.width - width - 6, y: DiffMetrics.rowPadding, width: width, height: height).integral
+        let count = badge.count > 0 ? badgeCount(badge).size().width + ReviewMetrics.badgeGap : 0
+        let width = ReviewMetrics.badgeIconWidth + count + 2 * ReviewMetrics.badgePadding
+        return CGRect(
+            x: side.x + side.width - width - ReviewMetrics.badgeInset, y: DiffMetrics.rowPadding, width: width, height: metrics.lineHeight
+        ).integral
+    }
+
+    /// Where `line`'s comment badge is, in the cell's coordinates. `nil` when the line has none or is not in this row.
+    func badgeRect(of line: DiffLine) -> CGRect? {
+        guard let index = sides.firstIndex(where: { $0.cell?.line == line }), marks.indices.contains(index),
+              let badge = marks[index].badge
+        else { return nil }
+        return badgeRect(sides[index], badge)
     }
 
     private func badgeCount(_ badge: LineBadge) -> NSAttributedString {
@@ -156,14 +166,19 @@ final class NativeLineCell: NSView {
         if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) {
             let size = image.size
             image.draw(
-                in: CGRect(x: rect.minX + 5 + (ReviewMetrics.badgeIconWidth - size.width) / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height),
+                in: CGRect(
+                    x: rect.minX + ReviewMetrics.badgePadding + (ReviewMetrics.badgeIconWidth - size.width) / 2,
+                    y: rect.midY - size.height / 2, width: size.width, height: size.height
+                ),
                 from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil
             )
         }
         if badge.count > 0 {
             let count = badgeCount(badge)
             let size = count.size()
-            count.draw(at: CGPoint(x: rect.minX + 5 + ReviewMetrics.badgeIconWidth + 4, y: rect.midY - size.height / 2))
+            count.draw(at: CGPoint(
+                x: rect.minX + ReviewMetrics.badgePadding + ReviewMetrics.badgeIconWidth + ReviewMetrics.badgeGap, y: rect.midY - size.height / 2
+            ))
         }
     }
 
@@ -452,11 +467,21 @@ final class NativeLineCell: NSView {
 
     override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
         guard let review = model?.review, let file else { return nil }
-        return lines.map { line in
+        let comment = lines.map { line in
             NSAccessibilityCustomAction(name: "Comment on \(lineRangeLabel(CommentAnchor(path: "", end: line.commentPosition)))") {
                 review.startComment(file: file.id, from: line, to: line)
                 return true
             }
         }
+        // The line's threads and drafts are in a popover that only its badge opens.
+        let show = zip(lines, marks).compactMap { line, marks -> NSAccessibilityCustomAction? in
+            guard let badge = marks.badge else { return nil }
+            let label = lineRangeLabel(CommentAnchor(path: "", end: line.commentPosition))
+            return NSAccessibilityCustomAction(name: "Show \(badge.count) comments on \(label)") {
+                review.focusedLine = ReviewModel.LineRef(file: file.id, line: line.numbers)
+                return true
+            }
+        }
+        return comment + show
     }
 }
