@@ -151,9 +151,10 @@ struct SidebarFrame<Content: View>: View {
                     ProgressView()
                     Text("Loading pull requests…").foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // Every state fills the column, so the bars below stay at its edges.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 AccountPicker()
