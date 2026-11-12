@@ -177,10 +177,13 @@ struct RepositoryColumn: View {
                 if let section { PullRequestRows(section: section) }
             case .issues:
                 IssueRows(repository: repository)
+            case .localStacks:
+                LocalStackRows(repository: repository)
             }
         }
         .listStyle(.inset)
         .modifier(ScrollsToRequestedRow())
+        .task(id: repository) { await model.localStacks.load(repository) }
         // A toolbar item at the leading edge, which lands above this column. Only there does the
         // system draw the control the way it draws the pull request's tabs.
         .toolbar {
@@ -188,7 +191,12 @@ struct RepositoryColumn: View {
                 Picker("List", selection: $model.repositoryList) {
                     Text("Pull Requests (\(section?.shownPullRequestCount ?? 0))").tag(RepositoryList.pullRequests)
                     Text("Issues (\(issueList.totalCount ?? section?.openIssueCount ?? 0))").tag(RepositoryList.issues)
+                    if let local = model.localStacks.entry(repository) {
+                        Text("Local (\(local.stacks.flatMap(\.branches).count))").tag(RepositoryList.localStacks)
+                    }
                 }
+                // A segment added to a live segmented picker draws without its label, so the picker is rebuilt.
+                .id(model.localStacks.entry(repository) != nil)
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
@@ -203,6 +211,11 @@ struct RepositoryColumn: View {
                 ContentUnavailableView(
                     "No Open Issues", systemImage: "smallcircle.filled.circle",
                     description: Text("\(repository.name) has no open issues.")
+                )
+            } else if model.repositoryList == .localStacks, model.localStacks.entry(repository)?.stacks.isEmpty ?? true {
+                ContentUnavailableView(
+                    "No Local Branches", systemImage: "arrow.triangle.branch",
+                    description: Text("Your checkout of \(repository.name) has no branches with commits beyond the default branch.")
                 )
             }
         }
@@ -261,6 +274,8 @@ struct DetailPane: View {
                     } else {
                         ContentUnavailableView("Session Ended", systemImage: "terminal")
                     }
+                case .localBranch(let key):
+                    LocalBranchScreen(key: key).id(key)
                 case nil:
                     ContentUnavailableView(
                         "No Selection", systemImage: "arrow.triangle.pull",
@@ -277,6 +292,7 @@ struct DetailPane: View {
         switch model.destination {
         case .pullRequest(let key), .issue(let key): key.description
         case .session(let id): model.session(id)?.title ?? "Session"
+        case .localBranch(let key): key.branch
         case nil: "Hermes"
         }
     }

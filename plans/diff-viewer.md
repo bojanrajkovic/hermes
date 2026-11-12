@@ -20,6 +20,24 @@ Three targets make it up:
 | `.workingTree` | `git diff` of a worktree against the merge base of a ref, plus untracked files | Watching the worktree's files | No |
 | `.localBranch` | `git diff parent...branch` in a checkout | Nothing. It loads once | No |
 
+## Local stacks
+
+A repository with a checkout in the search folders has a Local tab beside
+Pull Requests and Issues. It lists the checkout's branches with commits
+beyond the default branch, grouped by the trunk they target. A stacked branch
+is indented under its parent. Stacks come from `gh stack` when it tracks the
+checkout, and are otherwise inferred from history (see `Checkout.stacks()`).
+
+A branch whose name is an open pull request's head opens that pull request.
+Any other branch opens `LocalBranchScreen`: its diff against its parent, read
+only. Nothing is written to git or GitHub.
+
+The stack switcher covers both. On a pull request it lists the GitHub stack,
+then the local branches built on its top that have no pull request yet. On a
+local branch it lists the branch's local stack. ⌘[ and ⌘] move through the
+same list. `LocalStacks` caches each repository's stacks for every window and
+reads them again when a list or screen that shows them appears.
+
 ## From source to rows
 
 ```mermaid

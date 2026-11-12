@@ -151,7 +151,7 @@ enum Workspace {
 
 extension URL {
     /// The path with the home directory written as `~`.
-    var abbreviatedPath: String {
+    public var abbreviatedPath: String {
         (path as NSString).abbreviatingWithTildeInPath
     }
 }

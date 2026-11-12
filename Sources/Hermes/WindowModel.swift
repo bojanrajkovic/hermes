@@ -242,6 +242,7 @@ final class WindowModel {
         case .pullRequest(let key), .issue(let key): return key.repository
         case .session(let id):
             if let session = sessions.sessions.first(where: { $0.id == id }) { return session.origin.repository }
+        case .localBranch(let key): return key.repository
         case nil: break
         }
         if case .repository(let repository) = scope { return repository }
@@ -263,7 +264,7 @@ final class WindowModel {
     func linkedPullRequest(of session: ClaudeSession) -> PullRequest? {
         if session.origin.isPullRequest, let pullRequest = pullRequest(session.origin.key) { return pullRequest }
         guard let branch = session.branch else { return nil }
-        return pullRequests.first { $0.repository == session.origin.repository && $0.headRefName == branch }
+        return pullRequest(headedBy: branch, in: session.origin.repository)
     }
 
     // MARK: Navigation
@@ -289,6 +290,9 @@ final class WindowModel {
             if let id = issue(key)?.id { scroll(to: id) }
         case .session:
             scope = .sessions
+        case .localBranch(let key):
+            reveal(key.repository, list: .localStacks)
+            scroll(to: key)
         }
     }
 
@@ -306,24 +310,60 @@ final class WindowModel {
         repositoryList = list
     }
 
-    /// Moves to the neighboring pull request of the open one's stack.
+    /// Moves to the neighbor of the open item in its stack.
     ///
     /// - Parameter offset: 1 for the next one up the stack, -1 for the next one down.
     func moveInStack(by offset: Int) {
-        guard case .pullRequest(let key) = destination, let current = pullRequest(key) else { return }
-        let stack = stack(of: current)
-        guard let index = stack.firstIndex(where: { $0.id == current.id }), stack.indices.contains(index + offset) else { return }
-        navigate(to: .pullRequest(stack[index + offset].key))
+        if let neighbor = stackNeighbor(offset) { navigate(to: neighbor) }
     }
 
     var canMoveDownStack: Bool { stackNeighbor(-1) != nil }
     var canMoveUpStack: Bool { stackNeighbor(1) != nil }
 
-    private func stackNeighbor(_ offset: Int) -> PullRequest? {
-        guard case .pullRequest(let key) = destination, let current = pullRequest(key) else { return nil }
-        let stack = stack(of: current)
-        guard let index = stack.firstIndex(where: { $0.id == current.id }), stack.indices.contains(index + offset) else { return nil }
-        return stack[index + offset]
+    private func stackNeighbor(_ offset: Int) -> Destination? {
+        let sequence = stackSequence
+        guard let destination, let index = sequence.firstIndex(of: destination), sequence.indices.contains(index + offset) else {
+            return nil
+        }
+        return sequence[index + offset]
+    }
+
+    /// The open item's stack, bottom first. For a pull request: its stack on
+    /// GitHub, then the local branches built on its top that have no pull
+    /// request yet. For a local branch: its local stack, where a branch with an
+    /// open pull request is that pull request. Empty when there is no stack.
+    var stackSequence: [Destination] {
+        switch destination {
+        case .pullRequest(let key):
+            guard let pullRequest = pullRequest(key) else { return [] }
+            let stacked = stack(of: pullRequest)
+            let members = stacked.isEmpty ? [pullRequest] : stacked
+            let above = localStacks.entry(key.repository)?.stacks.branches(above: members[members.count - 1].headRefName) ?? []
+            let local = above
+                .filter { self.pullRequest(headedBy: $0.name, in: key.repository) == nil }
+                .map { Destination.localBranch(LocalBranchKey(repository: key.repository, branch: $0.name)) }
+            let sequence = members.map { Destination.pullRequest($0.key) } + local
+            return sequence.count > 1 ? sequence : []
+        case .localBranch(let key):
+            guard let stack = localStacks.entry(key.repository)?.stacks.stack(containing: key.branch),
+                  stack.branches.count > 1 else { return [] }
+            return stack.branches.map { destination(ofBranch: $0.name, in: key.repository) }
+        case .issue, .session, nil:
+            return []
+        }
+    }
+
+    var localStacks: LocalStacks { store.localStacks }
+
+    /// The open pull request whose head is this branch.
+    func pullRequest(headedBy branch: String, in repository: RepositoryRef) -> PullRequest? {
+        pullRequests.first { $0.repository == repository && $0.headRefName == branch }
+    }
+
+    /// Where a local branch leads: its open pull request, or the branch screen.
+    func destination(ofBranch branch: String, in repository: RepositoryRef) -> Destination {
+        if let pullRequest = pullRequest(headedBy: branch, in: repository) { return .pullRequest(pullRequest.key) }
+        return .localBranch(LocalBranchKey(repository: repository, branch: branch))
     }
 
     /// Opens the pull request or issue with this number, loading it from
@@ -355,8 +395,8 @@ final class WindowModel {
         let path: String? = switch destination {
         case .pullRequest(let key): "\(key.repository)/pull/\(key.number)"
         case .issue(let key): "\(key.repository)/issues/\(key.number)"
-        // Sessions end with the app, so a restored window can't show one.
-        case .session, nil: if case .repository(let repository) = scope { "\(repository)" } else { nil }
+        // Sessions end with the app, so a restored window can't show one. Local branches have no link.
+        case .session, .localBranch, nil: if case .repository(let repository) = scope { "\(repository)" } else { nil }
         }
         return path.flatMap { URL(string: "hermes://\($0)") }
     }
@@ -371,7 +411,7 @@ final class WindowModel {
         switch destination {
         case .pullRequest(let key): pullRequest(key).map(SessionOrigin.init)
         case .issue(let key): issue(key).map { SessionOrigin($0, in: key.repository) }
-        case .session, nil: nil
+        case .session, .localBranch, nil: nil
         }
     }
 
@@ -381,7 +421,7 @@ final class WindowModel {
         case .pullRequest(let key): pullRequest(key)?.url
         case .issue(let key): issue(key)?.url
         case .session(let id): session(id)?.origin.url
-        case nil: nil
+        case .localBranch, nil: nil
         }
     }
 }

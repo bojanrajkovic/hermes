@@ -9,6 +9,11 @@ public struct LocalStack: Hashable, Sendable {
         public let name: String
         /// The branch this one builds on: the trunk, or a branch earlier in the stack.
         public let parent: String
+
+        public init(name: String, parent: String) {
+            self.name = name
+            self.parent = parent
+        }
     }
 
     /// The branch the stack targets, such as `main`.
@@ -17,6 +22,11 @@ public struct LocalStack: Hashable, Sendable {
     /// `gh stack` is a single chain from bottom to top. An inferred stack can
     /// fork when two branches build on the same parent.
     public let branches: [Branch]
+
+    public init(trunk: String, branches: [Branch]) {
+        self.trunk = trunk
+        self.branches = branches
+    }
 }
 
 extension Checkout {

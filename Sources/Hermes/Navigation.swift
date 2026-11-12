@@ -38,6 +38,8 @@ enum Destination: Hashable, Sendable {
     case pullRequest(ItemKey)
     case issue(ItemKey)
     case session(UUID)
+    /// A local branch that has no open pull request, read from the user's checkout.
+    case localBranch(LocalBranchKey)
 }
 
 /// The tabs of a pull request's detail pane.
@@ -56,9 +58,10 @@ enum PullRequestTab: Int, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Which of a repository's two lists the middle column shows.
+/// Which of a repository's lists the middle column shows.
 enum RepositoryList: String, CaseIterable, Identifiable, Sendable {
-    case pullRequests, issues
+    /// Local stacks shows only for a repository with a checkout.
+    case pullRequests, issues, localStacks
 
     var id: Self { self }
 }

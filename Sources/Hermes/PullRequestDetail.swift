@@ -166,7 +166,7 @@ struct PullRequestHeader: View {
                     .textSelection(.enabled)
                 Spacer(minLength: 12)
                 HStack(spacing: 8) {
-                    StackSwitcher(pullRequest: pullRequest)
+                    StackSwitcher()
                     MergeButton(pullRequest: pullRequest)
                     Button("Start Claude Session", systemImage: "sparkles") {
                         model.launching = SessionOrigin(pullRequest)
@@ -178,6 +178,8 @@ struct PullRequestHeader: View {
                 }
                 .fixedSize()
             }
+            // Local branches stacked on this pull request join the stack switcher.
+            .task(id: pullRequest.repository) { await model.localStacks.load(pullRequest.repository) }
 
             HStack(spacing: Theme.rowMetaSpacing) {
                 Label(pullRequest.repository.description, systemImage: "book.closed")
@@ -368,26 +370,21 @@ struct MergeButton: View {
     }
 }
 
+/// A menu of the open item's stack, bottom first: pull requests, then local
+/// branches that have none yet. Hidden when the open item is in no stack.
 struct StackSwitcher: View {
-    let pullRequest: PullRequest
     @Environment(WindowModel.self) private var model
 
     var body: some View {
-        let stack = model.stack(of: pullRequest)
-        if let entry = pullRequest.stack, !stack.isEmpty {
+        let sequence = model.stackSequence
+        if let current = model.destination, let position = sequence.firstIndex(of: current) {
             Menu {
-                ForEach(stack) { member in
-                    Toggle(isOn: Binding(
-                        get: { member.id == pullRequest.id },
-                        set: { _ in model.navigate(to: .pullRequest(member.key)) }
-                    )) {
-                        Label {
-                            Text(verbatim: "#\(member.number)  \(member.title)")
-                        } icon: {
-                            Image(systemName: StatusKind(member.checkState).symbol)
-                        }
+                ForEach(Array(sequence.enumerated()), id: \.element) { index, member in
+                    if case .localBranch = member, index > 0, case .pullRequest = sequence[index - 1] {
+                        Section("Local, no pull request") { entry(member, current: current) }
+                    } else {
+                        entry(member, current: current)
                     }
-                    .accessibilityLabel("\(member.number), \(member.title), \(StatusKind(member.checkState).label)")
                 }
                 Divider()
                 Button("Down the Stack") { model.moveInStack(by: -1) }
@@ -395,10 +392,35 @@ struct StackSwitcher: View {
                 Button("Up the Stack") { model.moveInStack(by: 1) }
                     .disabled(!model.canMoveUpStack)
             } label: {
-                Label("Stack \(entry.position) of \(entry.size)", systemImage: "square.stack.3d.up")
+                Label("Stack \(position + 1) of \(sequence.count)", systemImage: "square.stack.3d.up")
             }
             .fixedSize()
-            .help("Switch to another pull request in this stack (⌘[ and ⌘])")
+            .help("Switch to another branch in this stack (⌘[ and ⌘])")
+        }
+    }
+
+    @ViewBuilder
+    private func entry(_ member: Destination, current: Destination) -> some View {
+        let toggle = Binding(get: { member == current }, set: { _ in model.navigate(to: member) })
+        switch member {
+        case .pullRequest(let key):
+            if let pullRequest = model.pullRequest(key) {
+                Toggle(isOn: toggle) {
+                    Label {
+                        Text(verbatim: "#\(pullRequest.number)  \(pullRequest.title)")
+                    } icon: {
+                        Image(systemName: StatusKind(pullRequest.checkState).symbol)
+                    }
+                }
+                .accessibilityLabel("\(pullRequest.number), \(pullRequest.title), \(StatusKind(pullRequest.checkState).label)")
+            }
+        case .localBranch(let key):
+            Toggle(isOn: toggle) {
+                Label(key.branch, systemImage: "arrow.triangle.branch")
+            }
+            .accessibilityLabel("Local branch \(key.branch)")
+        case .issue, .session:
+            EmptyView()
         }
     }
 }

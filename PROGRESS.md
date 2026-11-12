@@ -14,6 +14,9 @@ What is built and works, and what is known not to work or is unverified.
 - Open pull requests and repositories per account. Issues load per repository,
   30 at a time.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
+- Local stacks: a repository with a checkout has a Local tab of its stacked
+  branches, and a branch with no pull request opens a read-only diff against
+  its parent. The stack switcher includes local branches above a pull request.
 - Stacks: stacked pull requests are grouped in the lists, and the detail pane
   has a stack switcher.
 - The bot filter: a bot's pull request shows only when its checks fail or it

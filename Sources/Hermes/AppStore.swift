@@ -18,6 +18,7 @@ final class AppStore {
     let client: GitHubClient
     let repoCache: RepoCache
     let sessions: SessionStore
+    let localStacks: LocalStacks
     private let defaults: UserDefaults
 
     private(set) var startup: Startup = .loading
@@ -67,6 +68,7 @@ final class AppStore {
         self.client = client
         self.repoCache = repoCache
         self.sessions = sessions
+        localStacks = LocalStacks(sessions: sessions)
         self.defaults = defaults
         showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
         hasFinishedSetup = defaults.bool(forKey: Keys.finishedSetup)

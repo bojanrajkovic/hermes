@@ -72,6 +72,20 @@ enum Snapshots {
         model.normalizeScope()
         try await scene("personal-inbox", MainView(), model: model)
 
+        // A repository's local stacks, and the first branch without a pull request.
+        if let parts = environment["HERMES_SNAPSHOT_LOCAL"]?.split(separator: "/").map(String.init), parts.count == 2 {
+            let local = RepositoryRef(owner: parts[0], name: parts[1])
+            await model.localStacks.load(local)
+            model.show(.repository(local), list: .localStacks)
+            let branches = model.localStacks.entry(local)?.stacks.flatMap(\.branches) ?? []
+            if let branch = branches.first(where: { model.pullRequest(headedBy: $0.name, in: local) == nil && $0.parent != "main" })
+                ?? branches.first {
+                model.navigate(to: .localBranch(LocalBranchKey(repository: local, branch: branch.name)))
+            }
+            try await scene("local-stack", settle: .seconds(5), MainView(), model: model)
+            model.destination = nil
+        }
+
         // A stack: its header, switcher, and conversation.
         let stacked = model.pullRequests.first { $0.stack?.position == 2 && $0.repository.name == "airway" }
             ?? model.pullRequests.first { $0.stack != nil }

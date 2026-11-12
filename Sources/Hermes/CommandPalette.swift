@@ -129,7 +129,7 @@ struct CommandPalette: View {
         case .show(.issue(let key)): "\(key.repository)/issues/\(key.number)"
         case .repository(let repository): "\(repository)"
         case .link(let link): link.path
-        case .show(.session), .account, .refresh, .toggleBots, .settings: nil
+        case .show(.session), .show(.localBranch), .account, .refresh, .toggleBots, .settings: nil
         }
         return path.flatMap { URL(string: "hermes://\($0)") }
     }
