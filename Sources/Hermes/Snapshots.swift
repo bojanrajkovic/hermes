@@ -62,6 +62,10 @@ enum Snapshots {
         try await scene("startup-problem", StartupProblemView(problem: .ghNotInstalled) {}, model: model)
         try await scene("profile", size: NSSize(width: 300, height: 320), ProfileCard(viewer: viewer), model: model)
         try await scene("settings", size: NSSize(width: 500, height: 320), SettingsView(), model: model)
+        let setupSize = NSSize(width: Theme.setupWidth, height: Theme.setupHeight)
+        try await scene("setup-account", size: setupSize, SetupSheet(viewer: viewer, finish: {}), model: model)
+        try await scene("setup-checkouts", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .checkouts), model: model)
+        model.store.hasFinishedSetup = true
 
         // The personal account.
         model.show(.filter(.needsReview))

@@ -168,14 +168,19 @@ public final class SessionStore {
     /// The user's checkout of the origin's repository, from the search roots
     /// in settings or from Hermes's own clones.
     func checkout(for origin: SessionOrigin) async -> Checkout? {
+        await checkout(for: origin.repoID)
+    }
+
+    /// The user's checkout of a repository, from the search roots in settings or from Hermes's own clones.
+    public func checkout(for repository: RepoID) async -> Checkout? {
         let roots = settings.searchRoots + [Workspace.checkoutsRoot]
         if finder?.roots != roots { finder = (roots, CheckoutFinder(roots: roots)) }
         guard let finder = finder?.finder else { return nil }
 
-        if let checkout = await finder.checkout(for: origin.repoID) { return checkout }
+        if let checkout = await finder.checkout(for: repository) { return checkout }
         // The scan is cached, and the user may have cloned since.
         await finder.rescan()
-        return await finder.checkout(for: origin.repoID)
+        return await finder.checkout(for: repository)
     }
 
     /// Where a local session for `origin` would run. Reads only.

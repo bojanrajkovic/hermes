@@ -17,6 +17,9 @@ public enum Theme {
     public static let windowMinHeight: CGFloat = 520
     public static let windowDefaultWidth: CGFloat = 1360
     public static let windowDefaultHeight: CGFloat = 860
+    /// The first-run setup sheet.
+    public static let setupWidth: CGFloat = 520
+    public static let setupHeight: CGFloat = 420
 
     // MARK: Sidebar
     public static let sidebarMinWidth: CGFloat = 200

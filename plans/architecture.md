@@ -111,9 +111,16 @@ sequenceDiagram
 
 ## Refresh
 
-- The PR and issue lists reload on a timer set in Settings, 60 seconds by
-  default. They also reload when the app becomes active, if the last reload
-  is more than 10 seconds old.
+- The PR and issue lists refresh on a timer set in Settings, 60 seconds by
+  default. They also refresh when the app becomes active, if the last refresh
+  is more than 10 seconds old. One timer runs per window; windows on the same
+  account share the refresh.
+- An account's first load fetches the viewer's own PRs and review requests,
+  shows them, then fetches the rest. Later refreshes fetch only the PRs updated
+  since the last one, because reloading every PR of an organization with
+  hundreds of repositories each minute uses up GitHub's hourly rate limit.
+  Repositories reload on ⌘R or once they are 10 minutes old. A repository
+  archived after the first load keeps its PRs until the app relaunches.
 - An open PR polls its head commit every 10 seconds while its diff is on
   screen. When the head changes, the diff and threads reload in place and
   keep the scroll position.
@@ -144,3 +151,5 @@ that session's PR, which links an issue to the PR a session opened for it.
 
 The app is not sandboxed. It runs `gh`, `git`, and `claude`, and reads
 checkouts under the search folders set in Settings, `~/Projects` by default.
+First-run setup, a two-page sheet shown once after sign-in, confirms the
+account and asks for these folders.

@@ -15,8 +15,12 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let problem):
                 StartupProblemView(problem: problem) { Task { await model.start() } }
-            case .ready:
+            case .ready(let viewer):
                 MainView()
+                    .sheet(isPresented: Binding(get: { !model.store.hasFinishedSetup }, set: { _ in })) {
+                        SetupSheet(viewer: viewer) { model.store.hasFinishedSetup = true }
+                            .interactiveDismissDisabled()
+                    }
             }
         }
         // Signs in once for the app. Each window then picks its account and loads it.

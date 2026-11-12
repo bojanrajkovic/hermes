@@ -29,6 +29,9 @@ final class AccountData {
     private(set) var listError: String?
     private(set) var lastRefresh: Date?
     private(set) var isRefreshing = false
+    /// When the last pull request load started. Nil until the first finishes.
+    private var pullRequestsLoadedAt: Date?
+    private var repositoriesLoadedAt: Date?
 
     init(login: String, client: GitHubClient) {
         self.login = login
@@ -37,30 +40,74 @@ final class AccountData {
 
     // MARK: Loading
 
-    /// Reloads the pull requests, repositories, and the issue lists that are
-    /// open. Rows keep their identity, so selection and scroll position stay.
-    func refresh() async {
+    /// Brings the lists up to date. Rows keep their identity, so selection and scroll position stay.
+    ///
+    /// The first load fetches the pull requests that involve the viewer, shows
+    /// them, then fetches the rest of the account. Later refreshes fetch only the
+    /// pull requests updated since the last one, so a large organization costs a
+    /// few requests per refresh instead of hundreds.
+    ///
+    /// - Parameter everything: Also reload the repositories, which otherwise
+    ///   reload once they are 10 minutes old. For ⌘R.
+    func refresh(everything: Bool = false) async {
         guard !login.isEmpty, !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
-        async let loadedPullRequests = client.openPullRequests(owner: login)
-        async let loadedRepositories = client.repositories(owner: login)
-        async let requested = try? reviewRequestedIDs()
+        let started = Date.now
+        let reposAreStale = repositoriesLoadedAt.map { started.timeIntervalSince($0) > 600 } ?? true
+        async let loadedRepositories = everything || reposAreStale ? client.repositories(owner: login) : nil
         do {
-            let (pullRequests, repositories) = try await (loadedPullRequests, loadedRepositories)
-            keepLeaving(pullRequests: pullRequests)
-            self.pullRequests = pullRequests
-            self.repositories = repositories
+            if let pullRequestsLoadedAt {
+                try await loadChanges(since: pullRequestsLoadedAt)
+            } else {
+                try await loadEverything()
+            }
+            pullRequestsLoadedAt = started
+            if let repositories = try await loadedRepositories {
+                self.repositories = repositories
+                repositoriesLoadedAt = started
+            }
             listError = nil
-            hasLoaded = true
             lastRefresh = .now
         } catch {
             listError = describe(error)
         }
-        if let requested = await requested { reviewRequested = requested }
 
         for repository in issueLists.keys { await reloadIssues(of: repository) }
+    }
+
+    /// The viewer's pull requests first, so their lists show while the rest of the account loads.
+    private func loadEverything() async throws {
+        let queries = PullRequestSearch.involvingViewer(owner: login)
+        async let involved = client.pullRequestIDs(matching: queries[0])
+        async let requested = client.pullRequestIDs(matching: queries[1])
+        let (involvedIDs, requestedIDs) = try await (involved, requested)
+        reviewRequested = Set(requestedIDs)
+        let mine = Array(Set(involvedIDs + requestedIDs))
+        pullRequests = PullRequestChanges.apply(to: [], changed: try await client.pullRequests(ids: mine), closed: [])
+        hasLoaded = true
+
+        let held = Set(pullRequests.map(\.id))
+        let rest = try await client.pullRequestIDs(matching: PullRequestSearch.open(owner: login)).filter { !held.contains($0) }
+        pullRequests = PullRequestChanges.apply(to: pullRequests, changed: try await client.pullRequests(ids: rest), closed: [])
+    }
+
+    /// The pull requests updated since the last refresh, and the current review requests.
+    // shortcut: a repository archived since the first load keeps its pull requests until relaunch; reload everything if that matters.
+    private func loadChanges(since: Date) async throws {
+        async let open = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: true))
+        async let closed = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: false))
+        async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
+        let (openIDs, closedIDs, requestedIDs) = try await (open, closed, requested)
+
+        // A review request does not update the pull request, so one not held yet loads here.
+        let held = Set(pullRequests.map(\.id))
+        let changed = try await client.pullRequests(ids: Array(Set(openIDs + requestedIDs.filter { !held.contains($0) })))
+        let reloaded = PullRequestChanges.apply(to: pullRequests, changed: changed, closed: Set(closedIDs))
+        keepLeaving(pullRequests: reloaded)
+        pullRequests = reloaded
+        reviewRequested = Set(requestedIDs)
     }
 
     /// Reloads when the lists are older than a few seconds, for app activation.
@@ -104,21 +151,6 @@ final class AccountData {
                 fetchedIssues[key] = issue
             }
         }
-    }
-
-    private func reviewRequestedIDs() async throws -> Set<String> {
-        struct Data: Decodable, Sendable {
-            struct Search: Decodable, Sendable { let nodes: [Node] }
-            struct Node: Decodable, Sendable { let id: String? }
-            let search: Search
-        }
-        // shortcut: the first 100 requests; upgrade to paging if someone has more waiting.
-        let query = """
-            { search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 100) {
-                nodes { ... on PullRequest { id } }
-            } }
-            """
-        return Set(try await client.graphQL(query, as: Data.self).search.nodes.compactMap(\.id))
     }
 
     // MARK: Issues

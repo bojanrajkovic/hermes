@@ -35,7 +35,7 @@ struct SessionScreen: View {
         .task {
             // The stack the session's branch is part of, read from the user's checkout.
             let origin = session.origin.repository
-            guard let checkout = await model.checkouts.checkout(for: RepoID(owner: origin.owner, name: origin.name)),
+            guard let checkout = await model.sessions.checkout(for: RepoID(owner: origin.owner, name: origin.name)),
                   let stacks = try? await checkout.stacks() else { return }
             self.checkout = checkout
             branches = stacks.first { stack in stack.branches.contains { $0.name == session.branch } }?.branches ?? []

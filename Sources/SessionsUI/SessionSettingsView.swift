@@ -8,7 +8,6 @@ public struct SessionSettingsView: View {
 
     @State private var newName = ""
     @State private var newID = ""
-    @State private var isChoosingFolder = false
 
     public init(settings: SessionSettings = .shared) {
         self.settings = settings
@@ -50,42 +49,9 @@ public struct SessionSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                if settings.searchRoots.isEmpty {
-                    Text("No folders. Sessions will offer to clone every repository.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(settings.searchRoots, id: \.self) { root in
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder")
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(root.abbreviatedPath)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        removeButton("Remove \(root.abbreviatedPath)") {
-                            settings.searchRoots.removeAll { $0 == root }
-                        }
-                    }
-                }
-                Button("Add Folder…") { isChoosingFolder = true }
-            } header: {
-                Text("Checkout Folders")
-            } footer: {
-                Text("""
-                    Local sessions run in a worktree of your own clone, found one or two levels inside these folders. \
-                    Repositories found nowhere can be cloned to \(Workspace.checkoutsRoot.abbreviatedPath).
-                    """)
-                    .foregroundStyle(.secondary)
-            }
+            CheckoutFoldersSection(settings: settings)
         }
         .formStyle(.grouped)
-        .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
-            guard case let .success(url) = result else { return }
-            let folder = URL(fileURLWithPath: url.path, isDirectory: true)
-            if !settings.searchRoots.contains(folder) { settings.searchRoots.append(folder) }
-        }
     }
 
     private var addEnvironmentRow: some View {
@@ -120,12 +86,60 @@ public struct SessionSettingsView: View {
         newID = ""
     }
 
-    private func removeButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(role: .destructive, action: action) {
-            Image(systemName: "minus.circle")
-        }
-        .buttonStyle(.borderless)
-        .help(label)
-        .accessibilityLabel(label)
+}
+
+/// The folders searched for the user's checkouts, with Add and Remove. In Settings and in first-run setup.
+public struct CheckoutFoldersSection: View {
+    @Bindable private var settings: SessionSettings
+    @State private var isChoosingFolder = false
+
+    public init(settings: SessionSettings = .shared) {
+        self.settings = settings
     }
+
+    public var body: some View {
+        Section {
+            if settings.searchRoots.isEmpty {
+                Text("No folders. Sessions will offer to clone every repository.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(settings.searchRoots, id: \.self) { root in
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(root.abbreviatedPath)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    removeButton("Remove \(root.abbreviatedPath)") {
+                        settings.searchRoots.removeAll { $0 == root }
+                    }
+                }
+            }
+            Button("Add Folder…") { isChoosingFolder = true }
+        } header: {
+            Text("Checkout Folders")
+        } footer: {
+            Text("""
+                Local sessions run in a worktree of your own clone, found one or two levels inside these folders. \
+                Repositories found nowhere can be cloned to \(Workspace.checkoutsRoot.abbreviatedPath).
+                """)
+                .foregroundStyle(.secondary)
+        }
+        .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
+            guard case let .success(url) = result else { return }
+            let folder = URL(fileURLWithPath: url.path, isDirectory: true)
+            if !settings.searchRoots.contains(folder) { settings.searchRoots.append(folder) }
+        }
+    }
+}
+
+private func removeButton(_ label: String, action: @escaping () -> Void) -> some View {
+    Button(role: .destructive, action: action) {
+        Image(systemName: "minus.circle")
+    }
+    .buttonStyle(.borderless)
+    .help(label)
+    .accessibilityLabel(label)
 }

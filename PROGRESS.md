@@ -18,8 +18,12 @@ What is built and works, and what is known not to work or is unverified.
   has a stack switcher.
 - The bot filter: a bot's pull request shows only when its checks fail or it
   has merge conflicts.
-- The lists reload on a timer (30 seconds to 5 minutes, 1 minute by default),
-  when the app becomes active, and on ⌘R.
+- The lists refresh on a timer (30 seconds to 5 minutes, 1 minute by default),
+  when the app becomes active, and on ⌘R. The first load shows the viewer's own
+  pull requests before the rest of the account; later refreshes fetch only what
+  changed.
+- First-run setup: a sheet confirms the signed-in account and asks where
+  checkouts live.
 - The command palette: fuzzy search over repositories, pull requests, and
   issues, and `repo#123` references to items outside the lists.
 

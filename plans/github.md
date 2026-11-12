@@ -51,14 +51,17 @@ sequenceDiagram
     C->>API: GET /user, organizations query
     API-->>App: profile and accounts
 
-    par refresh, per selected account
-        App->>C: openPullRequests(owner)
-        loop 100 IDs per page
-            C->>API: search is:pr is:open user:owner
-        end
-        App->>C: repositories(owner)
-        App->>API: search review-requested:@me
+    Note over App,API: First load of an account
+    App->>API: search involves:@me, review-requested:@me (scoped to the account)
+    App->>C: pullRequests(ids), then the lists show
+    App->>API: search every open pull request, IDs only
+    App->>C: pullRequests(ids not loaded yet)
+
+    loop every refresh
+        App->>API: search updated:>=last refresh (open), (closed), review-requested:@me
+        App->>C: pullRequests(changed ids)
     end
+    App->>C: repositories(owner) on ⌘R or when 10 minutes old
 
     Note over App,API: When a pull request opens
     App->>C: pullRequestDetail, pullRequestDiff, checks
@@ -70,7 +73,9 @@ sequenceDiagram
 | Call | Source | Notes |
 |------|--------|-------|
 | `viewer()` | REST `/user` and GraphQL | The profile comes from REST because GraphQL's `email` needs a scope `gh` does not request. |
-| `openPullRequests(owner:)` | GraphQL search | Every open pull request in the account's non-archived repositories. The search returns IDs, 100 per page and at most 1,000. The fields load by ID, 10 per request and up to 8 requests at once. |
+| `pullRequestIDs(matching:)` | GraphQL search | The IDs a search finds, 100 per page and at most 1,000. `PullRequestSearch` builds the queries. |
+| `pullRequests(ids:)` | GraphQL | Pull request fields by ID, 10 per request and up to 8 requests at once. |
+| `openPullRequests(owner:)` | GraphQL search | Both of the above for every open pull request in the account's non-archived repositories. |
 | `repositories(owner:)` | GraphQL | Non-archived repositories the account owns, with open issue counts. |
 | `issues(repository:pageSize:after:)` | GraphQL | One page of a repository's open issues. Loaded when the list is shown. |
 | `pullRequestDetail` | GraphQL | Description, comments, reviews, requested reviewers, commits, review threads. |

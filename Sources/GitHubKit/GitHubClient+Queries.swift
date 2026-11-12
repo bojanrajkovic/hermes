@@ -61,13 +61,19 @@ extension GitHubClient {
     ///
     /// - Parameter owner: The login of the user or organization.
     public func openPullRequests(owner: String) async throws -> [PullRequest] {
+        try await pullRequests(ids: pullRequestIDs(matching: PullRequestSearch.open(owner: owner)))
+    }
+
+    /// The node IDs of the pull requests a search finds, in its order, without
+    /// repeats. Stops at GitHub's limit of 1,000 results.
+    ///
+    /// - Parameter query: A search query, usually from `PullRequestSearch`.
+    public func pullRequestIDs(matching query: String) async throws -> [String] {
         var ids: [String] = []
         var seen: Set<String> = []
         var cursor: String?
         repeat {
-            let variables: [String: JSONValue] = [
-                "q": .string("is:pr is:open archived:false user:\(owner)"), "after": JSONValue(cursor),
-            ]
+            let variables: [String: JSONValue] = ["q": .string(query), "after": JSONValue(cursor)]
             let page = try await retryingGatewayErrors {
                 try await self.graphQL(Self.pullRequestIDsQuery, variables: variables, as: SearchData<NodeID>.self).search
             }
@@ -76,11 +82,12 @@ extension GitHubClient {
             ids += page.nodes.map(\.id).filter { seen.insert($0).inserted }
             cursor = page.nextCursor
         } while cursor != nil
-        return try await pullRequests(ids: ids)
+        return ids
     }
 
-    /// Loads pull requests by node ID, in the order of `ids`.
-    private func pullRequests(ids: [String]) async throws -> [PullRequest] {
+    /// Loads pull requests by node ID, in the order of `ids`. An ID that no
+    /// longer names a pull request is left out.
+    public func pullRequests(ids: [String]) async throws -> [PullRequest] {
         // 10 to a request keeps each under 2 seconds. At most 8 run at once.
         let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
         var byID: [String: PullRequest] = [:]

@@ -18,7 +18,6 @@ final class AppStore {
     let client: GitHubClient
     let repoCache: RepoCache
     let sessions: SessionStore
-    let checkouts = CheckoutFinder()
     private let defaults: UserDefaults
 
     private(set) var startup: Startup = .loading
@@ -41,6 +40,11 @@ final class AppStore {
         set { defaults.set(newValue, forKey: Keys.account) }
     }
 
+    /// False until the user finishes first-run setup. Everyone sees it once, existing users included.
+    var hasFinishedSetup: Bool {
+        didSet { defaults.set(hasFinishedSetup, forKey: Keys.finishedSetup) }
+    }
+
     var showingAllBots: Bool {
         didSet { defaults.set(showingAllBots, forKey: Keys.showingAllBots) }
     }
@@ -53,6 +57,7 @@ final class AppStore {
         static let account = "selectedAccount"
         static let showingAllBots = "showingAllBots"
         static let refreshInterval = "refreshInterval"
+        static let finishedSetup = "finishedSetup"
     }
 
     init(
@@ -64,6 +69,7 @@ final class AppStore {
         self.sessions = sessions
         self.defaults = defaults
         showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
+        hasFinishedSetup = defaults.bool(forKey: Keys.finishedSetup)
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
     }

@@ -72,7 +72,6 @@ final class WindowModel {
     var client: GitHubClient { store.client }
     var repoCache: RepoCache { store.repoCache }
     var sessions: SessionStore { store.sessions }
-    var checkouts: CheckoutFinder { store.checkouts }
     var startup: Startup { store.startup }
     var viewer: ViewerProfile? { store.viewer }
 
@@ -168,7 +167,8 @@ final class WindowModel {
 
     // MARK: Loading
 
-    func refresh() async { await data.refresh() }
+    /// Reloads everything, repositories included. For ⌘R and the Refresh buttons.
+    func refresh() async { await data.refresh(everything: true) }
     func refreshIfStale() async { await data.refreshIfStale() }
     func refetch(_ key: ItemKey) async { await data.refetch(key) }
 
