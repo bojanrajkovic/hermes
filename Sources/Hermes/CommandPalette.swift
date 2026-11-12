@@ -122,6 +122,8 @@ struct CommandPalette: View {
             model.reveal(repository)
         case .open(let key):
             Task { await model.open(key) }
+        case .link(let link):
+            Task { await model.open(link) }
         case .account(let login):
             if let account = model.viewer?.accounts.first(where: { $0.login == login }) { model.select(account) }
         case .refresh:

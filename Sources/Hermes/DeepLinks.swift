@@ -55,6 +55,15 @@ extension AppModel {
 }
 
 extension DeepLink {
+    /// What the link names, such as `octo/app#12` or `octo/app stack 97`.
+    var title: String {
+        switch self {
+        case .repository(let repository): "\(repository)"
+        case .issue(let repository, let number, _), .pullRequest(let repository, let number, _): "\(repository)#\(number)"
+        case .stack(let repository, let number): "\(repository) stack \(number)"
+        }
+    }
+
     /// The repository the link is in.
     var repository: RepositoryRef {
         switch self {

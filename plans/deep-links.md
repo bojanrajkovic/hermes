@@ -28,6 +28,14 @@ GitHub names a file in a `#diff-` anchor by the SHA-256 of its path, so Hermes
 hashes the diff's paths to find it. An outdated thread has no line in the diff,
 and its link opens its file instead.
 
+Pasting a github.com or `hermes://` link into the command palette (⌘K) offers
+one row that opens it.
+
+macOS sends `https://github.com` links only to apps GitHub has approved
+through associated domains, so Hermes cannot claim them. A link router such as
+Finicky, Velja or Switchbar can send them to Hermes by rule, and Hermes reads
+github.com URLs the same as `hermes://` ones.
+
 ## Accounts
 
 When the link's owner is the viewer or one of their organizations, Hermes

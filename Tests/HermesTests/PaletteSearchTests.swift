@@ -16,9 +16,20 @@ import Testing
         ("fix #95 later", .text("fix #95 later")),
         ("airway#", .text("airway#")),
         ("#12a", .text("#12a")),
+        (" https://github.com/octo/app/pull/12#discussion_r4 ", .link(.pullRequest(RepositoryRef(owner: "octo", name: "app"), number: 12, target: .reviewComment(4)))),
+        ("hermes://octo/app/issues/5", .link(.issue(RepositoryRef(owner: "octo", name: "app"), number: 5, comment: nil))),
+        ("https://example.com/octo/app", .text("https://example.com/octo/app")),
     ])
     func parses(input: String, expected: PaletteQuery) {
         #expect(PaletteQuery(input) == expected)
+    }
+}
+
+@Suite struct PaletteLinkTests {
+    @Test func aPastedLinkIsTheOnlyRow() {
+        let items = paletteItems(for: "https://github.com/octo/app/pull/12", in: PaletteContext())
+        #expect(items.map(\.action) == [.link(.pullRequest(RepositoryRef(owner: "octo", name: "app"), number: 12, target: nil))])
+        #expect(items.first?.title == "Open octo/app#12")
     }
 }
 

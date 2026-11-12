@@ -6,12 +6,16 @@ enum PaletteQuery: Equatable {
     case empty
     /// `repo#123`, `owner/repo#123`, or `#123` (no repository named).
     case reference(repository: String?, number: Int)
+    /// A pasted github.com or hermes:// link.
+    case link(DeepLink)
     case text(String)
 
     init(_ input: String) {
         let trimmed = input.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
             self = .empty
+        } else if trimmed.contains("://"), let url = URL(string: trimmed), let link = DeepLink(url: url) {
+            self = .link(link)
         } else if let match = trimmed.wholeMatch(of: /([\w.\-]+(?:\/[\w.\-]+)?)?\s*#(\d+)/), let number = Int(match.2) {
             self = .reference(repository: match.1.map(String.init), number: number)
         } else {
@@ -64,6 +68,8 @@ enum PaletteAction: Hashable {
     case repository(RepositoryRef)
     /// Load a pull request or issue that is not in the lists.
     case open(ItemKey)
+    /// Go where a pasted link points.
+    case link(DeepLink)
     case account(login: String)
     case refresh
     case toggleBots
@@ -103,6 +109,9 @@ func paletteItems(for input: String, in context: PaletteContext, limit: Int = 40
     switch PaletteQuery(input) {
     case .empty:
         return Array((commands(in: context) + context.repositories.map(repositoryItem)).prefix(limit))
+
+    case .link(let link):
+        return [PaletteItem(title: "Open \(link.title)", subtitle: "Go to the linked page", symbol: "link", action: .link(link))]
 
     case .reference(let name, let number):
         return referencedRepositories(name, in: context).map { repository in
