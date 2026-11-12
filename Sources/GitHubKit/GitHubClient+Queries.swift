@@ -74,7 +74,7 @@ extension GitHubClient {
         var cursor: String?
         repeat {
             let variables: [String: JSONValue] = ["q": .string(query), "after": JSONValue(cursor)]
-            let page = try await retryingGatewayErrors {
+            let page = try await retryingReads {
                 try await self.graphQL(Self.pullRequestIDsQuery, variables: variables, as: SearchData<NodeID>.self).search
             }
             // A pull request opened while the pages load shifts the results by
@@ -88,16 +88,17 @@ extension GitHubClient {
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no
     /// longer names a pull request is left out.
     public func pullRequests(ids: [String]) async throws -> [PullRequest] {
-        // 10 to a request keeps each under 2 seconds. At most 8 run at once.
+        // 10 to a request keeps each under 2 seconds. At most 2 run at once: more
+        // in a large organization trips GitHub's secondary rate limit on bursts.
         let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
         var byID: [String: PullRequest] = [:]
         try await withThrowingTaskGroup(of: [PullRequest].self) { group in
             for (index, chunk) in chunks.enumerated() {
-                if index >= 8, let loaded = try await group.next() {
+                if index >= 2, let loaded = try await group.next() {
                     for pullRequest in loaded { byID[pullRequest.id] = pullRequest }
                 }
                 group.addTask {
-                    try await self.retryingGatewayErrors {
+                    try await self.retryingReads {
                         try await self.graphQL(
                             Self.pullRequestsQuery, variables: ["ids": .array(chunk.map(JSONValue.string))], as: NodesData.self
                         ).nodes
@@ -112,14 +113,18 @@ extension GitHubClient {
     }
 
     /// Runs a read again, up to two more times, when GitHub answers HTTP 502
-    /// or 504, which is how a GraphQL query that ran too long fails. Not for
-    /// mutations: one may have been applied before the gateway gave up.
-    private func retryingGatewayErrors<T: Sendable>(_ read: () async throws -> T) async throws -> T {
+    /// or 504, which is how a GraphQL query that ran too long fails, or asks
+    /// Hermes to back off for at most a minute, which is how a burst trips the
+    /// secondary rate limit. Not for mutations: one may have been applied
+    /// before the gateway gave up.
+    private func retryingReads<T: Sendable>(_ read: () async throws -> T) async throws -> T {
         for _ in 1...2 {
             do {
                 return try await read()
             } catch GitHubError.http(status: 502, _), GitHubError.http(status: 504, _) {
                 continue
+            } catch GitHubError.rateLimited(let resetAt) where resetAt.timeIntervalSinceNow <= 60 {
+                try await Task.sleep(for: .seconds(max(1, resetAt.timeIntervalSinceNow)))
             }
         }
         return try await read()

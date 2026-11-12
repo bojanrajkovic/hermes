@@ -8,6 +8,7 @@ final class StubProtocol: URLProtocol {
     struct Response: Sendable {
         var status = 200
         var body = ""
+        var headers: [String: String] = [:]
     }
 
     struct Recorded: Sendable {
@@ -54,7 +55,7 @@ final class StubProtocol: URLProtocol {
         let response = Self.respond.withLock { $0 }(recorded)
         client?.urlProtocol(
             self,
-            didReceive: HTTPURLResponse(url: request.url!, statusCode: response.status, httpVersion: nil, headerFields: nil)!,
+            didReceive: HTTPURLResponse(url: request.url!, statusCode: response.status, httpVersion: nil, headerFields: response.headers)!,
             cacheStoragePolicy: .notAllowed
         )
         client?.urlProtocol(self, didLoad: Data(response.body.utf8))
@@ -161,6 +162,21 @@ actor TokenCounter {
 
         #expect(pullRequests.count == 25)
         #expect(StubProtocol.requests.withLock { $0.count } == 10)
+    }
+
+    @Test func pullRequestListWaitsOutASecondaryRateLimit() async throws {
+        let respond = try pullRequestList()
+        let limited = OSAllocatedUnfairLock(initialState: false)
+        // The first request is asked to back off for a second.
+        let client = client { request in
+            limited.withLock { done in defer { done = true }; return !done }
+                ? .init(status: 403, body: #"{"message": "secondary rate limit"}"#, headers: ["retry-after": "1"])
+                : respond(request)
+        }
+
+        let pullRequests = try await client.openPullRequests(owner: "o")
+
+        #expect(pullRequests.count == 25)
     }
 
     @Test func pullRequestDetailLoadsEveryPageOfCommentsReviewsAndThreads() async throws {
