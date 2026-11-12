@@ -166,7 +166,7 @@ struct DiffPointerTests {
 
         table.mouseDown(with: event(.leftMouseDown, x: nameX, line: lines[4]))
         table.mouseUp(with: event(.leftMouseUp, x: nameX, line: lines[4]))
-        #expect(model.definitions.current?.name == "part")
+        #expect(model.peek.current?.name == "part")
     }
 
     /// The tints over a line that was just revealed: the row's, then one per marked symbol.

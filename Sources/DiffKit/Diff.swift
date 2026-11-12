@@ -93,6 +93,26 @@ public struct FileDiff: Sendable, Hashable, Identifiable {
         if case .text(let hunks) = content { hunks } else { [] }
     }
 
+    /// The 1-based line of the new file where the first change is: the first
+    /// added line, or for a deletion the new line after it (the line before
+    /// it at the end of a hunk). `nil` for a deleted file or one with no hunks.
+    public var firstChangedLine: Int? {
+        guard newPath != nil else { return nil }
+        for hunk in hunks {
+            var previous: Int?
+            for (index, line) in hunk.lines.enumerated() {
+                switch line.kind {
+                case .context: previous = line.newNumber
+                case .addition: return line.newNumber
+                case .deletion:
+                    let next = hunk.lines[index...].lazy.compactMap(\.newNumber).first
+                    return next ?? previous ?? max(hunk.newStart, 1)
+                }
+            }
+        }
+        return nil
+    }
+
     /// Whether the mode changed on a file that existed before and after.
     public var isModeChange: Bool {
         if let oldMode, let newMode { oldMode != newMode } else { false }

@@ -14,11 +14,12 @@ final class DefinitionModel {
             case message(title: String, detail: String)
             /// Several definitions to pick from.
             case choices([DefinitionLocation])
-            case file(DefinitionLocation, CodeFile)
+            /// A file, at a zero-based line that is marked.
+            case file(path: String, line: Int, CodeFile)
         }
 
         let id: Int
-        /// The identifier that was looked up.
+        /// The identifier that was looked up, or the file that was opened.
         let name: String
         var phase: Phase
     }
@@ -54,7 +55,7 @@ final class DefinitionModel {
             model.update(page, .searching("Searching for “\(name)”…"))
             switch try await DefinitionSearch.find(name: name, origin: origin, in: tree) {
             case .found(let locations) where locations.count == 1:
-                model.update(page, .file(locations[0], try await Self.load(locations[0], from: tree)))
+                model.update(page, try await Self.load(path: locations[0].path, line: locations[0].line, from: tree))
             case .found(let locations):
                 model.update(page, .choices(locations))
             case .notFound:
@@ -75,8 +76,21 @@ final class DefinitionModel {
     func open(_ location: DefinitionLocation, name: String) {
         let page = push(name: name, phase: .searching("Opening \(location.path)…"))
         run(on: page) { [tree] model in
-            model.update(page, .file(location, try await Self.load(location, from: try await tree())))
+            model.update(page, try await Self.load(path: location.path, line: location.line, from: try await tree()))
         }
+    }
+
+    /// Opens a whole file on a new page, at a zero-based line.
+    func openFile(_ path: String, line: Int) {
+        let page = push(name: (path as NSString).lastPathComponent, phase: .searching(fetchStatus))
+        run(on: page) { [tree] model in
+            model.update(page, try await Self.load(path: path, line: line, from: try await tree()))
+        }
+    }
+
+    /// Shows a page from another definition model, such as the popover's, on a new page.
+    func show(_ page: Page) {
+        _ = push(name: page.name, phase: page.phase)
     }
 
     private func push(name: String, phase: Page.Phase) -> Int {
@@ -107,7 +121,7 @@ final class DefinitionModel {
         pages[index].phase = phase
     }
 
-    private nonisolated static func load(_ location: DefinitionLocation, from tree: any SourceTree) async throws -> CodeFile {
-        CodeFile(source: try await tree.readFile(location.path), path: location.path)
+    private nonisolated static func load(path: String, line: Int, from tree: any SourceTree) async throws -> Page.Phase {
+        .file(path: path, line: line, CodeFile(source: try await tree.readFile(path), path: path))
     }
 }

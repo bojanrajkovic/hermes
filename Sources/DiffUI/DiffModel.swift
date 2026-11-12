@@ -226,7 +226,10 @@ final class DiffModel {
     let scroll = DiffScrollState()
     /// Review comments. `nil` for local sources, which are read-only.
     let review: ReviewModel?
+    /// The definition pane docked under the list.
     let definitions: DefinitionModel
+    /// The definition popover over a clicked identifier. It reads the same source tree as the pane.
+    let peek: DefinitionModel
     /// A "+" was clicked in a rendered Markdown file of a source that takes no comments.
     var isReadOnlyNoticeShown = false
 
@@ -270,11 +273,15 @@ final class DiffModel {
         } else {
             review = nil
         }
-        definitions = DefinitionModel(fetchStatus: review == nil ? "Reading the files…" : "Fetching the commit from GitHub…")
-        definitions.tree = { [weak self] in
+        let fetchStatus = review == nil ? "Reading the files…" : "Fetching the commit from GitHub…"
+        definitions = DefinitionModel(fetchStatus: fetchStatus)
+        peek = DefinitionModel(fetchStatus: fetchStatus)
+        let tree: @MainActor () async throws -> any SourceTree = { [weak self] in
             guard let tree = try await self?.sourceTree() else { throw DefinitionError.noSourceTree }
             return tree
         }
+        definitions.tree = tree
+        peek.tree = tree
     }
 
     var additions: Int { files.reduce(0) { $0 + $1.diff.additions } }
@@ -535,20 +542,27 @@ final class DiffModel {
     // MARK: Definitions
 
     /// The location's page on GitHub at the head commit. `nil` for local sources.
-    func gitHubURL(for location: DefinitionLocation) -> URL? {
+    /// The zero-based `line` of the file at `path` on GitHub, at the pull request's head commit.
+    func gitHubURL(path: String, line: Int) -> URL? {
         guard case .pullRequest(let pullRequest) = source, let head else { return nil }
-        let file = URL(string: "https://github.com/\(pullRequest.repository)/blob/\(head)")?.appending(path: location.path)
-        return file.flatMap { URL(string: "\($0.absoluteString)#L\(location.line + 1)") }
+        let file = URL(string: "https://github.com/\(pullRequest.repository)/blob/\(head)")?.appending(path: path)
+        return file.flatMap { URL(string: "\($0.absoluteString)#L\(line + 1)") }
     }
 
-    /// The diff row that shows the location, when the diff has that line.
-    func diffRow(for location: DefinitionLocation) -> RowID? {
-        for file in files where file.diff.newPath == location.path {
-            if let line = file.diff.line(at: DiffPosition(side: .right, line: location.line + 1)) {
+    /// The diff row that shows the zero-based `line` of the file at `path`, when the diff has that line.
+    func diffRow(path: String, line: Int) -> RowID? {
+        for file in files where file.diff.newPath == path {
+            if let line = file.diff.line(at: DiffPosition(side: .right, line: line + 1)) {
                 return RowID(file: file.id, item: .line(line.numbers))
             }
         }
         return nil
+    }
+
+    /// Opens the new version of a file in the definition pane, at its first change.
+    func openFile(_ file: FileModel) {
+        guard let path = file.diff.newPath else { return }
+        definitions.openFile(path, line: (file.diff.firstChangedLine ?? 1) - 1)
     }
 
     /// Scrolls a row to the middle of the list, opening its file first when it is collapsed or rendered.

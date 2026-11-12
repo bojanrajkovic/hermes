@@ -15,7 +15,7 @@ struct DiffContent: View {
                 DiffList(model: model)
                     .frame(minHeight: DiffMetrics.listMinHeight)
                 if model.definitions.isOpen {
-                    DefinitionPane(model: model)
+                    DefinitionPane(model: model, definitions: model.definitions, style: .pane)
                         .frame(minHeight: DiffMetrics.paneMinHeight, idealHeight: DiffMetrics.paneIdealHeight)
                 }
             }
@@ -210,10 +210,14 @@ struct FileHeader: View {
             .help(file.isCollapsed ? "Expand File" : "Collapse File")
 
             ChangeIcon(change: file.diff.change)
-            path
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
+            // A deleted file is not in the commit the pane reads.
+            if file.diff.newPath != nil {
+                FileLink(path: path) { model.openFile(file) }
+            } else {
+                path
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             ChangeCounts(additions: file.diff.additions, deletions: file.diff.deletions)
                 .font(Theme.Fonts.meta)
 
@@ -251,6 +255,9 @@ struct FileHeader: View {
         .overlay(alignment: .bottom) { Divider() }
         .overlay(alignment: .top) { Divider() }
         .contextMenu {
+            if file.diff.newPath != nil {
+                Button("Open File") { model.openFile(file) }
+            }
             Button("Copy Path", action: copyPath)
             if let gitHubURL {
                 Button("Open on GitHub") { openURL(gitHubURL) }
@@ -281,6 +288,26 @@ struct FileHeader: View {
     private func copyPath() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(file.diff.path, forType: .string)
+    }
+}
+
+/// A file's path that opens the file in the definition pane. It is underlined while the pointer is over it.
+private struct FileLink: View {
+    let path: Text
+    let open: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: open) {
+            path
+                .underline(isHovered)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .pointerStyle(.link)
+        .help("Open the file in the Definition Pane")
     }
 }
 

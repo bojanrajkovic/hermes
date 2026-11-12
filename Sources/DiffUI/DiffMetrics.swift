@@ -33,6 +33,7 @@ struct DiffMetrics: Equatable {
     static let paneMinHeight: CGFloat = 220
     static let paneIdealHeight: CGFloat = 320
     static let renderedMinHeight: CGFloat = 120
+    static let definitionPopoverSize = CGSize(width: 640, height: 360)
 
     init(fontSize: Double = DiffDefaults.fontSize) {
         let size = min(max(fontSize, DiffDefaults.fontSizeRange.lowerBound), DiffDefaults.fontSizeRange.upperBound)

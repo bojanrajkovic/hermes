@@ -260,8 +260,32 @@ Clicking an identifier in the diff or in the definition pane looks it up:
 3. `Syntax.definitions` parses each candidate and returns the places that
    define the name.
 
-One result opens the file at the definition in a pane under the diff. Several
-results show a list. The pane keeps a back and forward history.
+A click in the diff shows the result in a popover over the identifier. One
+result opens the file at the definition, and several show a list. Identifiers
+clicked inside the popover are looked up in the popover, which keeps a back and
+forward history. The popover's pane button moves the page on screen into the
+definition pane docked under the diff.
+
+The pane and the popover are two `DefinitionModel`s: `DiffModel.definitions`
+and `DiffModel.peek`. They share the source tree. `LinePopover` shows the
+popover, anchored to the table rather than a cell because the table reuses
+cells as it scrolls.
+
+```mermaid
+graph LR
+    D[Identifier in the diff] --> P[peek: popover]
+    P -- identifier --> P
+    P -- Open in Pane --> Q[definitions: docked pane]
+    Q -- identifier --> Q
+    H[File name in a header] --> Q
+```
+
+## Opening a file
+
+A file header's name is a link. It opens the new version of the file in the
+definition pane at its first changed line (`FileDiff.firstChangedLine`). A
+deleted file's name is plain text, because the pane reads the head commit,
+where the file no longer exists.
 
 Definitions work for Swift, TypeScript, TSX, JavaScript, Go, Rust, C#, Python,
 Ruby, Bash, and HCL. The lookup is by name, not by type, so two unrelated

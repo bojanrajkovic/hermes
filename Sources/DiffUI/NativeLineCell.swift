@@ -321,6 +321,22 @@ final class NativeLineCell: NSView {
         return identifiers[index]?.first { displayRange(of: $0.range, in: line.text).contains(offset) }
     }
 
+    /// Where the identifier at `point` is drawn, in the cell's coordinates: its first line when it wraps.
+    func identifierRect(at point: CGPoint) -> CGRect? {
+        guard let identifier = identifier(at: point), let index = sideIndex(at: point), let line = sides[index].cell?.line,
+              let layout = layout(side: index)
+        else { return nil }
+        let glyphs = layout.manager.glyphRange(forCharacterRange: NSRange(displayRange(of: identifier.range, in: line.text)), actualCharacterRange: nil)
+        var first: CGRect?
+        layout.manager.enumerateEnclosingRects(
+            forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: layout.container
+        ) { rect, stop in
+            first = rect
+            stop.pointee = true
+        }
+        return first?.offsetBy(dx: sides[index].codeX, dy: DiffMetrics.rowPadding)
+    }
+
     private func layout(side index: Int) -> (manager: NSLayoutManager, container: NSTextContainer)? {
         let side = sides[index]
         if let hitLayout, hitLayout.side == index, hitLayout.width == side.codeWidth { return (hitLayout.manager, hitLayout.container) }

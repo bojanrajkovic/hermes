@@ -224,6 +224,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     private var isDraggingGutter = false
     /// The identifier a press started on. A release on it looks it up.
     private var pressedIdentifier: String?
+    private let popover = LinePopover()
 
     private var request: DiffScrollState.Request?
     /// The last request, held in place while rows around it get their real heights. The user's own scrolling ends it.
@@ -804,8 +805,25 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         } else if let name = pressedIdentifier, let hit = lineCell(at: tableView.convert(event.locationInWindow, from: nil)),
                   hit.cell.identifier(at: hit.point)?.name == name, let file = hit.cell.file
         {
-            model.definitions.lookUp(name: name, from: file.diff.path)
+            showDefinition(of: name, from: file.diff.path, at: hit.cell.identifierRect(at: hit.point).map { hit.cell.convert($0, to: tableView) })
         }
         pressedIdentifier = nil
+    }
+
+    // MARK: Popover
+
+    /// Looks `name` up in the definition popover, shown over `rect` of the table.
+    private func showDefinition(of name: String, from path: String, at rect: CGRect?) {
+        let peek = model.peek
+        peek.lookUp(name: name, from: path)
+        let content = DefinitionPane(model: model, definitions: peek, style: .popover { [weak self, model] in
+            if let page = peek.current { model.definitions.show(page) }
+            self?.popover.close()
+        })
+        .environment(\.diffMetrics, metrics)
+        .environment(model.review)
+        popover.show(
+            content, size: DiffMetrics.definitionPopoverSize, relativeTo: rect ?? .zero, of: tableView
+        ) { peek.isOpen = false }
     }
 }
