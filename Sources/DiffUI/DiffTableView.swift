@@ -347,6 +347,8 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         if request != self.request {
             self.request = request
             target = request
+            // A jump moves the rows out from under the popover's arrow.
+            if request != nil { popover.close() }
             settle(anchor: nil)
             // A revealed line, not a jump from the navigator.
             if let request, request.anchor == .center { highlight(request) }
@@ -871,11 +873,13 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             return (index, cell.line)
         }.first
         guard let found else {
-            // A collapsed or rendered file shows its lines once revealed, and `update` calls this again.
-            // Any other file, such as a large one behind its notice, has no row for the line to point at.
-            if let file = model.files.first(where: { $0.id == focus.file }), file.isCollapsed || file.showsRendered {
+            // `update` calls this again whenever the rows change.
+            if !rows.contains(where: { $0.file.id == focus.file }) {
+                // The table has not been given this file's rows yet, as when a link opens the diff.
+            } else if let file = model.files.first(where: { $0.id == focus.file }), file.isCollapsed || file.showsRendered {
                 model.reveal(RowID(file: focus.file, item: .line(focus.line)))
             } else {
+                // The file's rows are in and none is the line, as in a large file behind its notice.
                 review.focusedLine = nil
             }
             return
