@@ -139,6 +139,14 @@ stacked one is merged with the `gh stack` extension, which also merges every
 member below it. `GH_REPO` tells the extension the repository, because it
 otherwise reads it from the working directory.
 
+When a missing review or check blocks the merge, or the branch is behind its
+base, and GitHub's `viewerCanMergeAsAdmin` is true, the Merge menu offers
+"Merge Without Requirements" with each method. It is the same merge call:
+GitHub lets a viewer who may bypass the rules merge past them. The
+confirmation is destructive and names what is unmet. It is never offered for
+conflicts, a draft, or a stacked pull request, because `gh stack merge`
+cannot bypass.
+
 ## Writes
 
 Writes are submitting a review and merging. `GitHubClient` has no other mutation.

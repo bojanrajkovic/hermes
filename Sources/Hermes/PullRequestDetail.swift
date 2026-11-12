@@ -289,41 +289,76 @@ struct MergeButton: View {
     let pullRequest: PullRequest
     @Environment(WindowModel.self) private var model
     @State private var readiness: MergeReadiness?
-    /// The method waiting for the user's confirmation.
-    @State private var pending: MergeMethod?
+    /// The merge waiting for the user's confirmation.
+    @State private var pending: PendingMerge?
     @State private var isMerging = false
     @State private var failure: String?
+
+    private struct PendingMerge: Hashable {
+        let method: MergeMethod
+        /// Past unmet requirements, which only the viewer's bypass permission allows.
+        let bypassing: Bool
+    }
 
     var body: some View {
         // A pull request that is merged or closed has nothing to merge.
         if model.closedState(of: pullRequest.key) == nil || model.closedState(of: pullRequest.key) == .open {
-            Menu {
-                ForEach(readiness?.allowedMethods ?? [], id: \.self) { method in
-                    Button(method.title) { pending = method }
+            menu
+                .fixedSize()
+                .disabled(!(readiness?.canMerge == true || canBypass) || isMerging)
+                .help(help)
+                .task(id: MergeInput(head: pullRequest.headOID, updatedAt: pullRequest.updatedAt, checks: pullRequest.checkState)) {
+                    readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
                 }
-            } label: {
-                Label(isMerging ? "Merging…" : "Merge", systemImage: "arrow.triangle.merge")
-            } primaryAction: {
-                pending = readiness?.defaultMethod
+                .confirmationDialog(
+                    title, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), presenting: pending
+                ) { pending in
+                    Button(pending.bypassing ? "\(pending.method.title) Anyway" : pending.method.title,
+                           role: pending.bypassing ? .destructive : nil) { merge(pending.method) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { _ in
+                    Text(message)
+                }
+                .alert("Could Not Merge", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                    Button("OK") {}
+                } message: {
+                    Text(failure ?? "")
+                }
+        }
+    }
+
+    /// GitHub would let the viewer merge past what blocks it. Not for a stacked pull request:
+    /// `gh stack merge` cannot bypass.
+    private var canBypass: Bool {
+        readiness?.canBypass == true && pullRequest.stack == nil
+    }
+
+    /// A button that merges with the default method when it can, and a menu of methods.
+    /// Blocked, it is only a menu, so the bypass takes a choice from it.
+    @ViewBuilder
+    private var menu: some View {
+        let label = Label(isMerging ? "Merging…" : "Merge", systemImage: "arrow.triangle.merge")
+        if readiness?.canMerge == true {
+            Menu { items } label: { label } primaryAction: { pending = readiness.map { PendingMerge(method: $0.defaultMethod, bypassing: false) } }
+        } else {
+            Menu { items } label: { label }
+        }
+    }
+
+    @ViewBuilder
+    private var items: some View {
+        let methods = readiness?.allowedMethods ?? []
+        if readiness?.canMerge == true {
+            ForEach(methods, id: \.self) { method in
+                Button(method.title) { pending = PendingMerge(method: method, bypassing: false) }
             }
-            .fixedSize()
-            .disabled(readiness?.canMerge != true || isMerging)
-            .help(help)
-            .task(id: MergeInput(head: pullRequest.headOID, updatedAt: pullRequest.updatedAt, checks: pullRequest.checkState)) {
-                readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
-            }
-            .confirmationDialog(
-                title, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), presenting: pending
-            ) { method in
-                Button(method.title) { merge(method) }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text(message)
-            }
-            .alert("Could Not Merge", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-                Button("OK") {}
-            } message: {
-                Text(failure ?? "")
+        } else if canBypass {
+            Section(readiness?.blocker ?? "") {
+                Menu("Merge Without Requirements") {
+                    ForEach(methods, id: \.self) { method in
+                        Button(method.title) { pending = PendingMerge(method: method, bypassing: true) }
+                    }
+                }
             }
         }
     }
@@ -337,10 +372,14 @@ struct MergeButton: View {
 
     private var help: String {
         guard let readiness else { return "Checking whether this can merge…" }
-        return readiness.blocker ?? "\(readiness.defaultMethod.title) (the repository's default)"
+        if let blocker = readiness.blocker {
+            return canBypass ? "\(blocker) You can merge anyway from this menu." : blocker
+        }
+        return "\(readiness.defaultMethod.title) (the repository's default)"
     }
 
     private var title: String {
+        if pending?.bypassing == true { return "Merge #\(pullRequest.number) without its requirements?" }
         let set = model.mergeSet(of: pullRequest)
         return set.count > 1
             ? "Merge \(set.count) pull requests into \(set[0].baseRefName)?"
@@ -348,6 +387,10 @@ struct MergeButton: View {
     }
 
     private var message: String {
+        if pending?.bypassing == true {
+            let blocker = readiness?.blocker.map { "\($0) " } ?? ""
+            return "\(blocker)You can bypass this repository's rules, so “\(pullRequest.title)” will be merged anyway. This can't be undone."
+        }
         let set = model.mergeSet(of: pullRequest)
         // GitHub allows a merge while a check that is not required fails or still runs.
         let warning = readiness?.state == .unstable ? " A check is failing or still running." : ""

@@ -45,12 +45,17 @@ public struct MergeReadiness: Sendable, Hashable {
     public let viewerCanPush: Bool
     /// GitHub reports a draft as `clean`, so this is checked on its own.
     public let isDraft: Bool
+    /// Whether the viewer may merge past unmet requirements, GitHub's
+    /// `viewerCanMergeAsAdmin`: its "bypass rules" checkbox.
+    public let viewerCanBypass: Bool
 
     public init(
-        state: MergeStateStatus, allowedMethods: [MergeMethod], defaultMethod: MergeMethod, viewerCanPush: Bool, isDraft: Bool = false
+        state: MergeStateStatus, allowedMethods: [MergeMethod], defaultMethod: MergeMethod, viewerCanPush: Bool,
+        isDraft: Bool = false, viewerCanBypass: Bool = false
     ) {
         self.state = state
         self.isDraft = isDraft
+        self.viewerCanBypass = viewerCanBypass
         self.allowedMethods = allowedMethods
         self.defaultMethod = defaultMethod
         self.viewerCanPush = viewerCanPush
@@ -72,6 +77,14 @@ public struct MergeReadiness: Sendable, Hashable {
     }
 
     public var canMerge: Bool { blocker == nil }
+
+    /// Whether the viewer can merge anyway, past a missing review or check or a
+    /// branch behind its base. Never past conflicts, a draft, or missing permission:
+    /// GitHub lets nobody bypass those.
+    public var canBypass: Bool {
+        guard viewerCanBypass, viewerCanPush, !allowedMethods.isEmpty, !isDraft else { return false }
+        return state == .blocked || state == .behind
+    }
 }
 
 private struct MergeReadinessData: Decodable, Sendable {
@@ -79,6 +92,7 @@ private struct MergeReadinessData: Decodable, Sendable {
         struct PullRequest: Decodable, Sendable {
             let mergeStateStatus: MergeStateStatus
             let isDraft: Bool
+            let viewerCanMergeAsAdmin: Bool
         }
         let mergeCommitAllowed: Bool
         let squashMergeAllowed: Bool
@@ -105,7 +119,7 @@ extension GitHubClient {
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
                 mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod viewerPermission
-                pullRequest(number: $number) { mergeStateStatus isDraft }
+                pullRequest(number: $number) { mergeStateStatus isDraft viewerCanMergeAsAdmin }
               }
             }
             """
@@ -124,11 +138,13 @@ extension GitHubClient {
             allowedMethods: allowed,
             defaultMethod: allowed.contains(data.viewerDefaultMergeMethod) ? data.viewerDefaultMergeMethod : allowed.first ?? .merge,
             viewerCanPush: ["ADMIN", "MAINTAIN", "WRITE"].contains(data.viewerPermission ?? ""),
-            isDraft: data.pullRequest.isDraft
+            isDraft: data.pullRequest.isDraft,
+            viewerCanBypass: data.pullRequest.viewerCanMergeAsAdmin
         )
     }
 
-    /// Merges one pull request that is not part of a stack.
+    /// Merges one pull request that is not part of a stack. When the viewer can
+    /// bypass the repository's rules, GitHub merges past unmet requirements.
     ///
     /// - Parameters:
     ///   - pullRequestID: The GraphQL node ID.

@@ -153,4 +153,24 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
         // GitHub reports a draft as clean.
         #expect(!MergeReadiness(state: .clean, allowedMethods: [.squash], defaultMethod: .squash, viewerCanPush: true, isDraft: true).canMerge)
     }
+
+    @Test(arguments: [MergeStateStatus.blocked, .behind])
+    func bypassesAMissingRequirementWhenGitHubAllows(state: MergeStateStatus) {
+        let bypassing = MergeReadiness(state: state, allowedMethods: [.squash], defaultMethod: .squash, viewerCanPush: true, viewerCanBypass: true)
+
+        #expect(!bypassing.canMerge)
+        #expect(bypassing.canBypass)
+        #expect(!readiness(state).canBypass)
+    }
+
+    @Test(arguments: [MergeStateStatus.dirty, .draft, .unknown, .clean])
+    func neverBypassesConflictsDraftsOrWhatAlreadyMerges(state: MergeStateStatus) {
+        #expect(!MergeReadiness(state: state, allowedMethods: [.squash], defaultMethod: .squash, viewerCanPush: true, viewerCanBypass: true).canBypass)
+    }
+
+    @Test func neverBypassesADraftReportedAsBlocked() {
+        #expect(!MergeReadiness(
+            state: .blocked, allowedMethods: [.squash], defaultMethod: .squash, viewerCanPush: true, isDraft: true, viewerCanBypass: true
+        ).canBypass)
+    }
 }
