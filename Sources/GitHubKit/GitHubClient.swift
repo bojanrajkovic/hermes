@@ -92,7 +92,10 @@ public actor GitHubClient {
         var request = URLRequest(url: Self.api.appending(path: "graphql"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(graphQLRequest)
+        // Sorted, so a request encodes to the same bytes every time: dictionary order varies between encodes.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        request.httpBody = try encoder.encode(graphQLRequest)
 
         let (data, response) = try await send(request)
         return try Self.decodeGraphQL(T.self, from: data, rateLimitReset: Self.rateLimitReset(response, now: .now))
