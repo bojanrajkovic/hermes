@@ -10,10 +10,12 @@ import SwiftUI
 /// author, number, state and size on the second.
 struct PullRequestRow: View {
     let pullRequest: PullRequest
+    /// Merged or closed once Hermes knows it. Such a pull request stays listed until GitHub's search catches up.
+    var closedState: LinkedPullRequest.State? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.rowGlyphSpacing) {
-            StatusGlyph(StatusKind(pullRequest.checkState))
+            glyph
                 .frame(width: Theme.avatarSize)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
@@ -39,6 +41,19 @@ struct PullRequestRow: View {
         .padding(.vertical, Theme.rowVerticalPadding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// The merged or closed symbol as the detail view shows it, otherwise the checks.
+    @ViewBuilder
+    private var glyph: some View {
+        if let closedState, closedState != .open {
+            Image(systemName: closedState.symbol)
+                .foregroundStyle(closedState.tint)
+                .help(closedState.label)
+                .accessibilityLabel(closedState.label)
+        } else {
+            StatusGlyph(StatusKind(pullRequest.checkState))
+        }
     }
 
     private func meta(showingLogin: Bool) -> some View {
@@ -68,7 +83,7 @@ struct PullRequestRow: View {
         if pullRequest.isDraft { parts.append("draft") }
         if let decision = pullRequest.reviewDecision { parts.append(decision.label) }
         if pullRequest.mergeable == .conflicting { parts.append("merge conflicts") }
-        parts.append(StatusKind(pullRequest.checkState).label)
+        if let closedState, closedState != .open { parts.append(closedState.label) } else { parts.append(StatusKind(pullRequest.checkState).label) }
         return parts.joined(separator: ", ")
     }
 }
@@ -390,7 +405,7 @@ struct PullRequestRows: View {
     }
 
     private func row(_ pullRequest: PullRequest) -> some View {
-        PullRequestRow(pullRequest: pullRequest)
+        PullRequestRow(pullRequest: pullRequest, closedState: model.closedState(of: pullRequest.key))
             .tag(Destination.pullRequest(pullRequest.key))
             .contextMenu { ItemMenu(url: pullRequest.url, origin: SessionOrigin(pullRequest), model: model) }
     }
