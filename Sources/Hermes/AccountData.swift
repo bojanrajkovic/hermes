@@ -114,7 +114,9 @@ final class AccountData {
         // A review request does not update the pull request, so one not held yet loads here.
         let held = Set(pullRequests.map(\.id))
         let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || requestedIDs.contains($0.id) }.map(\.id)
-        let changed = try await client.pullRequests(ids: Array(Set(openIDs + requestedIDs.filter { !held.contains($0) })))
+        // A check that finishes does not update its pull request, so pending ones load again until they settle.
+        let pending = pullRequests.filter { $0.checkState == .pending || $0.checkState == .expected }.map(\.id)
+        let changed = try await client.pullRequests(ids: Array(Set(openIDs + pending + requestedIDs.filter { !held.contains($0) })))
         let reloaded = PullRequestChanges.apply(to: pullRequests, changed: changed, closed: Set(closedIDs))
         keepLeaving(pullRequests: reloaded)
         pullRequests = reloaded

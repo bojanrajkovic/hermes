@@ -118,7 +118,9 @@ sequenceDiagram
 - An account's first load fetches the viewer's own PRs and review requests,
   shows them, then fetches the rest. Later refreshes fetch only the PRs updated
   since the last one, because reloading every PR of an organization with
-  hundreds of repositories each minute uses up GitHub's hourly rate limit.
+  hundreds of repositories each minute uses up GitHub's rate limits. They also
+  fetch every PR whose checks were still pending: a check that finishes does
+  not change its PR's update time.
   Repositories reload on ⌘R or once they are 10 minutes old. A repository
   archived after the first load keeps its PRs until the app relaunches.
 - An open PR polls its head commit every 10 seconds while its diff is on
