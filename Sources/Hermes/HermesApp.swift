@@ -208,6 +208,7 @@ struct SettingsView: View {
                         Text("Show all bot pull requests")
                         Text("When off, a bot's pull request shows only if its checks fail or it has merge conflicts.")
                     }
+                    IgnoredRepositoriesSection()
                 }
                 .formStyle(.grouped)
             }
@@ -217,5 +218,53 @@ struct SettingsView: View {
         }
         .frame(width: 500)
         .frame(minHeight: 260)
+    }
+}
+
+/// The repositories left out of the lists, with a menu of every repository Hermes has loaded to add one.
+struct IgnoredRepositoriesSection: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let addable = store.knownRepositories.filter { !store.ignoredRepositories.contains($0) }
+        Section {
+            if store.ignoredRepositories.isEmpty {
+                Text("No repositories are ignored.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(store.ignoredRepositories.sorted { $0.description < $1.description }, id: \.self) { repository in
+                HStack(spacing: 8) {
+                    Image(systemName: "eye.slash")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(repository.description)
+                    Spacer(minLength: 8)
+                    Button(role: .destructive) {
+                        store.ignoredRepositories.remove(repository)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Stop ignoring \(repository.description)")
+                    .accessibilityLabel("Stop ignoring \(repository.description)")
+                }
+            }
+            Menu("Ignore a Repository") {
+                ForEach(Dictionary(grouping: addable, by: \.owner).sorted { $0.key < $1.key }, id: \.key) { owner, repositories in
+                    Section(owner) {
+                        ForEach(repositories, id: \.self) { repository in
+                            Button(repository.name) { store.ignoredRepositories.insert(repository) }
+                        }
+                    }
+                }
+            }
+            .disabled(addable.isEmpty)
+            .fixedSize()
+        } header: {
+            Text("Ignored Repositories")
+        } footer: {
+            Text("Their pull requests and issues leave the sidebar, every list, and ⌘K. A link still opens them.")
+                .foregroundStyle(.secondary)
+        }
     }
 }

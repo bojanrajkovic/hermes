@@ -77,8 +77,15 @@ final class WindowModel {
 
     // MARK: Lists
 
-    var pullRequests: [PullRequest] { data.pullRequests }
-    var repositories: [Repository] { data.repositories }
+    /// The account's pull requests, without those in ignored repositories. Every list reads these.
+    var pullRequests: [PullRequest] {
+        let ignored = store.ignored
+        return ignored.isEmpty ? data.pullRequests : data.pullRequests.filter { !ignored.contains($0.repository) }
+    }
+    var repositories: [Repository] {
+        let ignored = store.ignored
+        return ignored.isEmpty ? data.repositories : data.repositories.filter { !ignored.contains($0.ref) }
+    }
     var hasLoaded: Bool { data.hasLoaded }
     var listError: String? { data.listError }
     var isRefreshing: Bool { data.isRefreshing }

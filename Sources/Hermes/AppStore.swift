@@ -46,6 +46,22 @@ final class AppStore {
         didSet { defaults.set(hasFinishedSetup, forKey: Keys.finishedSetup) }
     }
 
+    /// Repositories left out of every list, the sidebar, and ⌘K. Their pull requests still open from a link.
+    var ignoredRepositories: Set<RepositoryRef> {
+        didSet { defaults.set(ignoredRepositories.map(\.description).sorted(), forKey: Keys.ignoredRepositories) }
+    }
+
+    /// The ignore list in force: empty when the app was launched with `HERMES_SHOW_IGNORED=1`.
+    var ignored: Set<RepositoryRef> {
+        ProcessInfo.processInfo.environment["HERMES_SHOW_IGNORED"] == "1" ? [] : ignoredRepositories
+    }
+
+    /// Every repository Hermes has loaded in any account, for the ignore list's picker.
+    var knownRepositories: [RepositoryRef] {
+        Set(accounts.values.flatMap { $0.repositories.map(\.ref) + $0.pullRequests.map(\.repository) })
+            .sorted { $0.description.localizedStandardCompare($1.description) == .orderedAscending }
+    }
+
     var showingAllBots: Bool {
         didSet { defaults.set(showingAllBots, forKey: Keys.showingAllBots) }
     }
@@ -59,6 +75,7 @@ final class AppStore {
         static let showingAllBots = "showingAllBots"
         static let refreshInterval = "refreshInterval"
         static let finishedSetup = "finishedSetup"
+        static let ignoredRepositories = "ignoredRepositories"
     }
 
     init(
@@ -72,6 +89,10 @@ final class AppStore {
         self.defaults = defaults
         showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
         hasFinishedSetup = defaults.bool(forKey: Keys.finishedSetup)
+        ignoredRepositories = Set((defaults.stringArray(forKey: Keys.ignoredRepositories) ?? []).compactMap { saved in
+            let parts = saved.split(separator: "/", maxSplits: 1).map(String.init)
+            return parts.count == 2 ? RepositoryRef(owner: parts[0], name: parts[1]) : nil
+        })
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
     }

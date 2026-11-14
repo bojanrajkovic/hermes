@@ -14,6 +14,7 @@ What is built and works, and what is known not to work or is unverified.
 - Open pull requests and repositories per account. Issues load per repository,
   30 at a time.
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
+- Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
 - Local stacks: a repository with a checkout has a Local tab of its stacked
   branches, and a branch with no pull request opens a read-only diff against

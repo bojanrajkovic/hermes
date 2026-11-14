@@ -29,6 +29,10 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
 
 * Every other repository is read-only, including the ones Hermes shows while you test it.
 
+* The user ignores `hermes-playground` in Settings, so it doesn't show in their lists. To test
+  against it, launch the app with `HERMES_SHOW_IGNORED=1`, which switches the ignore list off for
+  that run without changing the saved setting.
+
 ## Target layout
 
 * Logic goes in a `*Kit` target with no UI, so it is testable without a window.
