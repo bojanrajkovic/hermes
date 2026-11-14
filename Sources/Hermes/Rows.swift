@@ -12,6 +12,8 @@ struct PullRequestRow: View {
     let pullRequest: PullRequest
     /// Merged or closed once Hermes knows it. Such a pull request stays listed until GitHub's search catches up.
     var closedState: LinkedPullRequest.State? = nil
+    /// Why it is in the attention inbox. The inbox has no repository headers, so the row names its repository.
+    var reason: AttentionReason? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.rowGlyphSpacing) {
@@ -60,7 +62,7 @@ struct PullRequestRow: View {
         HStack(spacing: Theme.rowMetaSpacing) {
             AvatarView(url: pullRequest.author?.avatarURL, size: 14)
                 .help(pullRequest.author?.login ?? "Deleted account")
-            Text(verbatim: "#\(pullRequest.number)")
+            Text(verbatim: reason == nil ? "#\(pullRequest.number)" : "\(pullRequest.repository.name)#\(pullRequest.number)")
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
@@ -69,6 +71,7 @@ struct PullRequestRow: View {
                     .lineLimit(1)
                     .fixedSize()
             }
+            if let reason { Badge(reason.label) }
             if pullRequest.isDraft { Badge("Draft", systemImage: "pencil.line") }
             if let decision = pullRequest.reviewDecision { ReviewDecisionGlyph(decision: decision) }
             if pullRequest.mergeable == .conflicting { ConflictGlyph() }
@@ -79,6 +82,7 @@ struct PullRequestRow: View {
 
     private var accessibilityLabel: String {
         var parts = ["Pull request \(pullRequest.number)", pullRequest.title]
+        if let reason { parts.insert(reason.label, at: 0) }
         if let author = pullRequest.author { parts.append("by \(author.login)") }
         if pullRequest.isDraft { parts.append("draft") }
         if let decision = pullRequest.reviewDecision { parts.append(decision.label) }
@@ -405,7 +409,12 @@ struct PullRequestRows: View {
     }
 
     private func row(_ pullRequest: PullRequest) -> some View {
-        PullRequestRow(pullRequest: pullRequest, closedState: model.closedState(of: pullRequest.key))
+        Self.row(pullRequest, reason: nil, model: model)
+    }
+
+    /// One selectable pull request row with its context menu, for any list.
+    static func row(_ pullRequest: PullRequest, reason: AttentionReason?, model: WindowModel) -> some View {
+        PullRequestRow(pullRequest: pullRequest, closedState: model.closedState(of: pullRequest.key), reason: reason)
             .tag(Destination.pullRequest(pullRequest.key))
             .contextMenu { ItemMenu(url: pullRequest.url, origin: SessionOrigin(pullRequest), model: model) }
     }

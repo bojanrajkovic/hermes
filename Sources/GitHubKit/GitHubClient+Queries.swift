@@ -94,6 +94,38 @@ extension GitHubClient {
         return hits
     }
 
+    /// The commit each pull request's latest review by `viewer` was on, by pull request node ID.
+    /// A pull request with no review by the viewer is left out. 50 to a request, one at a time.
+    public func latestReviewCommits(pullRequestIDs ids: [String], viewer: String) async throws -> [String: String] {
+        struct Data: Decodable, Sendable {
+            struct Node: Decodable, Sendable {
+                struct Review: Decodable, Sendable {
+                    struct Commit: Decodable, Sendable { let oid: String }
+                    let commit: Commit?
+                }
+                let id: String?
+                let reviews: Connection<Review>?
+            }
+            let nodes: [Node?]
+        }
+        let query = """
+            query($ids: [ID!]!, $viewer: String!) {
+              nodes(ids: $ids) { ... on PullRequest { id reviews(last: 1, author: $viewer) { nodes { commit { oid } } } } }
+            }
+            """
+        var commits: [String: String] = [:]
+        for start in stride(from: 0, to: ids.count, by: 50) {
+            let chunk = ids[start..<min(start + 50, ids.count)].map(JSONValue.string)
+            let nodes = try await retryingReads {
+                try await self.graphQL(query, variables: ["ids": .array(chunk), "viewer": .string(viewer)], as: Data.self).nodes
+            }
+            for case let node? in nodes {
+                if let id = node.id, let oid = node.reviews?.nodes.last?.commit?.oid { commits[id] = oid }
+            }
+        }
+        return commits
+    }
+
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no
     /// longer names a pull request is left out.
     public func pullRequests(ids: [String]) async throws -> [PullRequest] {

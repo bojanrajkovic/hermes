@@ -15,9 +15,24 @@ public enum PullRequestSearch {
         ["involves:@me", "review-requested:@me"].map { "\(base(owner: owner, open: true)) \($0)" }
     }
 
-    /// The open pull requests that ask for the viewer's review.
+    /// The open pull requests that ask for the viewer's review, by name or through a team.
     public static func reviewRequested(owner: String) -> String {
         involvingViewer(owner: owner)[1]
+    }
+
+    /// The open pull requests that ask for the viewer's review by name.
+    public static func directlyRequested(owner: String) -> String {
+        "\(base(owner: owner, open: true)) user-review-requested:@me"
+    }
+
+    /// The open pull requests the viewer has reviewed.
+    public static func reviewedByViewer(owner: String) -> String {
+        "\(base(owner: owner, open: true)) reviewed-by:@me"
+    }
+
+    /// The open pull requests that mention the viewer.
+    public static func mentioningViewer(owner: String) -> String {
+        "\(base(owner: owner, open: true)) mentions:@me"
     }
 
     /// The open or closed pull requests updated since a time. Starts a minute

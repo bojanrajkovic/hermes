@@ -123,7 +123,7 @@ final class AppStore {
     /// One account's data, made on first use. An empty login is the data of a window with no account yet.
     func data(for login: String) -> AccountData {
         if let data = accounts[login] { return data }
-        let data = AccountData(login: login, client: client)
+        let data = AccountData(login: login, client: client) { [weak self] in self?.viewer?.login }
         accounts[login] = data
         return data
     }

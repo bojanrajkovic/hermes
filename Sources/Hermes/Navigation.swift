@@ -75,13 +75,13 @@ enum Scope: Hashable, Sendable {
 
 /// A cross-repository pull request filter.
 enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
-    case needsReview, yours, failing, drafts, bots, all
+    case needsAttention, yours, failing, drafts, bots, all
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .needsReview: "Needs Your Review"
+        case .needsAttention: "Needs Your Attention"
         case .yours: "Yours"
         case .failing: "Failing CI"
         case .drafts: "Drafts"
@@ -92,7 +92,7 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
 
     var symbol: String {
         switch self {
-        case .needsReview: "eye"
+        case .needsAttention: "bell"
         case .yours: "person"
         case .failing: "xmark.octagon"
         case .drafts: "pencil.line"
@@ -108,15 +108,15 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
     ///
     /// - Parameters:
     ///   - viewer: The signed-in user's login.
-    ///   - reviewRequested: Node IDs of the pull requests that ask for the viewer's review.
+    ///   - attention: The viewer's part in each pull request, for `needsAttention`.
     func matches(
-        _ pullRequest: PullRequest, viewer: String, reviewRequested: Set<String>, showingAllBots: Bool
+        _ pullRequest: PullRequest, viewer: String, attention: AttentionSignals, now: Date, showingAllBots: Bool
     ) -> Bool {
         if self == .bots { return pullRequest.author?.isBot == true }
         guard pullRequest.isShown(showingAllBots: showingAllBots) else { return false }
 
         switch self {
-        case .needsReview: return reviewRequested.contains(pullRequest.id)
+        case .needsAttention: return attentionReason(for: pullRequest, viewer: viewer, signals: attention, now: now) != nil
         case .yours: return pullRequest.author?.login == viewer
         case .failing: return pullRequest.checkState == .failure || pullRequest.checkState == .error
         case .drafts: return pullRequest.isDraft

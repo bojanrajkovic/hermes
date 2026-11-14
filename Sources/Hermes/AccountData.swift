@@ -11,11 +11,13 @@ final class AccountData {
     /// Empty for the copy a window uses before it has an account.
     let login: String
     private let client: GitHubClient
+    /// The signed-in user's login, once known. Review searches are about them, not the account.
+    private let viewer: () -> String?
 
     private(set) var pullRequests: [PullRequest] = []
     private(set) var repositories: [Repository] = []
-    /// Node IDs of the open pull requests that ask for the viewer's review.
-    private(set) var reviewRequested: Set<String> = []
+    /// The viewer's part in each pull request: review requests, reviews, and mentions.
+    private var signals = AttentionSignals()
     private(set) var issueLists: [RepositoryRef: IssueList] = [:]
     /// Pull requests and issues loaded one at a time, by number, because they
     /// are not in the lists above: closed ones, ones in another account, and
@@ -33,9 +35,19 @@ final class AccountData {
     private var pullRequestsLoadedAt: Date?
     private var repositoriesTriedAt: Date?
 
-    init(login: String, client: GitHubClient) {
+    init(login: String, client: GitHubClient, viewer: @escaping () -> String?) {
         self.login = login
         self.client = client
+        self.viewer = viewer
+    }
+
+    /// What the attention inbox ranks by, with the head branches of pull requests Hermes saw merge.
+    var attention: AttentionSignals {
+        var signals = signals
+        signals.mergedBranches = Set(fetchedStates.compactMap { key, state in
+            state == .merged ? fetchedPullRequests[key].map { ItemBranch(repository: key.repository, name: $0.headRefName) } : nil
+        })
+        return signals
     }
 
     // MARK: Loading
@@ -80,12 +92,10 @@ final class AccountData {
     /// The rest is only what is in repositories the viewer can push to. A load that fails part
     /// way keeps what it fetched, and the next refresh fetches only what is still missing.
     private func loadEverything() async throws {
-        let queries = PullRequestSearch.involvingViewer(owner: login)
-        async let involved = client.pullRequestIDs(matching: queries[0])
-        async let requested = client.pullRequestIDs(matching: queries[1])
-        let (involvedIDs, requestedIDs) = try await (involved, requested)
-        reviewRequested = Set(requestedIDs)
-        try await loadMissing(Array(Set(involvedIDs + requestedIDs)))
+        async let involved = client.pullRequestIDs(matching: PullRequestSearch.involvingViewer(owner: login)[0])
+        async let signaled = loadSignals()
+        let (involvedIDs, signaledIDs) = try await (involved, signaled)
+        try await loadMissing(Array(Set(involvedIDs).union(signaledIDs)))
         hasLoaded = true
 
         let rest = try await client.pullRequestHits(matching: PullRequestSearch.open(owner: login)).filter(\.canPush)
@@ -107,20 +117,40 @@ final class AccountData {
     private func loadChanges(since: Date) async throws {
         async let open = client.pullRequestHits(matching: PullRequestSearch.updated(owner: login, since: since, open: true))
         async let closed = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: false))
-        async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
-        let (openHits, closedIDs, requestedIDs) = try await (open, closed, requested)
+        async let signaled = loadSignals()
+        let (openHits, closedIDs, signaledIDs) = try await (open, closed, signaled)
 
-        // A read-only repository's pull request loads only when the viewer already holds it or is asked to review it.
-        // A review request does not update the pull request, so one not held yet loads here.
+        // A read-only repository's pull request loads only when the viewer already holds it or has a part in it.
+        // A review request or a mention does not update the pull request, so one not held yet loads here.
         let held = Set(pullRequests.map(\.id))
-        let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || requestedIDs.contains($0.id) }.map(\.id)
+        let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || signaledIDs.contains($0.id) }.map(\.id)
         // A check that finishes does not update its pull request, so pending ones load again until they settle.
         let pending = pullRequests.filter { $0.checkState == .pending || $0.checkState == .expected }.map(\.id)
-        let changed = try await client.pullRequests(ids: Array(Set(openIDs + pending + requestedIDs.filter { !held.contains($0) })))
+        let changed = try await client.pullRequests(ids: Array(Set(openIDs + pending).union(signaledIDs.subtracting(held))))
         let reloaded = PullRequestChanges.apply(to: pullRequests, changed: changed, closed: Set(closedIDs))
         keepLeaving(pullRequests: reloaded)
         pullRequests = reloaded
-        reviewRequested = Set(requestedIDs)
+    }
+
+    /// Searches for the viewer's review requests, reviews, and mentions, and the commit of each
+    /// of their latest reviews. Returns every pull request they name, to load from any repository.
+    private func loadSignals() async throws -> Set<String> {
+        async let direct = client.pullRequestIDs(matching: PullRequestSearch.directlyRequested(owner: login))
+        async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
+        async let reviewed = client.pullRequestIDs(matching: PullRequestSearch.reviewedByViewer(owner: login))
+        async let mentions = client.pullRequestIDs(matching: PullRequestSearch.mentioningViewer(owner: login))
+        let (directIDs, requestedIDs, reviewedIDs, mentionIDs) = try await (direct, requested, reviewed, mentions)
+        let commits = if let viewer = viewer() {
+            try await client.latestReviewCommits(pullRequestIDs: reviewedIDs, viewer: viewer)
+        } else {
+            [String: String]()
+        }
+
+        signals = AttentionSignals(
+            directRequests: Set(directIDs), teamRequests: Set(requestedIDs).subtracting(directIDs),
+            reviewedCommits: commits, mentions: Set(mentionIDs)
+        )
+        return Set(directIDs + requestedIDs + reviewedIDs + mentionIDs)
     }
 
     /// Reloads when the lists are older than a few seconds, for app activation.

@@ -91,31 +91,39 @@ struct FilterList: View {
 
     var body: some View {
         let sections = model.sections(for: filter)
+        let attention = filter == .needsAttention ? model.attentionItems : []
         List(selection: model.selection) {
-            // Header rows, not `Section`s: a disclosure group under a section
-            // header in an inset list draws rows on top of each other.
-            ForEach(sections) { section in
-                HStack(spacing: 4) {
-                    Image(systemName: section.isPrivate ? "lock" : "book.closed")
-                    Text(section.ref.name).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Button("Issues", systemImage: "smallcircle.filled.circle") {
-                        model.show(.repository(section.ref), list: .issues)
-                    }
-                    .labelStyle(.compactCount(section.openIssueCount))
-                    .buttonStyle(.plain)
-                    .help("Show this repository's \(section.openIssueCount) open issues")
-                    .opacity(section.openIssueCount > 0 ? 1 : 0)
-                    .accessibilityHidden(section.openIssueCount == 0)
+            if filter == .needsAttention {
+                // One ranked list: why each pull request is here matters more than its repository.
+                ForEach(attention, id: \.pullRequest.id) { item in
+                    PullRequestRows.row(item.pullRequest, reason: item.reason, model: model)
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.top, 6)
-                .selectionDisabled()
-                .listRowSeparator(.hidden)
-                .accessibilityAddTraits(.isHeader)
+            } else {
+                // Header rows, not `Section`s: a disclosure group under a section
+                // header in an inset list draws rows on top of each other.
+                ForEach(sections) { section in
+                    HStack(spacing: 4) {
+                        Image(systemName: section.isPrivate ? "lock" : "book.closed")
+                        Text(section.ref.name).lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 4)
+                        Button("Issues", systemImage: "smallcircle.filled.circle") {
+                            model.show(.repository(section.ref), list: .issues)
+                        }
+                        .labelStyle(.compactCount(section.openIssueCount))
+                        .buttonStyle(.plain)
+                        .help("Show this repository's \(section.openIssueCount) open issues")
+                        .opacity(section.openIssueCount > 0 ? 1 : 0)
+                        .accessibilityHidden(section.openIssueCount == 0)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 6)
+                    .selectionDisabled()
+                    .listRowSeparator(.hidden)
+                    .accessibilityAddTraits(.isHeader)
 
-                PullRequestRows(section: section)
+                    PullRequestRows(section: section)
+                }
             }
         }
         .listStyle(.inset)
@@ -124,7 +132,7 @@ struct FilterList: View {
         .navigationSubtitle(model.account?.login ?? "")
         .overlay {
             // Nothing is known yet while the account's first load runs; the sidebar shows the spinner.
-            if sections.isEmpty, model.hasLoaded {
+            if (filter == .needsAttention ? attention.isEmpty : sections.isEmpty), model.hasLoaded {
                 ContentUnavailableView(
                     "No Pull Requests", systemImage: filter.symbol, description: Text(emptyDescription)
                 )
@@ -134,7 +142,7 @@ struct FilterList: View {
 
     private var emptyDescription: String {
         switch filter {
-        case .needsReview: "Nobody is waiting for your review in this account."
+        case .needsAttention: "Nothing in this account needs you right now."
         case .yours: "You have no open pull requests in this account."
         case .failing: "No open pull request has failing checks."
         case .drafts: "There are no draft pull requests."
@@ -332,6 +340,6 @@ extension WindowModel {
         case .repository(let repository): sections.contains { $0.ref == repository } || !hasLoaded
         case .sessions: !self.sessions.sessions.isEmpty
         }
-        if !isValid { show(.filter(.needsReview)) }
+        if !isValid { show(.filter(.needsAttention)) }
     }
 }

@@ -100,7 +100,7 @@ final class WindowModel {
         // Going anywhere else gives up on a by-number load still in flight.
         didSet { resolving = nil }
     }
-    var scope: Scope = .filter(.needsReview)
+    var scope: Scope = .filter(.needsAttention)
     var repositoryList: RepositoryList = .pullRequests
     var pullRequestTab: PullRequestTab = .files {
         // Handed over once the Checks tab showed it, so picking the same check again is a change.
@@ -160,7 +160,7 @@ final class WindowModel {
         self.account = account
         store.lastLogin = account.login
         destination = nil
-        scope = .filter(.needsReview)
+        scope = .filter(.needsAttention)
         expansion = [:]
         Task { await refresh() }
     }
@@ -203,9 +203,17 @@ final class WindowModel {
 
     private func matcher(_ filter: InboxFilter) -> (PullRequest) -> Bool {
         let viewer = viewer?.login ?? ""
-        let reviewRequested = data.reviewRequested
+        let attention = data.attention
         let showingAllBots = showingAllBots
-        return { filter.matches($0, viewer: viewer, reviewRequested: reviewRequested, showingAllBots: showingAllBots) }
+        let now = Date.now
+        return { filter.matches($0, viewer: viewer, attention: attention, now: now, showingAllBots: showingAllBots) }
+    }
+
+    /// The attention inbox: the pull requests that need the viewer, each with its strongest reason, ranked.
+    var attentionItems: [(pullRequest: PullRequest, reason: AttentionReason)] {
+        attentionList(
+            pullRequests.filter(matcher(.needsAttention)), viewer: viewer?.login ?? "", signals: data.attention, now: .now
+        )
     }
 
     func pullRequest(_ key: ItemKey) -> PullRequest? { data.pullRequest(key) }

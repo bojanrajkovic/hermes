@@ -11,14 +11,15 @@ func user(_ login: String, bot: Bool = false) -> User {
 
 func pullRequest(
     _ number: Int, in repository: RepositoryRef = airway, title: String = "A pull request", author: User? = user("bojan"),
-    draft: Bool = false, checks: StatusState? = .success, stack: StackEntry? = nil, created: Date = .distantPast
+    draft: Bool = false, checks: StatusState? = .success, stack: StackEntry? = nil, created: Date = .distantPast,
+    review: ReviewDecision? = nil, mergeable: MergeableState = .mergeable, head: String = "abc", base: String = "main"
 ) -> PullRequest {
     PullRequest(
         id: "PR_\(repository.name)_\(number)", number: number, title: title,
         url: URL(string: "https://github.com/\(repository)/pull/\(number)")!, repository: repository, author: author,
         isDraft: draft, createdAt: created, updatedAt: .distantPast, headRefName: "branch-\(number)",
-        baseRefName: "main", headOID: "abc", reviewDecision: nil, additions: 1, deletions: 1, changedFileCount: 1,
-        mergeable: .mergeable, labels: [], checkState: checks, stack: stack, closingIssueNumbers: []
+        baseRefName: base, headOID: head, reviewDecision: review, additions: 1, deletions: 1, changedFileCount: 1,
+        mergeable: mergeable, labels: [], checkState: checks, stack: stack, closingIssueNumbers: []
     )
 }
 

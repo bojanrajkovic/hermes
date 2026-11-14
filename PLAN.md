@@ -21,6 +21,7 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 
 ## Decisions
 
+- [plans/attention-inbox.md](plans/attention-inbox.md): what puts a pull request in "Needs Your Attention", and how the reasons rank.
 - [plans/navigation-bakeoff.md](plans/navigation-bakeoff.md): the three navigation styles that were compared and why Inbox stayed, with screenshots.
 
 ## Rules

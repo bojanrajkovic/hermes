@@ -52,14 +52,14 @@ sequenceDiagram
     API-->>App: profile and accounts
 
     Note over App,API: First load of an account
-    App->>API: search involves:@me, review-requested:@me (scoped to the account)
+    App->>API: search involves:@me and the attention searches (scoped to the account)
     App->>C: pullRequests(ids), then the lists show
     App->>API: search every open pull request: IDs and the viewer's repository permission
     Note over App,API: only pull requests in repositories the viewer can push to load
     App->>C: pullRequests(ids not loaded yet)
 
     loop every refresh
-        App->>API: search updated:>=last refresh (open), (closed), review-requested:@me
+        App->>API: search updated:>=last refresh (open), (closed), and the attention searches
         App->>C: pullRequests(changed ids)
     end
     App->>C: repositories(owner) on ⌘R or 10 minutes after the last try

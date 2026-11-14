@@ -68,7 +68,7 @@ enum Snapshots {
         model.store.hasFinishedSetup = true
 
         // The personal account.
-        model.show(.filter(.needsReview))
+        model.show(.filter(.needsAttention))
         model.normalizeScope()
         try await scene("personal-inbox", MainView(), model: model)
 

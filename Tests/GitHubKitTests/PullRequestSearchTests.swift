@@ -22,4 +22,10 @@ struct PullRequestSearchTests {
         #expect(PullRequestSearch.updated(owner: "acme", since: since, open: false)
             == "is:pr is:closed archived:false user:acme updated:>=2027-01-15T07:59:00Z")
     }
+
+    @Test func attentionSearchesStayInTheAccount() {
+        #expect(PullRequestSearch.directlyRequested(owner: "acme") == "is:pr is:open archived:false user:acme user-review-requested:@me")
+        #expect(PullRequestSearch.reviewedByViewer(owner: "acme") == "is:pr is:open archived:false user:acme reviewed-by:@me")
+        #expect(PullRequestSearch.mentioningViewer(owner: "acme") == "is:pr is:open archived:false user:acme mentions:@me")
+    }
 }

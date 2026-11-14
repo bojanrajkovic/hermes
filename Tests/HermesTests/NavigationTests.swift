@@ -13,7 +13,7 @@ import Testing
 
     private func numbers(_ filter: InboxFilter, showingAllBots: Bool = false) -> [Int] {
         [mine, theirs, failing, quietBot, failingBot]
-            .filter { filter.matches($0, viewer: "bojan", reviewRequested: [theirs.id, quietBot.id], showingAllBots: showingAllBots) }
+            .filter { filter.matches($0, viewer: "bojan", attention: AttentionSignals(directRequests: [theirs.id, quietBot.id]), now: .now, showingAllBots: showingAllBots) }
             .map(\.number)
     }
 
@@ -24,9 +24,10 @@ import Testing
         #expect(numbers(.all) == [1, 2, 3, 5])
     }
 
-    @Test func needsReviewLeavesOutQuietBots() {
-        #expect(numbers(.needsReview) == [2])
-        #expect(numbers(.needsReview, showingAllBots: true) == [2, 4])
+    @Test func needsAttentionLeavesOutQuietBots() {
+        // Yours (1) is old, passing, and unreviewed, so it needs nothing.
+        #expect(numbers(.needsAttention) == [2])
+        #expect(numbers(.needsAttention, showingAllBots: true) == [2, 4])
     }
 
     @Test func botsListsEveryBotWhateverTheSetting() {
