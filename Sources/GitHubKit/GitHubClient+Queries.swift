@@ -40,7 +40,7 @@ extension GitHubClient {
           nodes(ids: $ids) {
             ... on PullRequest {
               id number title url isDraft createdAt updatedAt headRefName baseRefName headRefOid
-              reviewDecision additions deletions changedFiles mergeable
+              reviewDecision additions deletions changedFiles mergeable autoMergeRequest { mergeMethod }
               repository { name owner { login } }
               author { \(userFields) }
               labels(first: 20) { nodes { name color } }

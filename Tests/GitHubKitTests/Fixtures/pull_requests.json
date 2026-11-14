@@ -23,6 +23,7 @@
           "deletions": 1,
           "changedFiles": 6,
           "mergeable": "MERGEABLE",
+          "autoMergeRequest": { "mergeMethod": "SQUASH" },
           "repository": {
             "name": "airway",
             "owner": {

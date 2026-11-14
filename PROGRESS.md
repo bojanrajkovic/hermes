@@ -134,6 +134,8 @@ What is built and works, and what is known not to work or is unverified.
 - **Approve and Request Changes.** Every pull request in the playground
   repository is the viewer's own, and GitHub rejects both verdicts on one's
   own pull request. Hermes disables them there, so neither has been sent.
+- **Auto-merge.** Enabling and disabling it has not been sent to GitHub. The
+  playground repository does not allow auto-merge.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
   stored notary profile. The Makefile sets neither.
 

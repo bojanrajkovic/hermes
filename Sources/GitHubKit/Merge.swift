@@ -14,6 +14,15 @@ public enum MergeMethod: String, Sendable, Hashable, CaseIterable, Decodable {
         case .rebase: "Rebase and Merge"
         }
     }
+
+    /// One word for a badge.
+    public var shortTitle: String {
+        switch self {
+        case .merge: "Merge"
+        case .squash: "Squash"
+        case .rebase: "Rebase"
+        }
+    }
 }
 
 /// What GitHub says about merging a pull request right now.
@@ -48,11 +57,21 @@ public struct MergeReadiness: Sendable, Hashable {
     /// Whether the viewer may merge past unmet requirements, GitHub's
     /// `viewerCanMergeAsAdmin`: its "bypass rules" checkbox.
     public let viewerCanBypass: Bool
+    /// Whether the repository allows auto-merge.
+    public let autoMergeAllowed: Bool
+    /// GitHub's `viewerCanEnableAutoMerge`: true only while the pull request cannot merge yet.
+    public let viewerCanEnableAutoMerge: Bool
+    /// GitHub's `viewerCanDisableAutoMerge`.
+    public let viewerCanDisableAutoMerge: Bool
 
     public init(
         state: MergeStateStatus, allowedMethods: [MergeMethod], defaultMethod: MergeMethod, viewerCanPush: Bool,
-        isDraft: Bool = false, viewerCanBypass: Bool = false
+        isDraft: Bool = false, viewerCanBypass: Bool = false,
+        autoMergeAllowed: Bool = false, viewerCanEnableAutoMerge: Bool = false, viewerCanDisableAutoMerge: Bool = false
     ) {
+        self.autoMergeAllowed = autoMergeAllowed
+        self.viewerCanEnableAutoMerge = viewerCanEnableAutoMerge
+        self.viewerCanDisableAutoMerge = viewerCanDisableAutoMerge
         self.state = state
         self.isDraft = isDraft
         self.viewerCanBypass = viewerCanBypass
@@ -85,6 +104,11 @@ public struct MergeReadiness: Sendable, Hashable {
         guard viewerCanBypass, viewerCanPush, !allowedMethods.isEmpty, !isDraft else { return false }
         return state == .blocked || state == .behind
     }
+
+    /// Whether the menu offers to merge automatically once requirements pass.
+    public var canEnableAutoMerge: Bool {
+        autoMergeAllowed && viewerCanEnableAutoMerge && !allowedMethods.isEmpty
+    }
 }
 
 private struct MergeReadinessData: Decodable, Sendable {
@@ -93,7 +117,10 @@ private struct MergeReadinessData: Decodable, Sendable {
             let mergeStateStatus: MergeStateStatus
             let isDraft: Bool
             let viewerCanMergeAsAdmin: Bool
+            let viewerCanEnableAutoMerge: Bool
+            let viewerCanDisableAutoMerge: Bool
         }
+        let autoMergeAllowed: Bool
         let mergeCommitAllowed: Bool
         let squashMergeAllowed: Bool
         let rebaseMergeAllowed: Bool
@@ -118,8 +145,10 @@ extension GitHubClient {
         let query = """
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
-                mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod viewerPermission
-                pullRequest(number: $number) { mergeStateStatus isDraft viewerCanMergeAsAdmin }
+                autoMergeAllowed mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod viewerPermission
+                pullRequest(number: $number) {
+                  mergeStateStatus isDraft viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge
+                }
               }
             }
             """
@@ -139,7 +168,10 @@ extension GitHubClient {
             defaultMethod: allowed.contains(data.viewerDefaultMergeMethod) ? data.viewerDefaultMergeMethod : allowed.first ?? .merge,
             viewerCanPush: ["ADMIN", "MAINTAIN", "WRITE"].contains(data.viewerPermission ?? ""),
             isDraft: data.pullRequest.isDraft,
-            viewerCanBypass: data.pullRequest.viewerCanMergeAsAdmin
+            viewerCanBypass: data.pullRequest.viewerCanMergeAsAdmin,
+            autoMergeAllowed: data.autoMergeAllowed,
+            viewerCanEnableAutoMerge: data.pullRequest.viewerCanEnableAutoMerge,
+            viewerCanDisableAutoMerge: data.pullRequest.viewerCanDisableAutoMerge
         )
     }
 
@@ -163,6 +195,34 @@ extension GitHubClient {
         _ = try await graphQL(query, variables: ["input": .object(input)], as: MergeResult.self)
     }
 
+    /// Turns on auto-merge: GitHub merges with `method` once every requirement passes.
+    ///
+    /// - Parameter expectedHeadOID: GitHub refuses when the branch has moved on since.
+    /// - Throws: `GitHubError.graphQL` with GitHub's reason, such as a pull request that can already merge.
+    public func enableAutoMerge(pullRequestID: String, method: MergeMethod, expectedHeadOID: String) async throws {
+        let query = """
+            mutation($input: EnablePullRequestAutoMergeInput!) {
+              enablePullRequestAutoMerge(input: $input) { clientMutationId }
+            }
+            """
+        let input: [String: JSONValue] = [
+            "pullRequestId": .string(pullRequestID),
+            "mergeMethod": .string(method.rawValue),
+            "expectedHeadOid": .string(expectedHeadOID),
+        ]
+        _ = try await graphQL(query, variables: ["input": .object(input)], as: Ignored.self)
+    }
+
+    /// Turns off auto-merge.
+    public func disableAutoMerge(pullRequestID: String) async throws {
+        let query = """
+            mutation($input: DisablePullRequestAutoMergeInput!) {
+              disablePullRequestAutoMerge(input: $input) { clientMutationId }
+            }
+            """
+        _ = try await graphQL(query, variables: ["input": .object(["pullRequestId": .string(pullRequestID)])], as: Ignored.self)
+    }
+
     /// Merges a stack from its bottom up to and including one pull request,
     /// all or nothing, with the `gh stack` extension. GitHub refuses the
     /// ordinary merge call for a stacked pull request.
@@ -183,3 +243,6 @@ extension GitHubClient {
         }
     }
 }
+
+/// A mutation's answer when only its success matters.
+private struct Ignored: Decodable, Sendable {}

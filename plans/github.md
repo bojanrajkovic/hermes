@@ -89,6 +89,8 @@ sequenceDiagram
 | `submitReview` | GraphQL mutations | See [diff-viewer.md](diff-viewer.md). |
 | `mergeReadiness(repository:number:)` | GraphQL | GitHub's merge state for a pull request, the methods its repository allows, the viewer's default method, and whether the viewer can push. |
 | `mergePullRequest(pullRequestID:method:expectedHeadOID:)` | GraphQL mutation | Merges one pull request that is not in a stack. GitHub refuses it when the head has moved. |
+| `enableAutoMerge(pullRequestID:method:expectedHeadOID:)` | GraphQL mutation | GitHub merges with the method once every requirement passes. |
+| `disableAutoMerge(pullRequestID:)` | GraphQL mutation | Turns auto-merge off. |
 | `mergeStack(repository:upTo:method:)` | `gh stack merge` | Merges a stack from the bottom up to one pull request, all or nothing. |
 
 The pull request fields load 10 per request because the query costs GitHub
@@ -147,9 +149,17 @@ confirmation is destructive and names what is unmet. It is never offered for
 conflicts, a draft, or a stacked pull request, because `gh stack merge`
 cannot bypass.
 
+When the repository allows auto-merge and GitHub's `viewerCanEnableAutoMerge`
+is true, the Merge menu offers "Enable Auto-Merge" with each allowed method.
+GitHub sets that flag only while the pull request cannot merge yet, so it never
+sits beside the ordinary merge entries. It has no confirmation, because it can
+be turned off before it fires. While it is on, the header shows an
+"Auto-merge" badge with the method, and the menu offers "Disable Auto-Merge".
+Stacked pull requests do not get it, because they merge through `gh stack`.
+
 ## Writes
 
-Writes are submitting a review and merging. `GitHubClient` has no other mutation.
+Writes are submitting a review, merging, and turning auto-merge on or off. `GitHubClient` has no other mutation.
 Live tests that write use `bojanrajkovic/hermes-playground` only.
 
 ## Rate limits

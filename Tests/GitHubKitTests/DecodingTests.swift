@@ -53,10 +53,12 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
             stackID: "PRS_kwDOVkPx6c4AMxgs", stackNumber: 97, size: 3, baseRefName: "main", position: 3
         ))
         #expect(top.closingIssueNumbers == [6])
+        #expect(top.autoMergeMethod == .squash)
 
         let releaseBot = pullRequests[3]
         #expect(releaseBot.author?.isBot == true)
         #expect(releaseBot.stack == nil)
+        #expect(releaseBot.autoMergeMethod == nil)
         #expect(!releaseBot.labels.isEmpty)
 
         #expect(pullRequests[4].checkState == .failure)

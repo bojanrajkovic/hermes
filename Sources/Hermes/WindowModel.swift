@@ -248,6 +248,16 @@ final class WindowModel {
         await refresh()
     }
 
+    /// Turns auto-merge on with `method`, or off when `method` is nil, then reloads the pull request.
+    func setAutoMerge(_ pullRequest: PullRequest, method: MergeMethod?) async throws {
+        if let method {
+            try await client.enableAutoMerge(pullRequestID: pullRequest.id, method: method, expectedHeadOID: pullRequest.headOID)
+        } else {
+            try await client.disableAutoMerge(pullRequestID: pullRequest.id)
+        }
+        await refetch(pullRequest.key)
+    }
+
     /// Every loaded pull request of `pullRequest`'s stack, bottom first. Empty when it is not in a stack.
     func stack(of pullRequest: PullRequest) -> [PullRequest] { data.stack(of: pullRequest) }
 

@@ -210,6 +210,9 @@ struct PullRequestHeader: View {
                 case .mergeable: Badge("No conflicts", systemImage: "arrow.triangle.merge")
                 case .unknown: EmptyView()
                 }
+                if let method = pullRequest.autoMergeMethod {
+                    Badge("Auto-merge: \(method.shortTitle)", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90", tint: .green)
+                }
                 Button {
                     model.pullRequestTab = .checks
                 } label: {
@@ -305,7 +308,7 @@ struct MergeButton: View {
         if model.closedState(of: pullRequest.key) == nil || model.closedState(of: pullRequest.key) == .open {
             menu
                 .fixedSize()
-                .disabled(!(readiness?.canMerge == true || canBypass) || isMerging)
+                .disabled(!(readiness?.canMerge == true || canBypass || canEnableAutoMerge || canDisableAutoMerge) || isMerging)
                 .help(help)
                 .task(id: MergeInput(head: pullRequest.headOID, updatedAt: pullRequest.updatedAt, checks: pullRequest.checkState)) {
                     readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
@@ -331,6 +334,15 @@ struct MergeButton: View {
     /// `gh stack merge` cannot bypass.
     private var canBypass: Bool {
         readiness?.canBypass == true && pullRequest.stack == nil
+    }
+
+    /// Not for a stacked pull request, which merges through `gh stack merge`.
+    private var canEnableAutoMerge: Bool {
+        readiness?.canEnableAutoMerge == true && pullRequest.stack == nil && pullRequest.autoMergeMethod == nil
+    }
+
+    private var canDisableAutoMerge: Bool {
+        pullRequest.autoMergeMethod != nil && readiness?.viewerCanDisableAutoMerge == true
     }
 
     /// A button that merges with the default method when it can, and a menu of methods.
@@ -361,6 +373,16 @@ struct MergeButton: View {
                 }
             }
         }
+        // Auto-merge can be turned off before it fires, so neither entry asks first.
+        if canEnableAutoMerge {
+            Menu("Enable Auto-Merge") {
+                ForEach(methods, id: \.self) { method in
+                    Button(method.title) { setAutoMerge(method) }
+                }
+            }
+        } else if canDisableAutoMerge {
+            Button("Disable Auto-Merge") { setAutoMerge(nil) }
+        }
     }
 
     /// What the readiness depends on: a push, a review, or a finished check changes it.
@@ -373,7 +395,9 @@ struct MergeButton: View {
     private var help: String {
         guard let readiness else { return "Checking whether this can merge…" }
         if let blocker = readiness.blocker {
-            return canBypass ? "\(blocker) You can merge anyway from this menu." : blocker
+            if canBypass { return "\(blocker) You can merge anyway from this menu." }
+            if canEnableAutoMerge { return "\(blocker) You can turn on auto-merge from this menu." }
+            return blocker
         }
         return "\(readiness.defaultMethod.title) (the repository's default)"
     }
@@ -397,6 +421,19 @@ struct MergeButton: View {
         guard set.count > 1 else { return "“\(pullRequest.title)” will be merged. This can't be undone.\(warning)" }
         let numbers = set.map { "#\($0.number)" }.formatted(.list(type: .and))
         return "This pull request is part of a stack. \(numbers) will be merged together, all or nothing. This can't be undone.\(warning)"
+    }
+
+    private func setAutoMerge(_ method: MergeMethod?) {
+        isMerging = true
+        Task {
+            defer { isMerging = false }
+            do {
+                try await model.setAutoMerge(pullRequest, method: method)
+            } catch {
+                failure = describe(error)
+            }
+            readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
+        }
     }
 
     private func merge(_ method: MergeMethod) {

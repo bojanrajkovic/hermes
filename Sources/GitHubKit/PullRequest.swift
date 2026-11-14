@@ -78,13 +78,15 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     public let stack: StackEntry?
     /// The numbers of the issues that merging this pull request closes.
     public let closingIssueNumbers: [Int]
+    /// The method GitHub will merge with once requirements pass. `nil` when auto-merge is off.
+    public let autoMergeMethod: MergeMethod?
 
     public init(
         id: String, number: Int, title: String, url: URL, repository: RepositoryRef, author: User?,
         isDraft: Bool, createdAt: Date, updatedAt: Date, headRefName: String, baseRefName: String,
         headOID: String, reviewDecision: ReviewDecision?, additions: Int, deletions: Int,
         changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: StatusState?,
-        stack: StackEntry?, closingIssueNumbers: [Int]
+        stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil
     ) {
         self.id = id
         self.number = number
@@ -107,6 +109,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         self.checkState = checkState
         self.stack = stack
         self.closingIssueNumbers = closingIssueNumbers
+        self.autoMergeMethod = autoMergeMethod
     }
 }
 
@@ -114,7 +117,7 @@ extension PullRequest: Decodable {
     private enum CodingKeys: String, CodingKey {
         case id, number, title, url, repository, author, isDraft, createdAt, updatedAt, headRefName
         case baseRefName, headRefOid, reviewDecision, additions, deletions, changedFiles, mergeable
-        case labels, commits, stack, stackEntry, closingIssuesReferences
+        case labels, commits, stack, stackEntry, closingIssuesReferences, autoMergeRequest
     }
 
     private struct HeadCommit: Decodable {
@@ -132,6 +135,7 @@ extension PullRequest: Decodable {
         let baseRefName: String
     }
 
+    private struct AutoMerge: Decodable { let mergeMethod: MergeMethod }
     private struct Position: Decodable { let position: Int }
     private struct Number: Decodable { let number: Int }
 
@@ -159,6 +163,7 @@ extension PullRequest: Decodable {
             .nodes.last?.commit.statusCheckRollup?.state
         closingIssueNumbers = try container.decode(Connection<Number>.self, forKey: .closingIssuesReferences)
             .nodes.map(\.number)
+        autoMergeMethod = try container.decodeIfPresent(AutoMerge.self, forKey: .autoMergeRequest)?.mergeMethod
 
         let stack = try container.decodeIfPresent(Stack.self, forKey: .stack)
         let position = try container.decodeIfPresent(Position.self, forKey: .stackEntry)?.position

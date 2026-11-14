@@ -174,3 +174,28 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
         ).canBypass)
     }
 }
+
+@Suite struct AutoMergeTests {
+    private func readiness(allowed: Bool = true, canEnable: Bool = true, methods: [MergeMethod] = [.squash]) -> MergeReadiness {
+        MergeReadiness(
+            state: .blocked, allowedMethods: methods, defaultMethod: methods.first ?? .merge, viewerCanPush: true,
+            autoMergeAllowed: allowed, viewerCanEnableAutoMerge: canEnable
+        )
+    }
+
+    @Test func offeredWhenTheRepositoryAllowsItAndGitHubLetsTheViewer() {
+        #expect(readiness().canEnableAutoMerge)
+    }
+
+    @Test func notOfferedWhenTheRepositoryDisallowsIt() {
+        #expect(!readiness(allowed: false).canEnableAutoMerge)
+    }
+
+    @Test func notOfferedWhenGitHubSaysTheViewerCannot() {
+        #expect(!readiness(canEnable: false).canEnableAutoMerge)
+    }
+
+    @Test func notOfferedWithoutAMergeMethod() {
+        #expect(!readiness(methods: []).canEnableAutoMerge)
+    }
+}
