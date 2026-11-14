@@ -353,14 +353,29 @@ struct SessionStateGlyph: View {
 
 // MARK: Row groups shared by every navigation style
 
-/// A repository's pull request rows: single ones, and stacks as nodes that
-/// open to their pull requests in order.
+/// Pull request rows: single ones, and stacks as nodes that open to their
+/// pull requests in order.
 struct PullRequestRows: View {
-    let section: RepositorySection
+    let groups: [PullRequestGroup]
+    /// Bot pull requests the bot filter left out, offered as a button to show them.
+    var hiddenBotCount = 0
+    /// The attention inbox's reason for each pull request, shown on its row.
+    var reasons: [String: AttentionReason] = [:]
     @Environment(WindowModel.self) private var model
 
+    /// A repository's rows.
+    init(section: RepositorySection) {
+        groups = section.groups
+        hiddenBotCount = section.hiddenBotCount
+    }
+
+    init(groups: [PullRequestGroup], reasons: [String: AttentionReason]) {
+        self.groups = groups
+        self.reasons = reasons
+    }
+
     var body: some View {
-        ForEach(section.groups) { group in
+        ForEach(groups) { group in
             switch group {
             case .single(let pullRequest):
                 row(pullRequest)
@@ -392,12 +407,12 @@ struct PullRequestRows: View {
                 }
             }
         }
-        if section.hiddenBotCount > 0 {
+        if hiddenBotCount > 0 {
             Button {
                 model.showingAllBots = true
             } label: {
                 Label(
-                    section.hiddenBotCount == 1 ? "1 bot PR hidden" : "\(section.hiddenBotCount) bot PRs hidden",
+                    hiddenBotCount == 1 ? "1 bot PR hidden" : "\(hiddenBotCount) bot PRs hidden",
                     systemImage: "eye.slash"
                 )
                 .font(Theme.Fonts.rowMeta)
@@ -409,7 +424,7 @@ struct PullRequestRows: View {
     }
 
     private func row(_ pullRequest: PullRequest) -> some View {
-        Self.row(pullRequest, reason: nil, model: model)
+        Self.row(pullRequest, reason: reasons[pullRequest.id], model: model)
     }
 
     /// One selectable pull request row with its context menu, for any list.

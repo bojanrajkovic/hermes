@@ -95,9 +95,11 @@ struct FilterList: View {
         List(selection: model.selection) {
             if filter == .needsAttention {
                 // One ranked list: why each pull request is here matters more than its repository.
-                ForEach(attention, id: \.pullRequest.id) { item in
-                    PullRequestRows.row(item.pullRequest, reason: item.reason, model: model)
-                }
+                // A stack sits at the rank of its most urgent member.
+                PullRequestRows(
+                    groups: PullRequest.grouped(attention.map(\.pullRequest)),
+                    reasons: Dictionary(attention.map { ($0.pullRequest.id, $0.reason) }, uniquingKeysWith: { first, _ in first })
+                )
             } else {
                 // Header rows, not `Section`s: a disclosure group under a section
                 // header in an inset list draws rows on top of each other.

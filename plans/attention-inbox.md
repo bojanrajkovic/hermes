@@ -20,7 +20,9 @@ strongest. Within a reason, the most recently updated comes first.
 | 7 | Ready to merge | Yours, approved, its checks pass or it has none, it can merge, and it is not a draft |
 | 8 | Opened recently | Yours, opened in the last 24 hours |
 
-The bot filter applies here as in the other lists.
+A stack shows as one node, at the rank of its most urgent member, with the
+members that need you under it, each with its own reason. The bot filter
+applies here as in the other lists.
 
 ## Signals
 
