@@ -62,6 +62,13 @@ final class AppStore {
             .sorted { $0.description.localizedStandardCompare($1.description) == .orderedAscending }
     }
 
+    /// A `hermes://` link to what the window used last showed. The first window of a launch opens
+    /// there when macOS does not restore windows.
+    var lastPlace: URL? {
+        get { defaults.url(forKey: Keys.lastPlace) }
+        set { defaults.set(newValue, forKey: Keys.lastPlace) }
+    }
+
     var showingAllBots: Bool {
         didSet { defaults.set(showingAllBots, forKey: Keys.showingAllBots) }
     }
@@ -76,6 +83,7 @@ final class AppStore {
         static let refreshInterval = "refreshInterval"
         static let finishedSetup = "finishedSetup"
         static let ignoredRepositories = "ignoredRepositories"
+        static let lastPlace = "lastPlace"
     }
 
     init(

@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
 
+    /// Comes to the front: launched by `open` from a background process, macOS can leave the app behind.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate()
+    }
+
     /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
@@ -64,7 +69,8 @@ struct HermesApp: App {
             WindowRoot(store: store, state: $state)
                 .frame(minWidth: Theme.windowMinWidth, minHeight: Theme.windowMinHeight)
         } defaultValue: {
-            WindowState()
+            // A window macOS does not restore opens on the account and place used last.
+            WindowState(login: store.lastLogin, url: store.lastPlace)
         }
         // Links go through the app delegate, which picks the window. Without this a window group makes a window per link.
         .handlesExternalEvents(matching: [])
@@ -105,11 +111,15 @@ struct WindowRoot: View {
                 await model.start(login: state.login)
             }
             .onChange(of: activeState, initial: true) {
-                if activeState == .key { model.store.frontmost = model }
+                if activeState == .key {
+                    model.store.frontmost = model
+                    model.store.lastPlace = state.url
+                }
             }
             // Kept current, so a restored window shows its account and what it showed.
             .onChange(of: WindowState(id: state.id, login: model.account?.login, url: model.placeURL)) { _, new in
                 state = new
+                if activeState == .key { model.store.lastPlace = new.url }
             }
     }
 }

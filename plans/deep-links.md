@@ -43,6 +43,13 @@ in a window of its own, and so does a link that arrives when no window is up.
 The app delegate takes every link (`AppStore.open(_:)`), and the window group
 handles none itself, so SwiftUI makes no window of its own for a link.
 
+When macOS does not restore windows, because "Close windows when quitting an
+application" is on, the first window of a launch opens on the account and
+place of the window used last. Hermes saves that place as a `hermes://` link
+whenever the key window moves. Hermes also activates itself when it finishes
+launching, since an app started by `open` from a background process can stay
+behind other windows.
+
 ## Accounts
 
 When the link's owner is the viewer or one of their organizations, Hermes
