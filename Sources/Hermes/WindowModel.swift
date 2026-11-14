@@ -529,15 +529,7 @@ extension GitHubClient {
                 issueOrPullRequest(number: $number) {
                   __typename
                   ... on PullRequest {
-                    id number title url state isDraft createdAt updatedAt headRefName baseRefName headRefOid
-                    reviewDecision additions deletions changedFiles mergeable
-                    repository { name owner { login } }
-                    author { \(user) }
-                    labels(first: 20) { nodes { name color } }
-                    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
-                    stack { id number size baseRefName }
-                    stackEntry { position }
-                    closingIssuesReferences(first: 20) { nodes { number } }
+                    state \(PullRequest.fields)
                   }
                   ... on Issue {
                     id number title url state createdAt updatedAt

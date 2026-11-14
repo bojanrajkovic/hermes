@@ -1,6 +1,21 @@
 import Foundation
 
 private let userFields = "__typename login avatarUrl"
+extension PullRequest {
+    /// The GraphQL fields `PullRequest` decodes from, for any query that loads one.
+    public static let fields = """
+        id number title url isDraft createdAt updatedAt headRefName baseRefName headRefOid
+        reviewDecision additions deletions changedFiles mergeable autoMergeRequest { mergeMethod }
+        repository { name owner { login } }
+        author { \(userFields) }
+        labels(first: 20) { nodes { name color } }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+        stack { id number size baseRefName }
+        stackEntry { position }
+        closingIssuesReferences(first: 20) { nodes { number } }
+        """
+}
+
 private let commentFields = "id databaseId author { \(userFields) } body createdAt"
 
 // MARK: Profile
@@ -39,15 +54,7 @@ extension GitHubClient {
         query($ids: [ID!]!) {
           nodes(ids: $ids) {
             ... on PullRequest {
-              id number title url isDraft createdAt updatedAt headRefName baseRefName headRefOid
-              reviewDecision additions deletions changedFiles mergeable autoMergeRequest { mergeMethod }
-              repository { name owner { login } }
-              author { \(userFields) }
-              labels(first: 20) { nodes { name color } }
-              commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
-              stack { id number size baseRefName }
-              stackEntry { position }
-              closingIssuesReferences(first: 20) { nodes { number } }
+              \(PullRequest.fields)
             }
           }
         }
