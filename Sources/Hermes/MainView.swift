@@ -96,8 +96,9 @@ struct FilterList: View {
             if filter == .needsAttention {
                 // One ranked list: why each pull request is here matters more than its repository.
                 // A stack sits at the rank of its most urgent member.
+                // The whole stack shows, so a member that needs nothing keeps its place without a reason.
                 PullRequestRows(
-                    groups: PullRequest.grouped(attention.map(\.pullRequest)),
+                    groups: PullRequest.grouped(withStacks(attention.map(\.pullRequest))),
                     reasons: Dictionary(attention.map { ($0.pullRequest.id, $0.reason) }, uniquingKeysWith: { first, _ in first })
                 )
             } else {
@@ -140,6 +141,12 @@ struct FilterList: View {
                 )
             }
         }
+    }
+
+    /// The ranked pull requests, each followed by the rest of its stack, without repeats.
+    private func withStacks(_ ranked: [PullRequest]) -> [PullRequest] {
+        var seen: Set<String> = []
+        return ranked.flatMap { [$0] + model.stack(of: $0) }.filter { seen.insert($0.id).inserted }
     }
 
     private var emptyDescription: String {

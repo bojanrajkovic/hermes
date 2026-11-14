@@ -12,8 +12,10 @@ struct PullRequestRow: View {
     let pullRequest: PullRequest
     /// Merged or closed once Hermes knows it. Such a pull request stays listed until GitHub's search catches up.
     var closedState: LinkedPullRequest.State? = nil
-    /// Why it is in the attention inbox. The inbox has no repository headers, so the row names its repository.
+    /// Why it is in the attention inbox.
     var reason: AttentionReason? = nil
+    /// Names the repository beside the number, for a list with no repository headers.
+    var showsRepository = false
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.rowGlyphSpacing) {
@@ -62,7 +64,7 @@ struct PullRequestRow: View {
         HStack(spacing: Theme.rowMetaSpacing) {
             AvatarView(url: pullRequest.author?.avatarURL, size: 14)
                 .help(pullRequest.author?.login ?? "Deleted account")
-            Text(verbatim: reason == nil ? "#\(pullRequest.number)" : "\(pullRequest.repository.name)#\(pullRequest.number)")
+            Text(verbatim: showsRepository ? "\(pullRequest.repository.name)#\(pullRequest.number)" : "#\(pullRequest.number)")
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
@@ -172,7 +174,7 @@ struct StackRow: View {
             Image(systemName: "square.stack.3d.up")
                 .foregroundStyle(.secondary)
                 .frame(width: Theme.avatarSize)
-            Text("Stack of \(stack.pullRequests.count)")
+            Text("Stack of \(stack.size)")
                 .font(Theme.Fonts.rowTitle)
                 .lineLimit(1)
             Text(verbatim: "→ \(stack.baseRefName)")
@@ -188,7 +190,7 @@ struct StackRow: View {
         }
         .padding(.vertical, Theme.rowVerticalPadding)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Stack of \(stack.pullRequests.count) pull requests into \(stack.baseRefName)")
+        .accessibilityLabel("Stack of \(stack.size) pull requests into \(stack.baseRefName)")
     }
 }
 
@@ -423,13 +425,12 @@ struct PullRequestRows: View {
         }
     }
 
+    /// One selectable pull request row with its context menu. The inbox, which has reasons, has no repository headers.
     private func row(_ pullRequest: PullRequest) -> some View {
-        Self.row(pullRequest, reason: reasons[pullRequest.id], model: model)
-    }
-
-    /// One selectable pull request row with its context menu, for any list.
-    static func row(_ pullRequest: PullRequest, reason: AttentionReason?, model: WindowModel) -> some View {
-        PullRequestRow(pullRequest: pullRequest, closedState: model.closedState(of: pullRequest.key), reason: reason)
+        PullRequestRow(
+            pullRequest: pullRequest, closedState: model.closedState(of: pullRequest.key), reason: reasons[pullRequest.id],
+            showsRepository: !reasons.isEmpty
+        )
             .tag(Destination.pullRequest(pullRequest.key))
             .contextMenu { ItemMenu(url: pullRequest.url, origin: SessionOrigin(pullRequest), model: model) }
     }
