@@ -201,22 +201,21 @@ struct RepositoryColumn: View {
         .listStyle(.inset)
         .modifier(ScrollsToRequestedRow())
         .task(id: repository) { await model.localStacks.load(repository) }
-        // A toolbar item at the leading edge, which lands above this column. Only there does the
-        // system draw the control the way it draws the pull request's tabs.
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Picker("List", selection: $model.repositoryList) {
-                    Text("Pull Requests (\(section?.shownPullRequestCount ?? 0))").tag(RepositoryList.pullRequests)
-                    Text("Issues (\(issueList.totalCount ?? section?.openIssueCount ?? 0))").tag(RepositoryList.issues)
-                    if let local = model.localStacks.entry(repository) {
-                        Text("Local (\(local.stacks.flatMap(\.branches).count))").tag(RepositoryList.localStacks)
-                    }
+        // Above the list, not in the toolbar, so it stays with this column when the sidebar collapses.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Picker("List", selection: $model.repositoryList) {
+                Text("Pull Requests (\(section?.shownPullRequestCount ?? 0))").tag(RepositoryList.pullRequests)
+                Text("Issues (\(issueList.totalCount ?? section?.openIssueCount ?? 0))").tag(RepositoryList.issues)
+                if let local = model.localStacks.entry(repository) {
+                    Text("Local (\(local.stacks.flatMap(\.branches).count))").tag(RepositoryList.localStacks)
                 }
-                // A segment added to a live segmented picker draws without its label, so the picker is rebuilt.
-                .id(model.localStacks.entry(repository) != nil)
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
+            // A segment added to a live segmented picker draws without its label, so the picker is rebuilt.
+            .id(model.localStacks.entry(repository) != nil)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
         }
         .overlay {
             if model.repositoryList == .pullRequests, (section?.shownPullRequestCount ?? 0) + (section?.hiddenBotCount ?? 0) == 0 {
@@ -251,17 +250,6 @@ struct DetailPane: View {
 
     var body: some View {
         content
-            // Leading items, which land above the list column in every state. As the window's
-            // primary actions they moved between the list column and the far right.
-            .toolbar {
-                ToolbarItemGroup(placement: .navigation) {
-                    Button("Refresh", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
-                        .help("Reload pull requests and issues (⌘R)")
-                        .disabled(model.isRefreshing)
-                    Button("Command Palette", systemImage: "magnifyingglass") { model.isPaletteShown = true }
-                        .help("Jump to a repository, pull request, or issue (⌘K)")
-                }
-            }
     }
 
     private var content: some View {
