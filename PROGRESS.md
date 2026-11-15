@@ -140,9 +140,6 @@ What is built and works, and what is known not to work or is unverified.
 - **Approve and Request Changes.** Every pull request in the playground
   repository is the viewer's own, and GitHub rejects both verdicts on one's
   own pull request. Hermes disables them there, so neither has been sent.
-- **An organization's forwarder in the app.** Hermes starts, stops, and
-  restarts repository forwarders, and shows their events. An organization's
-  forwarder is verified on its own, but Hermes has not started one.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
   stored notary profile. The Makefile sets neither.
 
