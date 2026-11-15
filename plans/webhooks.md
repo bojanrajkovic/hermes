@@ -65,6 +65,9 @@ carry.
 | `pull_request_review_comment`: a new comment that answers another | The comment, added to the thread that holds the one it answers | Nothing, when that thread is loaded |
 | `pull_request_review_comment`: a new comment that starts a thread, an edited one, a deleted one | Nothing | The review threads. The payload does not carry a new thread's ID. |
 | `pull_request_review_thread`: resolved, unresolved | The thread's resolved state, found by the thread's ID | Nothing, when that thread is loaded |
+| `status` on the head commit | The status, in the checks list | The pull request, for the rollup of its checks |
+| `check_run` on the head commit | The check's name, state, times, link, and app | The pull request, for the rollup. Also the checks, when the check is a job of a workflow run none of the loaded checks belongs to, because the payload does not carry the workflow's name. |
+| `check_suite` | Nothing | The checks and the pull request |
 | Anything else | Nothing | The pull request |
 
 A row's fields go into the account's lists through `AccountData.store`.
@@ -79,6 +82,18 @@ by more, the earlier changes are gone, so the pane loads the detail again.
 The diff screen does the same for the review threads, which `ReviewModel`
 holds: it applies a change with `ReviewModel.apply`, and loads the threads when
 that returns false. A change to a thread that is not loaded can't be applied.
+
+The checks screen and the checks summary do the same with
+`ChecksModel.apply`. A check run that is a job of a GitHub Actions workflow
+names its workflow run in its link, `…/actions/runs/<run>/job/<job>`. A check
+Hermes already holds keeps its workflow. A new job takes the workflow of a
+loaded check of the same run, and replaces an earlier attempt of the same job.
+A status or a check on an older commit of the pull request is not applied,
+because the screens show the head commit's checks.
+
+The checks list stops reloading once no check is queued or running. A
+delivery that puts a check back in one of those states starts the reloading
+again, so a check whose last delivery never arrives does not stay "running".
 
 The pull request's update time is not applied. The pane loads the detail
 again when it changes, which is at the next refresh, and that load settles
@@ -164,7 +179,8 @@ extension reported, and when the repository is tried again.
   keeps in the keychain.
 - It asks for the events that change a row or a pane: `pull_request`,
   `pull_request_review`, `pull_request_review_comment`,
-  `pull_request_review_thread`, `issue_comment`, `check_suite`, and `status`.
+  `pull_request_review_thread`, `issue_comment`, `check_suite`, `check_run`,
+  and `status`.
 - Each delivery is one line of JSON on stdout. The event's type is not in it,
   so `WebhookEvent` reads the keys that name a pull request: `pull_request`,
   `issue` with a `pull_request` key, and the `pull_requests` of a `check_suite`

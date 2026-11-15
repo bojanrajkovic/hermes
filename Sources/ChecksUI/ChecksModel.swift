@@ -28,6 +28,24 @@ final class ChecksModel {
     }
 
     @ObservationIgnored private var loadedCommit: String?
+    /// How many calls of `run` are loading or waiting to load again. A new call starts before
+    /// the cancelled one before it returns, so this can be two for a moment.
+    @ObservationIgnored private var running = 0
+
+    /// Whether a check is queued or running while nothing is reloading the list. An applied
+    /// delivery can leave it so, and the caller then starts `run` again, so a check whose
+    /// next delivery never comes is not shown as running for good.
+    var needsPolling: Bool { running == 0 && checks.contains(where: \.state.isPending) }
+
+    /// Applies what a webhook delivery says changed to the checks.
+    ///
+    /// - Returns: False when the checks have to load instead.
+    func apply(_ change: WebhookChange) -> Bool {
+        guard isLoaded, let changed = Check.applying(change, to: checks) else { return false }
+        checks = changed
+        if selectedCheck == nil { selection = CheckList.defaultSelection(checks) }
+        return true
+    }
 
     nonisolated static let refreshInterval = Duration.seconds(10)
     /// How long after a rerun request the list reloads, so the queued attempt is in it.
@@ -63,6 +81,8 @@ final class ChecksModel {
         }
         errorMessage = nil
         let start = ContinuousClock.now
+        running += 1
+        defer { running -= 1 }
 
         while !Task.isCancelled {
             var delay = Self.refreshInterval

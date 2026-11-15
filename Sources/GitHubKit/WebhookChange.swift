@@ -22,6 +22,16 @@ public enum WebhookChange: Sendable, Hashable {
     /// The review threads changed in a way the payload can't place: a new thread, whose ID
     /// the payload does not carry, or a line comment that was edited or deleted.
     case threads
+    /// A commit status was set.
+    case status(StatusContext)
+    /// A check run was created or changed. The run has no workflow: the payload does not
+    /// carry the workflow's name.
+    ///
+    /// - Parameter runID: The GitHub Actions workflow run the check is a job of, read from
+    ///   its details URL. Nil for another app's check.
+    case checkRun(CheckRun, runID: Int?)
+    /// The checks changed in a way the payload does not say: a check suite finished.
+    case checks
 
     /// Reads one delivery's JSON body. The kind of event is told from the body's keys,
     /// because a forwarder's deliveries carry no event name.
@@ -29,6 +39,35 @@ public enum WebhookChange: Sendable, Hashable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard let keys = try? decoder.decode(Keys.self, from: payload) else { return nil }
+
+        if keys.check_run != nil {
+            guard let run = (try? decoder.decode(CheckRunEvent.self, from: payload))?.check_run,
+                  let status = CheckRun.Status(rawValue: run.status.uppercased()) else { return nil }
+            let detailsURL = run.details_url.flatMap(URL.init(string:))
+            self = .checkRun(
+                CheckRun(
+                    databaseID: run.id, name: run.name, status: status,
+                    conclusion: run.conclusion.flatMap { CheckRun.Conclusion(rawValue: $0.uppercased()) },
+                    startedAt: run.started_at, completedAt: run.completed_at, detailsURL: detailsURL,
+                    appName: run.app?.name, workflow: nil
+                ),
+                runID: Self.workflowRunID(in: detailsURL)
+            )
+            return
+        }
+        if keys.check_suite != nil {
+            self = .checks
+            return
+        }
+        if keys.context != nil, keys.sha != nil {
+            guard let event = try? decoder.decode(StatusEvent.self, from: payload),
+                  let state = StatusState(rawValue: event.state.uppercased()) else { return nil }
+            self = .status(StatusContext(
+                context: event.context, state: state, targetURL: event.target_url.flatMap(URL.init(string:)),
+                description: event.description
+            ))
+            return
+        }
 
         switch (keys.pull_request != nil, keys.issue != nil, keys.comment != nil, keys.review != nil, keys.thread != nil) {
         case (true, false, false, false, false):
@@ -79,6 +118,14 @@ public enum WebhookChange: Sendable, Hashable {
     /// Hermes does not know, such as joining a stack, reloads too.
     static func reloads(action: String, changesBase: Bool) -> Bool {
         !completeActions.contains(action) || changesBase
+    }
+
+    /// The workflow run in the details URL of a GitHub Actions job:
+    /// `https://github.com/<owner>/<name>/actions/runs/<run>/job/<job>`. Nil for any other URL.
+    static func workflowRunID(in detailsURL: URL?) -> Int? {
+        guard let parts = detailsURL?.pathComponents, let runs = parts.firstIndex(of: "runs"),
+              runs > 0, parts[runs - 1] == "actions", parts.indices.contains(runs + 1) else { return nil }
+        return Int(parts[runs + 1])
     }
 }
 
@@ -175,7 +222,7 @@ extension PullRequestDetail {
             } else {
                 reviews.append(review)
             }
-        case .reply, .threadResolved, .threads:
+        case .reply, .threadResolved, .threads, .status, .checkRun, .checks:
             return nil
         }
         return PullRequestDetail(
@@ -199,7 +246,7 @@ extension ReviewThread {
         case .threadResolved(let id, let resolved):
             guard let index = threads.firstIndex(where: { $0.id == id }) else { return nil }
             threads[index] = threads[index].with(isResolved: resolved)
-        case .pullRequest, .comment, .review, .threads:
+        case .pullRequest, .comment, .review, .threads, .status, .checkRun, .checks:
             return nil
         }
         return threads
@@ -210,6 +257,43 @@ extension ReviewThread {
             id: id, path: path, line: line, startLine: startLine, diffSide: diffSide, startDiffSide: startDiffSide,
             isResolved: isResolved ?? self.isResolved, isOutdated: isOutdated, comments: comments ?? self.comments
         )
+    }
+}
+
+extension Check {
+    /// A commit's checks with a change applied. Nil when they have to load instead: the
+    /// change is not about one check, or it is a job of a workflow run none of `checks`
+    /// belongs to, so its workflow's name is not known.
+    public static func applying(_ change: WebhookChange, to checks: [Check]) -> [Check]? {
+        var checks = checks
+        switch change {
+        case .status(let status):
+            if let index = checks.firstIndex(where: { $0.id == Check.status(status).id }) {
+                checks[index] = .status(status)
+            } else {
+                checks.append(.status(status))
+            }
+        case .checkRun(let run, let runID):
+            let runs = checks.compactMap { check in if case .run(let run) = check { run } else { nil } }
+            // The run itself, or the attempt of the same job that a re-run replaces.
+            let replaced = runs.first { $0.databaseID == run.databaseID }
+                ?? runs.first { runID != nil && $0.workflow?.runID == runID && $0.name == run.name }
+            let workflow = replaced?.workflow ?? runs.first { runID != nil && $0.workflow?.runID == runID }?.workflow
+            guard workflow != nil || runID == nil else { return nil }
+            let applied = Check.run(CheckRun(
+                databaseID: run.databaseID, name: run.name, status: run.status, conclusion: run.conclusion,
+                startedAt: run.startedAt, completedAt: run.completedAt, detailsURL: run.detailsURL,
+                appName: run.appName, workflow: workflow
+            ))
+            if let replaced, let index = checks.firstIndex(of: .run(replaced)) {
+                checks[index] = applied
+            } else {
+                checks.append(applied)
+            }
+        case .pullRequest, .comment, .review, .reply, .threadResolved, .threads, .checks:
+            return nil
+        }
+        return checks
     }
 }
 
@@ -249,6 +333,36 @@ private struct Keys: Decodable {
     let comment: Present?
     let review: Present?
     let thread: Present?
+    let check_run: Present?
+    let check_suite: Present?
+    /// A `status` delivery's name for the status, and its commit.
+    let context: String?
+    let sha: String?
+}
+
+private struct CheckRunEvent: Decodable {
+    struct Run: Decodable {
+        struct App: Decodable { let name: String }
+
+        let id: Int
+        let name: String
+        /// Lowercase, where GraphQL's is uppercase. So is `conclusion`.
+        let status: String
+        let conclusion: String?
+        let started_at: Date?
+        let completed_at: Date?
+        let details_url: String?
+        let app: App?
+    }
+
+    let check_run: Run
+}
+
+private struct StatusEvent: Decodable {
+    let context: String
+    let state: String
+    let target_url: String?
+    let description: String?
 }
 
 struct RESTAuthor: Decodable {

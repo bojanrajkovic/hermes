@@ -148,7 +148,7 @@ struct PullRequestDetailView: View {
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks.count ?? 0
+                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
             )
         case .sessions:
             ScrollView {
@@ -553,7 +553,7 @@ struct ConversationView: View {
                 PaneSection("Checks") {
                     ChecksSummary(
                         repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                        changes: model.store.eventCounts[pullRequest.key]?.checks.count ?? 0
+                        changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
                     ) { check in
                         model.checkToOpen = check
                         model.pullRequestTab = .checks

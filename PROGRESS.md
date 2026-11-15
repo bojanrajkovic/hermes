@@ -17,7 +17,7 @@ What is built and works, and what is known not to work or is unverified.
 - Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own and picked, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
 - Relay setup: "Set Up a Relay…" in Settings and in first-run setup takes an account the user owns, a relay server, and an invite code. It checks that the relay answers, opens GitHub to create the account's App, hands the App's secrets to the relay, and then offers the App's install page and the join link for members. Several accounts can each have a tenant. See [plans/relay-client.md](plans/relay-client.md).
 - Relay tenants: opening a `hermes://relay.join` link joins a tenant and signs in through the browser. Each tenant keeps a connection to its relay, and a change in a repository the tenant covers reloads its pull request, and the review threads or checks on screen, at once. Those repositories get no webhook forwarder. Settings shows each tenant's connection and its relay's commit.
-- Applied payloads: a forwarder's or a relay's delivery about a pull request's title, labels, draft state, state, reviewers, or auto-merge changes its row at once with no request. New commits change the row at once and then load the rest. An edited description, a conversation comment, and a review show in the open pull request at once. So do a reply in a review thread and a thread being resolved or reopened. See [plans/webhooks.md](plans/webhooks.md).
+- Applied payloads: a forwarder's or a relay's delivery about a pull request's title, labels, draft state, state, reviewers, or auto-merge changes its row at once with no request. New commits change the row at once and then load the rest. An edited description, a conversation comment, and a review show in the open pull request at once. So do a reply in a review thread, a thread being resolved or reopened, a commit status, and a check run. See [plans/webhooks.md](plans/webhooks.md).
 - Relay discovery: an owner can publish a tenant as `hermes-relay.json` in the account's `.github` repository, after confirming. Hermes looks there once a launch for each of the viewer's accounts and offers a tenant it finds, so members need no join link. A tenant turned down is not asked about again, and Settings lists it with a Connect button.
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
@@ -169,6 +169,11 @@ What is built and works, and what is known not to work or is unverified.
   WebSocket server, which showed its messages, the `4001` close code, and a
   refused token, and against a deployed relay for a tenant it does not have.
   Hermes has not signed in to a relay or received an event from one.
+- **Applied payloads.** Reading a pull request, a comment, a review, a reply,
+  and a resolved thread is tested against deliveries captured from the
+  playground repository. Reading a status, a check run, and a push is tested
+  against payloads written by hand. Hermes has applied no delivery from a
+  running forwarder or relay.
 - **Relay discovery.** Reading and committing `hermes-relay.json` are tested
   against a stubbed GitHub. Hermes has committed the file to no repository.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a

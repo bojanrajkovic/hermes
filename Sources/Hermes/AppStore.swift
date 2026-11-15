@@ -252,6 +252,11 @@ final class AppStore {
         case .reply, .threadResolved, .threads:
             // The diff applies the change to its threads, or loads them. A row shows none of it.
             return note(event.change, in: \.threads, of: key)
+        case .status, .checkRun, .checks:
+            // The checks screens show the head commit's checks. A check on an older commit of
+            // the pull request is not among them. The row's rollup is GitHub's to work out.
+            if event.commit == nil || event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
+            return load(key, part: nil) { await data.refetch(key) }
         case nil:
             break
         }
