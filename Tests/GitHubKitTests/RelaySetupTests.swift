@@ -49,6 +49,17 @@ import Testing
         #expect(page.contains(#"action="https://github.com/settings/apps/new?state=s1&amp;x=2""#))
     }
 
+    @Test func aCodeGitHubNeverAnsweredForCanBeRedeemedAgain() {
+        // GitHub was not reached, or failed to serve the request: the code is unused.
+        #expect(RelayAPI.canRedeemAgain(after: URLError(.notConnectedToInternet)))
+        #expect(RelayAPI.canRedeemAgain(after: GitHubError.http(status: 502, message: "")))
+        #expect(RelayAPI.canRedeemAgain(after: GitHubError.http(status: 0, message: "")))
+        // GitHub refused the code, or took it and sent an answer Hermes could not read.
+        #expect(!RelayAPI.canRedeemAgain(after: GitHubError.http(status: 404, message: "")))
+        #expect(!RelayAPI.canRedeemAgain(after: GitHubError.http(status: 422, message: "")))
+        #expect(!RelayAPI.canRedeemAgain(after: GitHubError.decoding(description: "no slug")))
+    }
+
     @Test func theAppsSecretsBecomeTheRegistrationAndThePrivateKeyIsNotRead() throws {
         let json = #"""
             {"id": 42, "slug": "hermes-acme", "client_id": "Iv1.abc", "client_secret": "cs", "webhook_secret": "ws",

@@ -21,6 +21,15 @@ struct RelayMembership: Codable, Hashable, Identifiable {
     var id: String { tenant.id }
 }
 
+/// A relay tenant an account publishes in its `.github` repository.
+struct PublishedRelay: Hashable, Identifiable {
+    /// The account's login.
+    let account: String
+    let tenant: RelayTenant
+
+    var id: String { "\(account)/\(tenant.id)" }
+}
+
 /// What a tenant's connection is doing.
 enum RelayState: Equatable {
     /// There is no refresh token: the user has not signed in to the tenant, or the relay
@@ -90,7 +99,13 @@ final class Relays {
         /// The App's secrets, from when GitHub makes it until the relay has them. Held in
         /// memory only, so a refused invite code can be corrected without a second App.
         var credentials: RelayAppCredentials?
+        /// GitHub's code for the App's secrets, kept when redeeming it failed in a way that
+        /// left it good. GitHub made the App already, so the code is the only way to its secrets.
+        var code: String?
         var phase: Phase
+
+        /// Whether the step that failed can be tried again without a second App.
+        var canRetry: Bool { credentials != nil || code != nil }
 
         /// The page that posts the manifest, in the temporary directory.
         var page: URL {
@@ -107,6 +122,8 @@ final class Relays {
     private(set) var states: [String: RelayState] = [:]
     /// The commit each relay server reports, for Settings.
     private(set) var versions: [URL: String] = [:]
+    /// The tenants the viewer's accounts publish, as last looked up.
+    private(set) var published: [PublishedRelay] = []
     /// Called for each webhook delivery a relay sends.
     @ObservationIgnored var onEvent: (RelayEvent) -> Void = { _ in }
 
@@ -126,24 +143,49 @@ final class Relays {
 
     private let api: RelayAPI
     private let defaults: UserDefaults
+    /// Opens a page in the browser.
+    private let open: @MainActor (URL) -> Void
     static let key = "relayMemberships"
     static let log = Logger(subsystem: "com.coderinserepeat.hermes", category: "relay")
 
-    init(defaults: UserDefaults, api: RelayAPI = RelayAPI()) {
+    init(defaults: UserDefaults, api: RelayAPI = RelayAPI(), open: @escaping @MainActor (URL) -> Void = Relays.openInBrowser) {
         self.defaults = defaults
         self.api = api
+        self.open = open
         memberships = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode([RelayMembership].self, from: $0) } ?? []
         declined = Set(defaults.stringArray(forKey: "relayDeclined") ?? [])
+        gone = Set(defaults.stringArray(forKey: "relayGone") ?? [])
+        states = Dictionary(uniqueKeysWithValues: gone.map { ($0, .gone) })
     }
 
-    /// Starts a tenant for an account: writes the page that posts the App's manifest and
-    /// opens it in the browser. The owner creates the App there.
-    func beginSetup(account: Account, server: URL, invite: String) {
-        guard let tenant = RelayTenant(server: server) else { return }
+    /// Opens a page in the default browser, not in whatever opens its file type: the setup
+    /// page is an `.html` file, which can belong to an editor.
+    static func openInBrowser(_ url: URL) {
+        if let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://github.com")!) {
+            NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Starts a tenant for an account: asks the relay whether it is there, writes the page
+    /// that posts the App's manifest, and opens it in the browser. The owner creates the App there.
+    ///
+    /// - Returns: Why the setup did not start, or nil. When it did not, no App exists.
+    func beginSetup(account: Account, server: URL, invite: String) async -> String? {
+        guard let tenant = RelayTenant(server: server) else { return "That is not a relay's address." }
+
+        // GitHub fixes the App's webhook and sign-in addresses when it creates the App. A
+        // server that does not answer would leave an App that can never reach a relay.
+        do {
+            versions[tenant.server] = try await api.version(of: tenant.server)
+        } catch {
+            let host = tenant.server.host() ?? tenant.server.absoluteString
+            return "The relay at \(host) did not answer, so no App was created. \(describe(error))"
+        }
+
         endSetup()
         let setup = Setup(tenant: tenant, account: account, state: UUID().uuidString, invite: invite, credentials: nil, phase: .creatingApp)
-        self.setup = setup
-
         let page = RelayAppManifest.page(
             manifest: RelayAppManifest.json(for: tenant, login: account.login),
             action: RelayAppManifest.registrationURL(for: account, state: setup.state)
@@ -151,30 +193,40 @@ final class Relays {
         do {
             try page.write(to: setup.page, atomically: true, encoding: .utf8)
         } catch {
-            self.setup?.phase = .failed("Could not write the setup page: \(error.localizedDescription)")
-            return
+            return "Could not write the setup page: \(error.localizedDescription)"
         }
 
-        // The default browser, not whatever opens `.html` files, which can be an editor.
-        if let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://github.com")!) {
-            NSWorkspace.shared.open([setup.page], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration())
-        } else {
-            NSWorkspace.shared.open(setup.page)
-        }
+        self.setup = setup
+        open(setup.page)
+        return nil
     }
 
     /// Redeems the code GitHub sent back for the App's secrets, then registers the tenant.
-    /// The caller has checked that the link's state is this setup's.
+    /// The caller has checked that the link's state is this setup's. `retrySetup` calls it
+    /// again with the code it kept.
     func finishSetup(code: String) async {
-        guard setup?.phase == .creatingApp else { return }
-        setup?.phase = .registering
+        guard let setup, setup.phase == .creatingApp || setup.code == code else { return }
+        self.setup?.code = nil
+        self.setup?.phase = .registering
+
         do {
-            setup?.credentials = try await api.redeemManifest(code: code)
+            self.setup?.credentials = try await api.redeemManifest(code: code)
         } catch {
-            setup?.phase = .failed("GitHub did not hand over the App: \(describe(error))")
+            if RelayAPI.canRedeemAgain(after: error) { self.setup?.code = code }
+            self.setup?.phase = .failed("GitHub did not hand over the App: \(describe(error))")
             return
         }
         await register()
+    }
+
+    /// Repeats the step of the setup that failed: redeeming GitHub's code when that is what
+    /// failed, and otherwise registering, with another invite code when one is given.
+    func retrySetup(invite: String? = nil) async {
+        if let code = setup?.code {
+            await finishSetup(code: code)
+        } else {
+            await register(invite: invite)
+        }
     }
 
     /// Registers the tenant with the invite code given, or the one the setup started with.
@@ -211,8 +263,16 @@ final class Relays {
         disconnect(membership.id)
         states[membership.id] = nil
         failures[membership.id] = nil
+        gone.remove(membership.id)
+        // A sign-in the browser has not come back from is no longer wanted.
+        signIns = signIns.filter { $0.value != membership.id }
         memberships.removeAll { $0.id == membership.id }
         RelayKeychain.set(refreshToken: nil, for: membership.tenant)
+    }
+
+    /// The tenants the relay no longer has, by ID, kept so each row still says so after a relaunch.
+    private var gone: Set<String> {
+        didSet { defaults.set(gone.sorted(), forKey: "relayGone") }
     }
 
     // MARK: Joining and signing in
@@ -222,17 +282,41 @@ final class Relays {
         didSet { defaults.set(declined.sorted(), forKey: "relayDeclined") }
     }
 
-    /// Whether to offer a tenant an account publishes: not one this Mac has, and not one the user turned down.
+    /// Whether to ask about a tenant an account publishes: not one whose ID this Mac has, and
+    /// not one the user turned down. A tenant turned down stays in `available`, for Settings.
     func shouldOffer(_ tenant: RelayTenant) -> Bool {
-        !memberships.contains { $0.tenant == tenant } && !declined.contains(tenant.id)
+        !memberships.contains { $0.id == tenant.id } && !declined.contains(tenant.id)
     }
 
     func decline(_ tenant: RelayTenant) {
         declined.insert(tenant.id)
     }
 
-    /// Adds a tenant from a join link, when this Mac does not have it yet, and signs in to it.
+    /// Records the tenants the viewer's accounts publish.
+    func found(_ published: [PublishedRelay]) {
+        self.published = published
+    }
+
+    /// The published tenants this Mac does not use. Settings lists them, so one the user
+    /// turned down can still be connected to.
+    var available: [PublishedRelay] {
+        published.filter { published in !memberships.contains { $0.tenant == published.tenant } }
+    }
+
+    /// Why a tenant can't be added, or nil when it can. A tenant's ID names one tenant, and
+    /// the connection, the sign-in, and the Keychain item all go by it. A link or a
+    /// published file that gives a known ID another server is refused, so it can't take
+    /// the place of the tenant this Mac uses.
+    func refusal(of tenant: RelayTenant) -> String? {
+        guard let other = memberships.first(where: { $0.id == tenant.id && $0.tenant != tenant }) else { return nil }
+        func host(_ tenant: RelayTenant) -> String { tenant.server.host() ?? tenant.server.absoluteString }
+        return "This Mac already uses a relay tenant with this ID, at \(host(other.tenant)). The one at \(host(tenant)) claims the same ID, so Hermes did not add it."
+    }
+
+    /// Adds a tenant from a join link or a published file, when this Mac does not have it
+    /// yet, and signs in to it. Does nothing for a tenant `refusal(of:)` refuses.
     func join(_ tenant: RelayTenant) {
+        guard refusal(of: tenant) == nil else { return }
         let membership = memberships.first { $0.tenant == tenant } ?? RelayMembership(tenant: tenant, app: nil)
         if !memberships.contains(membership) { memberships.append(membership) }
         signIn(membership)
@@ -245,7 +329,7 @@ final class Relays {
         signIns[state] = membership.id
         let login = membership.tenant.server.appending(path: "t/\(membership.id)/login")
             .appending(queryItems: [URLQueryItem(name: "state", value: state)])
-        NSWorkspace.shared.open(login)
+        open(login)
     }
 
     /// Exchanges the grant of a `hermes://relay.session` link for the refresh token, stores
@@ -259,16 +343,21 @@ final class Relays {
         }
         signIns[state] = nil
 
+        let token: String
         do {
-            let token = try await api.refreshToken(grant: grant, for: membership.tenant)
-            guard RelayKeychain.set(refreshToken: token, for: membership.tenant) else {
-                return "The Keychain refused the relay's token."
-            }
+            token = try await api.refreshToken(grant: grant, for: membership.tenant)
         } catch {
             return "Could not sign in to the relay: \(describe(error))"
         }
+        // The user can remove the tenant while the relay answers. Its token is then not
+        // kept, and nothing connects.
+        guard memberships.contains(membership) else { return nil }
+        guard RelayKeychain.set(refreshToken: token, for: membership.tenant) else {
+            return "The Keychain refused the relay's token."
+        }
 
         failures[tenantID] = nil
+        gone.remove(tenantID)
         disconnect(tenantID)
         connect(membership)
         return nil
@@ -308,11 +397,19 @@ final class Relays {
         let started = Date.now
         startedAt[id] = started
         states[id] = .connecting
-        connections[id] = RelayConnection(
-            tenant: membership.tenant, refreshToken: token,
-            onMessage: { [weak self] message in Task { @MainActor in self?.received(message, from: membership, started: started) } },
-            onEnd: { [weak self] ending in Task { @MainActor in self?.ended(membership, started: started, ending: ending) } }
-        )
+        let connection = RelayConnection(tenant: membership.tenant, refreshToken: token)
+        connections[id] = connection
+        // One task reads the connection in order. The relay can send a session and close in
+        // the same instant, and the session's token has to be stored before the ending
+        // starts the next connection, which would otherwise use the spent one.
+        Task { [weak self] in
+            for await event in connection.events {
+                switch event {
+                case .message(let message): self?.received(message, from: membership, started: started)
+                case .ended(let ending): self?.ended(membership, started: started, ending: ending)
+                }
+            }
+        }
         Self.log.info("connecting to tenant \(id.prefix(8), privacy: .public)")
     }
 
@@ -344,7 +441,11 @@ final class Relays {
         guard startedAt[id] == started else { return }
         disconnect(id)
 
-        let next = Self.next(after: ending, failures: failures[id] ?? 0, ran: Date.now.timeIntervalSince(started))
+        let ran = Date.now.timeIntervalSince(started)
+        // A connection that held was working, as with a forwarder, so the failures before it
+        // are not counted with the next one, whatever ended it.
+        if ran >= Forwarders.settledAfter { failures[id] = nil }
+        let next = Self.next(after: ending, failures: failures[id] ?? 0, ran: ran)
         Self.log.info("tenant \(id.prefix(8), privacy: .public) ended: \(String(describing: ending), privacy: .public)")
         switch next {
         case .connect:
@@ -355,6 +456,7 @@ final class Relays {
         case .stop:
             RelayKeychain.set(refreshToken: nil, for: membership.tenant)
             states[id] = .gone
+            gone.insert(id)
         case .wait(let delay, let count):
             failures[id] = count
             let error = if case .failed(let message) = ending { message } else { "" }

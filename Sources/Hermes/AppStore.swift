@@ -288,6 +288,10 @@ final class AppStore {
                 await syncForwarders()
             }
         case .join(let tenant):
+            if let refusal = relays.refusal(of: tenant) {
+                frontmost?.resolveError = refusal
+                return
+            }
             let host = tenant.server.host() ?? tenant.server.absoluteString
             if offersRelay(tenant, question: "Join the relay at \(host)?", accept: "Join", decline: "Cancel") { relays.join(tenant) }
         }
@@ -305,18 +309,27 @@ final class AppStore {
     }
 
     /// Looks, once a launch, for a relay tenant that each of the viewer's accounts publishes
-    /// in its `.github` repository, and offers the ones this Mac does not use. A tenant the
-    /// user turns down is not offered again.
+    /// in its `.github` repository, and asks about the ones this Mac does not use. A tenant
+    /// the user turns down is not asked about again. Settings lists it, with a Connect button.
     func discoverRelays() async {
         guard !hasLookedForRelays, let viewer else { return }
         hasLookedForRelays = true
+
+        var published: [PublishedRelay] = []
         for account in viewer.accounts {
             // An account with no file, and one that can't be read, publishes no relay.
-            guard let tenant = try? await client.publishedRelay(of: account.login), relays.shouldOffer(tenant) else { continue }
-            if offersRelay(tenant, question: "\(account.name ?? account.login) has a relay. Connect?", accept: "Connect", decline: "Not Now") {
-                relays.join(tenant)
+            if let tenant = try? await client.publishedRelay(of: account.login) {
+                published.append(PublishedRelay(account: account.login, tenant: tenant))
+            }
+        }
+        relays.found(published)
+
+        for published in published where relays.shouldOffer(published.tenant) {
+            let name = account(published.account)?.name ?? published.account
+            if offersRelay(published.tenant, question: "\(name) has a relay. Connect?", accept: "Connect", decline: "Not Now") {
+                relays.join(published.tenant)
             } else {
-                relays.decline(tenant)
+                relays.decline(published.tenant)
             }
         }
     }

@@ -56,6 +56,13 @@ public enum RelayMessage: Sendable, Equatable {
 /// The relay sends a `RelaySession` first, then a `RelayEvent` for each webhook delivery in a
 /// repository the member can see.
 public final class RelayConnection: Sendable {
+    /// One thing a connection reports.
+    public enum Event: Sendable, Equatable {
+        case message(RelayMessage)
+        /// The connection ended on its own. Nothing follows it.
+        case ended(Ending)
+    }
+
     /// Why a connection ended, which decides what happens next.
     public enum Ending: Sendable, Equatable {
         /// The relay wants the member's access checked again: connect again at once.
@@ -72,8 +79,15 @@ public final class RelayConnection: Sendable {
     /// hold a dead connection that reports no error until something is sent on it.
     static let pingInterval: Duration = .seconds(30)
 
+    /// The connection's messages and then its ending, in the order they happened. The relay
+    /// can send a session and close in the same instant, and the session's token has to be
+    /// kept before the ending is acted on, so both come through this one stream. It finishes
+    /// after the ending, or when `stop()` is called.
+    public let events: AsyncStream<Event>
+
     private let task: URLSessionWebSocketTask
     private let receiving: Task<Void, Never>
+    private let continuation: AsyncStream<Event>.Continuation
 
     /// Why a connection ended, from what the WebSocket reports.
     ///
@@ -102,17 +116,16 @@ public final class RelayConnection: Sendable {
     /// - Parameters:
     ///   - refreshToken: The member's token for this tenant. The relay replaces it in the
     ///     `RelaySession` it sends first.
-    ///   - onMessage: Called for each message, off the main actor.
-    ///   - onEnd: Called once when the connection ends on its own. Not called after `stop()`.
-    public init(
-        tenant: RelayTenant, refreshToken: String, session: URLSession = .shared,
-        onMessage: @escaping @Sendable (RelayMessage) -> Void, onEnd: @escaping @Sendable (Ending) -> Void
-    ) {
+    public init(tenant: RelayTenant, refreshToken: String, session: URLSession = .shared) {
         var request = URLRequest(url: Self.url(for: tenant))
         request.setValue("Bearer \(refreshToken)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: request)
         self.task = task
         task.resume()
+
+        let (events, continuation) = AsyncStream.makeStream(of: Event.self)
+        self.events = events
+        self.continuation = continuation
 
         receiving = Task {
             let pinging = Task {
@@ -126,24 +139,27 @@ public final class RelayConnection: Sendable {
             do {
                 while true {
                     switch try await task.receive() {
-                    case .string(let text): RelayMessage(frame: Data(text.utf8)).map(onMessage)
-                    case .data(let data): RelayMessage(frame: data).map(onMessage)
+                    case .string(let text): RelayMessage(frame: Data(text.utf8)).map { _ = continuation.yield(.message($0)) }
+                    case .data(let data): RelayMessage(frame: data).map { _ = continuation.yield(.message($0)) }
                     @unknown default: break
                     }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                onEnd(Self.ending(
+                continuation.yield(.ended(Self.ending(
                     closeCode: task.closeCode.rawValue, status: (task.response as? HTTPURLResponse)?.statusCode,
                     error: error.localizedDescription
-                ))
+                )))
+                continuation.finish()
             }
         }
     }
 
+    /// Closes the connection. It reports no ending.
     public func stop() {
         receiving.cancel()
         task.cancel(with: .goingAway, reason: nil)
+        continuation.finish()
     }
 }
 

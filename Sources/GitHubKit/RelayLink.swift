@@ -5,7 +5,8 @@ public struct RelayTenant: Sendable, Hashable, Codable {
     /// The hosted relay. An organization's owner can name another server at setup.
     public static let defaultServer = URL(string: "https://hermes-relay.services.coderinserepeat.com")!
 
-    /// The relay's base URL, such as `https://relay.example.com`.
+    /// The relay's base URL, such as `https://relay.example.com`: lowercase scheme and host,
+    /// and no trailing slash, query, or fragment, so one server has one spelling.
     public let server: URL
     /// 32 lowercase hex characters.
     public let id: String
@@ -14,10 +15,21 @@ public struct RelayTenant: Sendable, Hashable, Codable {
     /// with a host. `http` is read for `localhost` and `127.0.0.1`, for a relay run on this Mac.
     public init?(server: URL, id: String) {
         guard id.count == 32, id.allSatisfy({ "0123456789abcdef".contains($0) }) else { return nil }
-        guard let host = server.host(), !host.isEmpty else { return nil }
-        let isLocal = server.scheme == "http" && ["localhost", "127.0.0.1"].contains(host)
-        guard server.scheme == "https" || isLocal else { return nil }
-        self.server = server
+        guard var components = URLComponents(url: server, resolvingAgainstBaseURL: false),
+              let host = components.host?.lowercased(), !host.isEmpty else { return nil }
+        let scheme = components.scheme?.lowercased()
+        let isLocal = scheme == "http" && ["localhost", "127.0.0.1"].contains(host)
+        guard scheme == "https" || isLocal else { return nil }
+
+        // A link or a published file can spell a server's address many ways. Two tenants are
+        // the same only when their servers are, so the address is kept in one form.
+        components.scheme = scheme
+        components.host = host
+        while components.path.hasSuffix("/") { components.path.removeLast() }
+        components.query = nil
+        components.fragment = nil
+        guard let normalized = components.url else { return nil }
+        self.server = normalized
         self.id = id
     }
 

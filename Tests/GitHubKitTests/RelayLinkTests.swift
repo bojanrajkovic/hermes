@@ -41,6 +41,20 @@ import Testing
         #expect(RelayTenant(server: server)?.id.count == 32)
     }
 
+    @Test func oneServerHasOneSpelling() throws {
+        let plain = try #require(RelayTenant(server: server, id: id))
+
+        for spelling in ["https://relay.example.com/", "HTTPS://Relay.Example.COM", "https://relay.example.com//?x=1#top"] {
+            let tenant = try #require(RelayTenant(server: URL(string: spelling)!, id: id))
+            #expect(tenant == plain)
+            #expect(tenant.server.absoluteString == "https://relay.example.com")
+        }
+        // A port or a path makes it another server. A path keeps no trailing slash.
+        let based = try #require(RelayTenant(server: URL(string: "https://relay.example.com:8443/base/")!, id: id))
+        #expect(based != plain)
+        #expect(based.server.absoluteString == "https://relay.example.com:8443/base")
+    }
+
     @Test func relayLinksAndPlaceLinksDoNotOverlap() {
         #expect(DeepLink(url: URL(string: "hermes://relay.join?server=https%3A%2F%2Frelay.example.com&tenant=\(id)")!) == nil)
         #expect(RelayLink(url: URL(string: "hermes://octo/app")!) == nil)

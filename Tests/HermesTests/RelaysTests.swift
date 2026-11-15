@@ -44,6 +44,10 @@ struct RelaysTests {
         relays.decline(published)
         #expect(!relays.shouldOffer(published))
         #expect(!Relays(defaults: defaults).shouldOffer(published))
+
+        // Settings still lists it, and not the one this Mac uses.
+        relays.found([PublishedRelay(account: "acme", tenant: joined), PublishedRelay(account: "octo", tenant: published)])
+        #expect(relays.available == [PublishedRelay(account: "octo", tenant: published)])
     }
 
     @Test func aBurstOfEventsLoadsAPullRequestOnceAndThenOnceMore() {

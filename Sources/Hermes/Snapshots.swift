@@ -56,6 +56,10 @@ enum Snapshots {
             defaults.set(try? JSONEncoder().encode([membership]), forKey: Relays.key)
         }
         let model = WindowModel(defaults: defaults)
+        // A tenant an account publishes and this Mac does not use, so Settings shows its Connect row.
+        if let published = RelayTenant(server: URL(string: "https://relay.example.invalid")!, id: String(repeating: "0b", count: 16)) {
+            model.store.relays.found([PublishedRelay(account: "octo-org", tenant: published)])
+        }
         await model.start()
         guard let viewer = model.viewer else {
             if case .failed(let problem) = model.startup {

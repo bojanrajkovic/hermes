@@ -16,10 +16,9 @@ struct RelayLiveTests {
     @Test func aTenantTheRelayDoesNotHaveEndsAsGone() async throws {
         let tenant = try #require(RelayTenant(server: server))
 
-        let ending = await withCheckedContinuation { continuation in
-            _ = RelayConnection(tenant: tenant, refreshToken: "not-a-token", onMessage: { _ in }, onEnd: { continuation.resume(returning: $0) })
-        }
+        var events: [RelayConnection.Event] = []
+        for await event in RelayConnection(tenant: tenant, refreshToken: "not-a-token").events { events.append(event) }
 
-        #expect(ending == .gone)
+        #expect(events == [.ended(.gone)])
     }
 }

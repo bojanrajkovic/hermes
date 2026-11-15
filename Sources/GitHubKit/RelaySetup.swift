@@ -106,6 +106,18 @@ public struct RelayAppCredentials: Sendable, Equatable, Decodable {
 }
 
 extension RelayAPI {
+    /// Whether a code whose redemption failed with `error` can be redeemed again. GitHub takes
+    /// a code once, within an hour. A request that never reached GitHub, or that GitHub
+    /// failed to serve, did not use the code. A refusal did, and so did an answer Hermes
+    /// could not read, because GitHub had handed the App over by then.
+    public static func canRedeemAgain(after error: any Error) -> Bool {
+        switch error {
+        case GitHubError.http(let status, _): !(400..<500).contains(status)
+        case GitHubError.decoding: false
+        default: true
+        }
+    }
+
     /// Redeems the code of a `hermes://relay.setup` link for the App's secrets. GitHub takes
     /// a code once, within an hour, and asks for no sign-in.
     public func redeemManifest(code: String) async throws -> RelayAppCredentials {

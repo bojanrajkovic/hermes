@@ -36,6 +36,8 @@ sequenceDiagram
     participant B as Browser
     participant G as GitHub
     participant R as Relay
+    H->>R: GET /version
+    R-->>H: the relay's commit
     H->>B: open a page that posts the App's manifest
     B->>G: POST /organizations/acme/settings/apps/new?state=…
     Note over B,G: The owner clicks Create.
@@ -46,6 +48,10 @@ sequenceDiagram
     Note over H: The owner installs the App and sends members the join link.
 ```
 
+- **The relay answers first.** GitHub fixes the App's webhook and sign-in
+  addresses when it creates the App. Hermes calls the server's `/version`
+  before it opens GitHub, and a server that does not answer stops the setup
+  there, with no App created.
 - **The account owns the App.** Only its owners can read the App's webhook
   deliveries on GitHub or make it a private key. The relay's operator cannot.
 - **The manifest** (`RelayAppManifest`) names the App `hermes-<login>`, cut to
@@ -61,6 +67,11 @@ sequenceDiagram
   `hermes://relay.setup` link with any other state is refused.
 - **The private key** in GitHub's answer is not read. `RelayAppCredentials`
   has no field for it. Nothing in Hermes or the relay acts as the App.
+- **GitHub's code is kept while it is still good.** GitHub takes a code once,
+  within an hour. When the request for the App's secrets never reaches GitHub,
+  or GitHub answers with a `5xx`, the code is unused, and Try Again asks
+  again. A `4xx`, or an answer Hermes cannot read, means the code is spent.
+  `RelayAPI.canRedeemAgain(after:)` decides.
 - **The secrets stay in memory** until the relay has them. When the relay
   refuses the invite code, the sheet asks for another and registers again,
   without a second App. After that Hermes keeps only the tenant, the account,
@@ -100,6 +111,17 @@ Hermes checks that the session link's `state` is one it sent for that tenant,
 stores the refresh token in the Keychain, and connects. The grant is good for
 ten minutes and for one use.
 
+Removing a tenant ends its sign-in. A session link from before the removal is
+refused, and a removal while the relay is answering keeps no token and
+connects nothing.
+
+A tenant's ID names one tenant: its connection, its sign-in, and its Keychain
+item all go by the ID. `RelayTenant` keeps a server's address in one form,
+with a lowercase host and no trailing slash, so the same server spelled two
+ways is one tenant. A join link or a published file that gives an ID this Mac
+already has, on another server, is refused, and Hermes says which server has
+the ID.
+
 ## Finding a tenant without a link
 
 An owner can publish a tenant, so members need no join link. Publish, on the
@@ -130,10 +152,16 @@ On a member's Mac, once a launch, after the first window loads,
 viewer's accounts, with the user's token. A `404` means the account publishes
 no relay. When the file names a tenant this Mac does not use, Hermes asks
 "<Account> has a relay. Connect?" in the alert a join link uses, and runs the
-same sign-in. A tenant the user turns down is remembered and not offered
-again. The file can be written by anyone who can write to the repository, so
-it is read like a join link: the tenant must pass `RelayTenant`'s checks, and
-the alert names the server.
+same sign-in. The file can be written by anyone who can write to the
+repository, so it is read like a join link: the tenant must pass
+`RelayTenant`'s checks, and the alert names the server.
+
+The alert's other button is Not Now. Hermes remembers a tenant the user turned
+down and does not ask about it again. The relay section of Settings lists
+every published tenant this Mac does not use, from the same lookup, with the
+account, the server, and a Connect button that runs the sign-in. A published
+tenant whose ID this Mac has on another server is listed with the reason it
+was refused and no button.
 
 ## Calls
 
@@ -172,6 +200,12 @@ the member can see through the tenant's App. Each later message is a
 `RelayEvent`: GitHub's name for the event, the delivery's ID, and the payload
 as GitHub sent it. A frame of any other shape is skipped.
 
+A connection reports through one stream, `RelayConnection.events`: its
+messages, then its ending, in the order they happened. `Relays` reads the
+stream in one task. The relay can send a session and close in the same
+instant, and the session's token has to be in the Keychain before the ending
+starts the next connection.
+
 The connection pings the relay every 30 seconds. A Mac that slept or changed
 networks can hold a dead connection that reports nothing until something is
 sent on it.
@@ -193,9 +227,11 @@ why:
   answered in a tight loop.
 - **`unauthorized`** deletes the refresh token. The row shows Sign In.
 - **`gone`** deletes the refresh token and stops. The row says the relay no
-  longer has the tenant.
+  longer has the tenant, and still says so after a relaunch, until the user
+  removes the tenant or signs in to it again.
 - **`failed`** waits as a forwarder does: 30 seconds, doubling to 30 minutes,
-  and from 30 seconds again after a connection that held for 5 minutes.
+  and from 30 seconds again after a connection that held for 5 minutes,
+  whatever ended it.
 
 `Relays.sync()` connects each tenant that has a refresh token and no
 connection. It runs at launch and every 15 seconds with the forwarders.

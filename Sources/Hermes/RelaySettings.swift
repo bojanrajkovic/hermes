@@ -13,6 +13,9 @@ struct RelaySection: View {
             ForEach(store.relays.memberships) { membership in
                 RelayRow(membership: membership)
             }
+            ForEach(store.relays.available) { published in
+                PublishedRelayRow(published: published)
+            }
             Button("Set Up a Relay…") { isSettingUp = true }
                 .sheet(isPresented: $isSettingUp) {
                     RelaySetupSheet().environment(store)
@@ -20,7 +23,7 @@ struct RelaySection: View {
         } header: {
             Text("Relay")
         } footer: {
-            Text("A relay sends an account's changes to its members as they happen, with no webhook of their own. Setting one up creates a GitHub App that the account owns. To join one, open the link its owner sent you.")
+            Text("A relay sends an account's changes to its members as they happen, with no webhook of their own. Setting one up creates a GitHub App that the account owns. To join one, open the link its owner sent you, or connect to one an account of yours publishes.")
                 .foregroundStyle(.secondary)
         }
         .task { await store.relays.loadVersions() }
@@ -98,6 +101,28 @@ private struct RelayRow: View {
     }
 }
 
+/// A tenant one of the viewer's accounts publishes and this Mac does not use: where its
+/// relay runs, and the way to connect. The launch asks about each once, and this row is
+/// how to say yes later.
+private struct PublishedRelayRow: View {
+    @Environment(AppStore.self) private var store
+    let published: PublishedRelay
+
+    var body: some View {
+        let refusal = store.relays.refusal(of: published.tenant)
+        LabeledContent {
+            if refusal == nil {
+                Button("Connect") { store.relays.join(published.tenant) }
+                    .help("Sign in with GitHub in your browser, through the account's App")
+            }
+        } label: {
+            Text(verbatim: published.account)
+            Text(verbatim: refusal ?? "Publishes a relay this Mac does not use")
+            Text(verbatim: published.tenant.server.host() ?? published.tenant.server.absoluteString)
+        }
+    }
+}
+
 private func copyJoinLink(_ tenant: RelayTenant) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(tenant.joinLink.absoluteString, forType: .string)
@@ -150,6 +175,10 @@ struct RelaySetupSheet: View {
     @State private var account: Account?
     @State private var server = RelayTenant.defaultServer.absoluteString
     @State private var invite = ""
+    /// Hermes is asking the relay whether it is there, before it sends the owner to GitHub.
+    @State private var isContacting = false
+    /// Why the setup did not start, such as a relay that did not answer.
+    @State private var startError: String?
 
     /// The accounts the viewer can register an App for: their own and the organizations they own.
     private var accounts: [Account] {
@@ -168,7 +197,7 @@ struct RelaySetupSheet: View {
                 case nil: start
                 case .creatingApp: waiting("Finish creating the App in your browser. GitHub brings you back to Hermes.")
                 case .registering: waiting("Registering with the relay…")
-                case .failed(let message): failed(message, canRetry: setup?.credentials != nil)
+                case .failed(let message): failed(message, setup: setup)
                 case .done(let membership): done(membership)
                 }
             }
@@ -193,6 +222,10 @@ struct RelaySetupSheet: View {
             }
             TextField("Relay server", text: $server)
             TextField("Invite code", text: $invite, prompt: Text("From the relay's operator"))
+            if let startError {
+                Label(startError, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+            }
         } footer: {
             Text("Hermes opens GitHub to create an App that \(account?.login ?? "the account") owns. The App reads pull requests, issues, checks, commit statuses, and members, and sends their events to the relay. The relay passes each event on to the members who can see its repository and keeps none.")
                 .foregroundStyle(.secondary)
@@ -208,16 +241,19 @@ struct RelaySetupSheet: View {
         }
     }
 
-    @ViewBuilder private func failed(_ message: String, canRetry: Bool) -> some View {
+    @ViewBuilder private func failed(_ message: String, setup: Relays.Setup?) -> some View {
         Section {
             Label(message, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)
-            if canRetry {
+            if setup?.credentials != nil {
                 TextField("Invite code", text: $invite)
             }
         } footer: {
-            if canRetry {
+            if setup?.credentials != nil {
                 Text("GitHub made the App. Registering can be tried again with another invite code.")
+                    .foregroundStyle(.secondary)
+            } else if setup?.code != nil {
+                Text("GitHub made the App and keeps its secrets for an hour. Hermes can ask for them again.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -257,11 +293,12 @@ struct RelaySetupSheet: View {
         case .done:
             Button("Done") { close() }
                 .keyboardShortcut(.defaultAction)
-        case .failed where setup?.credentials != nil:
+        case .failed where setup?.canRetry == true:
             Button("Cancel", role: .cancel) { close() }
-            Button("Try Again") { Task { await store.relays.register(invite: invite.trimmingCharacters(in: .whitespaces)) } }
+            Button("Try Again") { Task { await store.relays.retrySetup(invite: invite.trimmingCharacters(in: .whitespaces)) } }
                 .keyboardShortcut(.defaultAction)
-                .disabled(invite.trimmingCharacters(in: .whitespaces).isEmpty)
+                // Only registering takes the invite code. Asking GitHub again takes nothing.
+                .disabled(setup?.credentials != nil && invite.trimmingCharacters(in: .whitespaces).isEmpty)
         case .failed:
             Button("Close") { close() }
                 .keyboardShortcut(.defaultAction)
@@ -271,10 +308,14 @@ struct RelaySetupSheet: View {
             Button("Cancel", role: .cancel) { close() }
             Button("Create App on GitHub") {
                 guard let account, let serverURL else { return }
-                store.relays.beginSetup(account: account, server: serverURL, invite: invite.trimmingCharacters(in: .whitespaces))
+                isContacting = true
+                Task {
+                    startError = await store.relays.beginSetup(account: account, server: serverURL, invite: invite.trimmingCharacters(in: .whitespaces))
+                    isContacting = false
+                }
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(account == nil || serverURL == nil || invite.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(account == nil || serverURL == nil || isContacting || invite.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
 
