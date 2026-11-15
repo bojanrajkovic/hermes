@@ -42,7 +42,7 @@ public struct RelayRegistration: Sendable, Equatable, Encodable {
 /// The relay's HTTP calls. Each throws `RelayError` for an answer it does not expect, and
 /// `URLError` when the relay can't be reached.
 public struct RelayAPI: Sendable {
-    private let session: URLSession
+    let session: URLSession
 
     public init(session: URLSession = .shared) {
         self.session = session

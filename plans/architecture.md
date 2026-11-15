@@ -157,4 +157,5 @@ that session's PR, which links an issue to the PR a session opened for it.
 The app is not sandboxed. It runs `gh`, `git`, and `claude`, and reads
 checkouts under the search folders set in Settings, `~/Projects` by default.
 First-run setup, a three-page sheet shown once after sign-in, confirms the
-account, asks for these folders, and offers webhook forwarders.
+account, asks for these folders, and offers webhook forwarders and setting up
+a relay.

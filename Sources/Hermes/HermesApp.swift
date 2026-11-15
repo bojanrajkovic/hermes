@@ -234,6 +234,7 @@ struct SettingsView: View {
                         Text("When off, a bot's pull request shows only if its checks fail or it has merge conflicts.")
                     }
                     WebhooksSection()
+                    RelaySection()
                     IgnoredRepositoriesSection()
                 }
                 .formStyle(.grouped)

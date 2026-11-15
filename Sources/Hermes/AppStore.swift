@@ -92,6 +92,8 @@ final class AppStore {
         }
     }
     let forwarders = Forwarders()
+    /// The relay tenants this Mac uses.
+    let relays: Relays
     /// Whether the `gh` token may create an organization's webhook, or nil until the first
     /// check answers. Checked when Hermes comes to the front, which is when a `gh auth refresh`
     /// in a terminal has just finished.
@@ -139,6 +141,7 @@ final class AppStore {
         self.sessions = sessions
         localStacks = LocalStacks(sessions: sessions)
         self.defaults = defaults
+        relays = Relays(defaults: defaults)
         showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
         hasFinishedSetup = defaults.bool(forKey: Keys.finishedSetup)
         ignoredRepositories = Set((defaults.stringArray(forKey: Keys.ignoredRepositories) ?? []).compactMap { saved in
@@ -211,6 +214,15 @@ final class AppStore {
     /// Opens a link in the frontmost window, or in a new window when it ends in `?window=new`
     /// or no window is up. A link Hermes can't read is reported in the frontmost window.
     func open(_ url: URL) {
+        if case .setup(let code, let state) = RelayLink(url: url) {
+            // GitHub sends back the state Hermes gave it. Any other link was not asked for.
+            guard relays.setup?.state == state else {
+                frontmost?.resolveError = "This relay setup link does not belong to a setup Hermes started."
+                return
+            }
+            Task { await relays.finishSetup(code: code) }
+            return
+        }
         guard let link = DeepLink(url: url) else {
             frontmost?.resolveError = "Hermes can't open \(url.absoluteString)."
             return

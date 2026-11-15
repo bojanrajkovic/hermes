@@ -50,6 +50,11 @@ enum Snapshots {
 
         let defaults = UserDefaults(suiteName: "hermes-snapshots")!
         defaults.removePersistentDomain(forName: "hermes-snapshots")
+        // A relay tenant, so Settings shows a row for one. No relay is contacted.
+        if let tenant = RelayTenant(server: RelayTenant.defaultServer, id: String(repeating: "0a", count: 16)) {
+            let membership = RelayMembership(tenant: tenant, app: .init(account: "acme", slug: "hermes-acme"))
+            defaults.set(try? JSONEncoder().encode([membership]), forKey: Relays.key)
+        }
         let model = WindowModel(defaults: defaults)
         await model.start()
         guard let viewer = model.viewer else {
@@ -66,6 +71,7 @@ enum Snapshots {
         try await scene("setup-account", size: setupSize, SetupSheet(viewer: viewer, finish: {}), model: model)
         try await scene("setup-checkouts", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .checkouts), model: model)
         try await scene("setup-updates", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .updates), model: model)
+        try await scene("relay-setup", size: setupSize, RelaySetupSheet(), model: model)
         model.store.hasFinishedSetup = true
 
         // The personal account.

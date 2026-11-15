@@ -5,7 +5,7 @@ import SwiftUI
 
 /// First-run setup, shown once over the first window after sign-in: who
 /// Hermes signed in as, where the user's checkouts live, and whether to get
-/// changes through webhooks. The last two stay editable in Settings.
+/// changes through webhooks or a relay. The last two stay editable in Settings.
 struct SetupSheet: View {
     enum Page: Int, CaseIterable { case account, checkouts, updates }
 
@@ -85,6 +85,7 @@ struct SetupSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             WebhooksSection()
+            RelaySection()
         }
         .formStyle(.grouped)
     }

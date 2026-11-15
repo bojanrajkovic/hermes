@@ -50,8 +50,12 @@ host has a dot, which a GitHub login cannot have, so none reads as
 
 `RelayLink` (GitHubKit) reads them, and `RelayTenant.joinLink` writes the
 invitation. A tenant's ID is 32 lowercase hex characters, and its server is an
-`https` URL, or `http` on `localhost`. Hermes reads these links but does not
-act on them.
+`https` URL, or `http` on `localhost`.
+
+`AppStore.open(_:)` takes a relay link before it tries a place. A setup link
+finishes the setup that is waiting for it, and is refused when its `state` is
+not that setup's. Hermes does not act on the other two.
+[relay-client.md](relay-client.md) has the setup.
 
 ## Windows
 
