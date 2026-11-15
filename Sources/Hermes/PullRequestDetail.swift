@@ -141,7 +141,7 @@ struct PullRequestDetailView: View {
             DiffScreen(
                 source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
-                threadChanges: model.store.eventCounts[pullRequest.key]?.threads.count ?? 0,
+                threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? WebhookChanges(),
                 // The review changes the reason the pull request is in the inbox, and its review decision.
                 onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )

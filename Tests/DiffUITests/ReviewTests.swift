@@ -217,7 +217,8 @@ struct DisplayRangeTests {
 }
 
 /// Answers GitHub requests without the network: a pull request with no
-/// threads or pending review, and a review that is accepted. Everything else, and every request
+/// threads or pending review, and a review that is accepted. A client whose token is `threads`
+/// gets a pull request with one thread of one comment. Everything else, and every request
 /// of a client whose token is `offline`, gets status 500.
 private final class GitHubStub: URLProtocol {
     /// The body of every request so far.
@@ -251,9 +252,15 @@ private final class GitHubStub: URLProtocol {
                 answer = #"{"data":{"node":{"reviews":{"nodes":[]}}}}"#
             } else if body.contains("reviewThreads") {
                 let empty = #"{"nodes":[]}"#
+                let thread = """
+                    {"nodes":[{"id":"T1","path":"guide.md","line":5,"startLine":null,"diffSide":"RIGHT","startDiffSide":null,\
+                    "isResolved":false,"isOutdated":false,"comments":{"nodes":[{"id":"C10","databaseId":10,"author":null,\
+                    "body":"First","createdAt":"2026-01-01T00:00:00Z"}]}}]}
+                    """
+                let threads = request.value(forHTTPHeaderField: "Authorization") == "Bearer threads" ? thread : empty
                 answer = """
                     {"data":{"repository":{"pullRequest":{"id":"PR_1","body":"","comments":\(empty),"reviews":\(empty),\
-                    "reviewRequests":\(empty),"commits":\(empty),"reviewThreads":\(empty)}}}}
+                    "reviewRequests":\(empty),"commits":\(empty),"reviewThreads":\(threads)}}}}
                     """
             } else if body.contains("addPullRequestReview(") {
                 answer = #"{"data":{"result":{"pullRequestReview":{"id":"R_1","url":"https://github.com/acme/app/pull/7"}}}}"#
@@ -295,6 +302,23 @@ struct ReviewModelTests {
         #expect(await online.reloadThreads())
         #expect(online.threadsError == nil)
         #expect(online.canSubmit(.approve))
+    }
+
+    @Test func aDeliverysChangeIsAppliedToTheLoadedThreads() async {
+        let model = makeModel(client: GitHubStub.client(token: "threads"))
+        let reply = GitHubKit.Comment(id: "C11", databaseID: 11, author: nil, body: "A reply", createdAt: .now)
+        // Nothing is loaded yet, so the reply has no thread to join and the caller loads.
+        #expect(!model.apply(.reply(reply, to: 10)))
+
+        await model.reloadThreads()
+        #expect(model.apply(.reply(reply, to: 10)))
+        #expect(model.threads.first?.comments.map(\.body) == ["First", "A reply"])
+        #expect(model.apply(.threadResolved(id: "T1", resolved: true)))
+        #expect(model.threads.map(\.isResolved) == [true])
+
+        // A new thread's ID is not in a payload, so the threads load.
+        #expect(!model.apply(.threads))
+        #expect(model.threads.count == 1)
     }
 
     @Test func aCommentGoesFromComposerToDiskAndBack() async {

@@ -249,6 +249,9 @@ final class AppStore {
         case .review:
             // The row's review decision is GitHub's to work out.
             note(event.change, in: \.detail, of: key)
+        case .reply, .threadResolved, .threads:
+            // The diff applies the change to its threads, or loads them. A row shows none of it.
+            return note(event.change, in: \.threads, of: key)
         case nil:
             break
         }

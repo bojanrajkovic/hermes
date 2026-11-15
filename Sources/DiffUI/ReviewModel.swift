@@ -193,6 +193,16 @@ final class ReviewModel {
         selection = nil
     }
 
+    /// Applies what a webhook delivery says changed to the threads.
+    ///
+    /// - Returns: False when the threads have to load instead.
+    func apply(_ change: WebhookChange) -> Bool {
+        guard let changed = ReviewThread.applying(change, to: threads) else { return false }
+        threads = changed
+        rebuild()
+        return true
+    }
+
     /// - Returns: Whether the threads were loaded. The caller asks again when they were not.
     @discardableResult
     func reloadThreads() async -> Bool {

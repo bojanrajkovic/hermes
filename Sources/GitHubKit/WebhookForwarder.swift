@@ -92,7 +92,7 @@ public final class WebhookForwarder: Sendable {
     /// The token scope an organization's forwarder needs. `gh` does not ask for it at login.
     public static let organizationScope = "admin:org_hook"
     /// The events that change what a pull request's row or pane shows.
-    static let events = "pull_request,pull_request_review,pull_request_review_comment,issue_comment,check_suite,status"
+    static let events = "pull_request,pull_request_review,pull_request_review_comment,pull_request_review_thread,issue_comment,check_suite,status"
     /// Passed as the webhook's secret. It marks the processes Hermes started, so a launch can
     /// find the ones a crash left behind.
     static let marker = "hermes-forwarder"

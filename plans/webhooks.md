@@ -62,6 +62,9 @@ carry.
 | `pull_request`: new commits, reopened, a new base branch, any other action | The same fields | The pull request: its review decision, mergeability, checks, and stack |
 | `issue_comment` on a pull request: created, edited, deleted | The comment, in the conversation | Nothing |
 | `pull_request_review`: submitted, edited, dismissed | The review, in the conversation | The pull request, for its review decision |
+| `pull_request_review_comment`: a new comment that answers another | The comment, added to the thread that holds the one it answers | Nothing, when that thread is loaded |
+| `pull_request_review_comment`: a new comment that starts a thread, an edited one, a deleted one | Nothing | The review threads. The payload does not carry a new thread's ID. |
+| `pull_request_review_thread`: resolved, unresolved | The thread's resolved state, found by the thread's ID | Nothing, when that thread is loaded |
 | Anything else | Nothing | The pull request |
 
 A row's fields go into the account's lists through `AccountData.store`.
@@ -72,6 +75,10 @@ pull request and each part of it, a `WebhookChanges`: how many deliveries came
 and the latest one's change. The pane watches the count. When it rises by one,
 the pane applies that change with `PullRequestDetail.applying`. When it rises
 by more, the earlier changes are gone, so the pane loads the detail again.
+
+The diff screen does the same for the review threads, which `ReviewModel`
+holds: it applies a change with `ReviewModel.apply`, and loads the threads when
+that returns false. A change to a thread that is not loaded can't be applied.
 
 The pull request's update time is not applied. The pane loads the detail
 again when it changes, which is at the next refresh, and that load settles
@@ -156,8 +163,8 @@ extension reported, and when the repository is tried again.
 - It passes the token in `GH_TOKEN`. The program cannot read a token that `gh`
   keeps in the keychain.
 - It asks for the events that change a row or a pane: `pull_request`,
-  `pull_request_review`, `pull_request_review_comment`, `issue_comment`,
-  `check_suite`, and `status`.
+  `pull_request_review`, `pull_request_review_comment`,
+  `pull_request_review_thread`, `issue_comment`, `check_suite`, and `status`.
 - Each delivery is one line of JSON on stdout. The event's type is not in it,
   so `WebhookEvent` reads the keys that name a pull request: `pull_request`,
   `issue` with a `pull_request` key, and the `pull_requests` of a `check_suite`

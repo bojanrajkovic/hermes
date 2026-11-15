@@ -15,6 +15,13 @@ public enum WebhookChange: Sendable, Hashable {
     case comment(Comment, deleted: Bool)
     /// A review was submitted, edited, or dismissed.
     case review(Review)
+    /// A line comment that answers the comment with this REST ID, so it joins that comment's thread.
+    case reply(Comment, to: Int)
+    /// A review thread was resolved, or opened again.
+    case threadResolved(id: String, resolved: Bool)
+    /// The review threads changed in a way the payload can't place: a new thread, whose ID
+    /// the payload does not carry, or a line comment that was edited or deleted.
+    case threads
 
     /// Reads one delivery's JSON body. The kind of event is told from the body's keys,
     /// because a forwarder's deliveries carry no event name.
@@ -40,6 +47,20 @@ public enum WebhookChange: Sendable, Hashable {
                 id: event.review.node_id, author: event.review.user?.user, state: state,
                 body: event.review.body ?? "", submittedAt: event.review.submitted_at
             ))
+        case (true, false, true, false, false):
+            guard let event = try? decoder.decode(ReviewCommentEvent.self, from: payload) else { return nil }
+            if event.action == "created", let parent = event.comment.in_reply_to_id {
+                self = .reply(Comment(event.comment), to: parent)
+            } else {
+                self = .threads
+            }
+        case (true, false, false, false, true):
+            guard let event = try? decoder.decode(ThreadEvent.self, from: payload) else { return nil }
+            switch event.action {
+            case "resolved": self = .threadResolved(id: event.thread.node_id, resolved: true)
+            case "unresolved": self = .threadResolved(id: event.thread.node_id, resolved: false)
+            default: self = .threads
+            }
         default:
             return nil
         }
@@ -154,10 +175,40 @@ extension PullRequestDetail {
             } else {
                 reviews.append(review)
             }
+        case .reply, .threadResolved, .threads:
+            return nil
         }
         return PullRequestDetail(
             id: id, body: body, comments: comments, reviews: reviews, requestedReviewers: requestedReviewers,
             commits: commits, reviewThreads: reviewThreads
+        )
+    }
+}
+
+extension ReviewThread {
+    /// The threads with a change applied. Nil when they have to load instead: the change is
+    /// not one a payload can place, or it is about a thread that is not among `threads`.
+    public static func applying(_ change: WebhookChange, to threads: [ReviewThread]) -> [ReviewThread]? {
+        var threads = threads
+        switch change {
+        case .reply(let comment, let parent):
+            guard let index = threads.firstIndex(where: { $0.comments.contains { $0.databaseID == parent } }) else { return nil }
+            // Hermes loads the threads after sending a review, so its own reply can be there already.
+            guard !threads[index].comments.contains(where: { $0.id == comment.id }) else { return threads }
+            threads[index] = threads[index].with(comments: threads[index].comments + [comment])
+        case .threadResolved(let id, let resolved):
+            guard let index = threads.firstIndex(where: { $0.id == id }) else { return nil }
+            threads[index] = threads[index].with(isResolved: resolved)
+        case .pullRequest, .comment, .review, .threads:
+            return nil
+        }
+        return threads
+    }
+
+    private func with(isResolved: Bool? = nil, comments: [Comment]? = nil) -> ReviewThread {
+        ReviewThread(
+            id: id, path: path, line: line, startLine: startLine, diffSide: diffSide, startDiffSide: startDiffSide,
+            isResolved: isResolved ?? self.isResolved, isOutdated: isOutdated, comments: comments ?? self.comments
         )
     }
 }
@@ -222,6 +273,8 @@ struct RESTComment: Decodable {
     let user: RESTAuthor?
     let body: String
     let created_at: Date
+    /// On a line comment that answers another: the REST ID of the comment it answers.
+    let in_reply_to_id: Int?
 }
 
 extension Comment {
@@ -243,6 +296,21 @@ private struct IssueCommentEvent: Decodable {
     let action: String
     let issue: Issue
     let comment: RESTComment
+}
+
+private struct ReviewCommentEvent: Decodable {
+    let action: String
+    let comment: RESTComment
+}
+
+private struct ThreadEvent: Decodable {
+    struct Thread: Decodable {
+        /// The same ID GraphQL gives the thread.
+        let node_id: String
+    }
+
+    let action: String
+    let thread: Thread
 }
 
 private struct ReviewEvent: Decodable {

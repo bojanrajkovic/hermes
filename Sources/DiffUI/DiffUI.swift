@@ -26,18 +26,18 @@ public struct DiffScreen: View {
     /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
     @Binding private var target: DeepLink.PullRequestTarget?
     private let onReviewSubmitted: @MainActor () -> Void
-    private let threadChanges: Int
+    private let threadChanges: WebhookChanges
 
     @State private var model: DiffModel?
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
-    /// - Parameter threadChanges: A count the host raises when it hears that the pull
-    ///   request's review threads changed. Each new value reloads them at once, ahead of
-    ///   the screen's own polling.
+    /// - Parameter threadChanges: What webhook deliveries have said about the pull request's
+    ///   review threads. When its count rises, the screen applies the latest change, or
+    ///   reloads the threads when it can't, ahead of its own polling.
     public init(
         source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
-        threadChanges: Int = 0, onReviewSubmitted: @escaping @MainActor () -> Void = {}
+        threadChanges: WebhookChanges = WebhookChanges(), onReviewSubmitted: @escaping @MainActor () -> Void = {}
     ) {
         _target = target
         self.threadChanges = threadChanges
@@ -74,8 +74,11 @@ public struct DiffScreen: View {
         }
         .onChange(of: layout) { model?.layout = layout }
         .onChange(of: target) { takeTarget() }
-        .onChange(of: threadChanges) {
-            Task { _ = await model?.review?.reloadThreads() }
+        .onChange(of: ThreadChanges(source: source.key, count: threadChanges.count)) { seen, now in
+            // Another pull request's count is not a change to this one.
+            guard seen.source == now.source, let review = model?.review else { return }
+            if let change = threadChanges.only(since: seen.count), review.apply(change) { return }
+            Task { await review.reloadThreads() }
         }
         // The task ends when the screen goes off screen, which stops the
         // polling. Coming back reuses the model, so the diff reloads in place.
@@ -88,6 +91,12 @@ public struct DiffScreen: View {
             await model?.run()
         }
     }
+}
+
+/// How many deliveries have changed the review threads of one diff source.
+private struct ThreadChanges: Equatable {
+    let source: String
+    let count: Int
 }
 
 extension DiffScreen {
