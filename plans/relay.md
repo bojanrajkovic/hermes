@@ -1,7 +1,8 @@
 # The relay
 
-The relay is a Cloudflare Worker in [`relay/`](../relay). It is not deployed,
-and Hermes does not call it.
+The relay is a Cloudflare Worker in [`relay/`](../relay). It runs at
+`https://hermes-relay.brajkovic.workers.dev`. Its invite code list holds one
+code that nobody has, so no tenant can register, and Hermes does not call it.
 
 ## Tenants
 
