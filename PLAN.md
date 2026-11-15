@@ -23,6 +23,7 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 ## Decisions
 
 - [plans/webhooks.md](plans/webhooks.md): the optional webhook forwarders that make a change show in seconds, and which repositories get one.
+- [plans/relay-client.md](plans/relay-client.md): how Hermes talks to the relay: its calls, its connection, and where the refresh token is kept.
 - [plans/attention-inbox.md](plans/attention-inbox.md): what puts a pull request in "Needs Your Attention", and how the reasons rank.
 - [plans/navigation-bakeoff.md](plans/navigation-bakeoff.md): the three navigation styles that were compared and why Inbox stayed, with screenshots.
 
