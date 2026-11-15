@@ -72,6 +72,23 @@ struct RelaysTests {
         #expect(next)
     }
 
+    @Test func aChangeAppliedDuringALoadMakesTheLoadRunAgain() {
+        var bursts = EventBursts()
+        let key = ItemKey(repository: airway, number: 7)
+
+        // Nothing is loading, so an applied change starts nothing.
+        bursts.applied(key)
+        let loads = bursts.shouldLoad(key, part: nil)
+        #expect(loads)
+
+        // The load may have asked GitHub before the change, so it runs once more.
+        bursts.applied(key)
+        let again = bursts.loaded(key)
+        #expect(again == [])
+        let over = bursts.loaded(key)
+        #expect(over == nil)
+    }
+
     @Test func eventsNameThePartOfAPullRequestTheyChange() {
         #expect(EventCounts.part(ofEvent: "pull_request_review_comment") == \.threads)
         #expect(EventCounts.part(ofEvent: "pull_request_review_thread") == \.threads)

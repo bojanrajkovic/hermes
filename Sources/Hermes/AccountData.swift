@@ -284,6 +284,9 @@ final class AccountData {
         pullRequests.first { $0.number == key.number && $0.repository == key.repository } ?? fetchedPullRequests[key]
     }
 
+    /// Every pull request held: the open list, then the ones loaded by number.
+    var heldPullRequests: [PullRequest] { pullRequests + fetchedPullRequests.values }
+
     /// Merged or closed, for a pull request that is not in the open list. Nil when unknown.
     func closedState(of key: ItemKey) -> LinkedPullRequest.State? {
         fetchedPullRequests[key]?.state

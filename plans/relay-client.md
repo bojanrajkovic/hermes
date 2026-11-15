@@ -244,8 +244,10 @@ member signs in again.
 ## Events
 
 Each event goes through `AppStore.reload`, the same path as a forwarder's
-delivery ([webhooks.md](webhooks.md)): Hermes loads the pull request the event
-names, or the one whose head commit a status or a check is on.
+delivery ([webhooks.md](webhooks.md)): Hermes finds the pull request the event
+names, or the one whose head commit a status or a check is on, applies the
+fields the payload carries, and loads the pull request when the event changed
+more than that.
 
 A relay's event also has GitHub's name for it, which says what part of the
 pull request changed. `AppStore.eventCounts` counts those per pull request,
@@ -257,16 +259,18 @@ their own 10-second polling:
 | `pull_request_review_comment`, `pull_request_review_thread` | The diff's review threads |
 | `check_run`, `check_suite`, `status` | The checks list and the checks summary |
 
-Hermes does not apply an event's payload to what it shows. It reloads from
-GitHub with the user's own `gh` token.
+What Hermes loads, it loads from GitHub with the user's own `gh` token.
 
-Two rules keep a relay's volume from becoming requests:
+Three rules keep a relay's volume from becoming requests:
 
 - **An event in an account no window shows is dropped.** A relay sends events
   for every repository the member can see.
 - **A burst loads a pull request twice, not once per event.** A CI run sends
   two events per job. `EventBursts` loads on the first event, and turns the
   events that arrive during that load and the 5 seconds after into one more.
+- **Events about nothing Hermes holds share the account's loads the same
+  way.** A status or a check on a commit that is no held pull request's head
+  loads the account, and a busy branch sends many.
 
 A repository that a connected tenant covers gets no webhook forwarder.
 `Forwarders.targets` leaves those out.

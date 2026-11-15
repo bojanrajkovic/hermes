@@ -19,6 +19,22 @@ struct EventCounts: Equatable {
     }
 }
 
+extension WebhookEvent {
+    /// The pull request this event is about, among the ones Hermes holds. Nil when it holds
+    /// none: a new pull request, or a commit that is no held pull request's head, which a
+    /// push makes true until the pull request is loaded again.
+    ///
+    /// A status names only a commit, and a check often does, so those find the pull request
+    /// by its head.
+    func pullRequest(among held: [PullRequest]) -> PullRequest? {
+        held.first { candidate in
+            guard candidate.repository == repository else { return false }
+            if let number = pullRequest { return candidate.number == number }
+            return commit != nil && candidate.headOID == commit
+        }
+    }
+}
+
 /// Keeps a burst of events about one pull request from loading it once per event. A CI run
 /// sends two events per job, and a relay sends them for every pull request in an account.
 ///
@@ -41,6 +57,12 @@ struct EventBursts {
         running[key]?.again = true
         if let part { running[key]?.parts.insert(part) }
         return false
+    }
+
+    /// Records an event whose payload was applied with no load. A load that is running may
+    /// have asked GitHub before the event, and its answer would undo the change, so it runs again.
+    mutating func applied(_ key: ItemKey) {
+        running[key]?.again = true
     }
 
     /// Records that a load finished.

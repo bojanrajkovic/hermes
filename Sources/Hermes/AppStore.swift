@@ -210,8 +210,9 @@ final class AppStore {
     /// screens that show those reload when their count rises.
     private(set) var eventCounts: [ItemKey: EventCounts] = [:]
 
-    /// Loads what a webhook says changed: the pull request when Hermes holds it, and
-    /// otherwise the account, which is how a new pull request joins the lists.
+    /// Takes in what a webhook says changed. For a pull request Hermes holds, it applies the
+    /// fields the payload carries, and loads the pull request when the event changed more
+    /// than that. Otherwise it loads the account, which is how a new pull request joins the lists.
     ///
     /// - Parameter part: The count to raise for the pull request, when the event's name says
     ///   which part of it changed. A forwarder's deliveries carry no name.
@@ -220,24 +221,34 @@ final class AppStore {
         // window shows has nothing to update.
         guard windows.allObjects.contains(where: { $0.account?.login == event.repository.owner }) else { return }
         let data = data(for: event.repository.owner)
-        // A status names only a commit, and a check often does, so those find the pull request by its head.
-        let key = event.pullRequest.map { ItemKey(repository: event.repository, number: $0) }
-            ?? event.commit.flatMap { commit in
-                data.pullRequests.first { $0.repository == event.repository && $0.headOID == commit }?.key
-            }
-        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(key?.number ?? 0)")
+        let held = event.pullRequest(among: data.heldPullRequests)
+        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(held?.number ?? 0)")
 
-        guard let key, data.pullRequest(key) != nil else {
-            // A status or a check on a commit that is no held pull request's head changes nothing Hermes shows.
-            if event.pullRequest != nil || event.commit == nil { Task { await data.refresh() } }
-            return
+        guard let held else {
+            // The account's own load finds a new pull request, and one whose new head Hermes has
+            // not heard of yet. A busy repository sends many such events, so they share loads.
+            return load(ItemKey(repository: RepositoryRef(owner: data.login, name: ""), number: 0), part: nil) {
+                await data.refresh()
+            }
         }
+        let key = held.key
+        if case .pullRequest(let fields, let reloads) = event.change {
+            data.store(.pullRequest(held.applying(fields)), for: key)
+            // A load that is running may have asked GitHub before this change, so it runs once more.
+            guard reloads else { return bursts.applied(key) }
+        }
+        load(key, part: part) { await data.refetch(key) }
+    }
+
+    /// Runs `operation` for the first event of a burst about `key`, and once more, a few
+    /// seconds later, for the events that came while it ran.
+    private func load(_ key: ItemKey, part: EventCounts.Part?, _ operation: @escaping () async -> Void) {
         guard bursts.shouldLoad(key, part: part) else { return }
         if let part { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }
 
         Task {
             while true {
-                await data.refetch(key)
+                await operation()
                 try? await Task.sleep(for: Self.eventSpacing)
                 guard let parts = bursts.loaded(key) else { break }
                 for part in parts { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }

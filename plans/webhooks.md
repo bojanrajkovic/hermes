@@ -2,7 +2,8 @@
 
 Hermes refreshes its lists on a timer. A webhook forwarder makes a change show
 in about two seconds instead: GitHub pushes the repository's webhook deliveries
-down a WebSocket, and Hermes reloads what a delivery names.
+down a WebSocket, and Hermes applies each delivery's payload or reloads what
+it names.
 
 The forwarder is `gh webhook forward`, from the `cli/gh-webhook` extension of
 the GitHub CLI. Only GitHub sees a forwarder's deliveries: no server sits
@@ -21,24 +22,56 @@ sequenceDiagram
     F->>GH: create webhook "cli", open WebSocket
     GH-->>F: delivery (JSON)
     F-->>H: one line on stdout
-    H->>GH: load that pull request by number
+    H->>H: apply the payload's fields
+    H->>GH: load what the payload does not carry
     Note over H,GH: The timer refresh keeps running.
 ```
 
 ## What it is for
 
-A delivery is only a signal. Hermes reads the repository and the pull request
-number from it and loads the pull request the usual way. A commit status names
-no pull request, and a check suite often names none, so Hermes finds theirs by
-the commit: the open pull request whose head it is. One on any other commit is
-dropped, because it changes nothing Hermes shows. Any other delivery that names
-no pull request Hermes holds, such as a newly opened pull request, refreshes
-the account. The timer refresh never stops, so a forwarder that ends costs
-nothing but the delay.
+Hermes reads the repository and the pull request number from a delivery. A
+commit status names no pull request, and a check often names none, so Hermes
+finds theirs by the commit: the held pull request whose head it is. Held means
+in the open list, or loaded by number.
+
+A delivery about a held pull request is applied or loads that pull request.
+[Applying a payload](#applying-a-payload) says which.
+
+A delivery about anything else loads the account. That covers a newly opened
+pull request, and a commit that is no held pull request's head, which a push
+makes true until its pull request loads again. A busy repository sends many of
+those, so they share loads the way a burst about one pull request does.
+
+The timer refresh never stops, so a forwarder that ends costs nothing but the
+delay.
 
 `AppStore.reload` does this for a relay's events too. A burst of deliveries
 about one pull request loads it on the first and once more after, not once
 per delivery. [relay-client.md](relay-client.md) has the rule.
+
+## Applying a payload
+
+A delivery's payload carries much of what changed. `WebhookChange` in
+`Sources/GitHubKit/WebhookChange.swift` reads it, and Hermes puts those fields
+into what it holds at once. It asks GitHub only for what the payload does not
+carry.
+
+| Delivery | Applied from the payload | Loaded from GitHub |
+|---|---|---|
+| `pull_request`: edited, labeled, unlabeled, converted to draft, ready for review, closed, review requested or removed, auto-merge on or off | Title, labels, draft, state, branches, head commit, line and file counts, auto-merge method, requested reviewers | Nothing |
+| `pull_request`: new commits, reopened, a new base branch, any other action | The same fields | The pull request: its review decision, mergeability, checks, and stack |
+| Anything else | Nothing | The pull request |
+
+The pull request's update time is not applied. The description and the
+conversation load when it changes, which is at the next refresh.
+
+A payload Hermes can't read has no change, and its delivery loads the pull
+request as before. A load that is running when a payload is applied runs once
+more, because it may have asked GitHub before the change.
+
+The payload types are small `Decodable` structs that hold only the fields
+Hermes reads. Types generated from GitHub's REST schema refuse real deliveries:
+a review's `body` is `null` in a delivery and a string in the schema.
 
 ## Which repositories
 
