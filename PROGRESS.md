@@ -131,8 +131,7 @@ What is built and works, and what is known not to work or is unverified.
   bundle and deploys it, and another checks hourly that the script Cloudflare
   runs is one the first attested, once the repository names a Cloudflare
   account. It runs at `hermes-relay.brajkovic.workers.dev` with no usable
-  invite code, and Hermes does not
-  call it. See [plans/relay.md](plans/relay.md).
+  invite code. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**
 
