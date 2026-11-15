@@ -42,7 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Comes to the front: launched by `open` from a background process, macOS can leave the app behind.
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
+        if store.usesWebhooks { WebhookForwarder.endLeftovers() }
         Task { await store.keepFresh() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        store.forwarders.stopAll()
     }
 
     /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.
@@ -222,6 +227,7 @@ struct SettingsView: View {
                         Text("Show all bot pull requests")
                         Text("When off, a bot's pull request shows only if its checks fail or it has merge conflicts.")
                     }
+                    WebhooksSection()
                     IgnoredRepositoriesSection()
                 }
                 .formStyle(.grouped)
@@ -232,6 +238,53 @@ struct SettingsView: View {
         }
         .frame(width: 500)
         .frame(minHeight: 260)
+    }
+}
+
+/// The switch for webhook forwarders, with what they are doing and a way to install the extension they need.
+struct WebhooksSection: View {
+    @Environment(AppStore.self) private var store
+    @State private var isInstalled = WebhookForwarder.binary != nil
+    @State private var isInstalling = false
+    @State private var installError: String?
+
+    var body: some View {
+        @Bindable var model = store
+        Section {
+            Toggle(isOn: $model.usesWebhooks) {
+                Text("Get changes as they happen")
+                Text("Adds a webhook named \"cli\" to up to 20 of your own repositories, the ones with pull requests on screen. GitHub removes it when Hermes quits. Other repositories refresh on the timer.")
+            }
+            if store.usesWebhooks, !isInstalled {
+                LabeledContent {
+                    Button(isInstalling ? "Installing…" : "Install") { install() }
+                        .disabled(isInstalling)
+                } label: {
+                    Text("Needs the gh webhook extension")
+                    Text(verbatim: installError ?? "gh extension install cli/gh-webhook")
+                        .foregroundStyle(installError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                }
+            } else if store.usesWebhooks {
+                LabeledContent("Repositories forwarded", value: store.forwarders.running.count, format: .number)
+            }
+        }
+    }
+
+    private func install() {
+        isInstalling = true
+        Task {
+            do {
+                try await WebhookForwarder.install()
+                installError = nil
+                await store.syncForwarders()
+            } catch GitHubError.commandFailed(let message) {
+                installError = message
+            } catch {
+                installError = "The GitHub CLI was not found."
+            }
+            isInstalled = WebhookForwarder.binary != nil
+            isInstalling = false
+        }
     }
 }
 

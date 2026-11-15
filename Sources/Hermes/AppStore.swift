@@ -80,7 +80,18 @@ final class AppStore {
         didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
     }
 
+    /// Whether Hermes runs webhook forwarders. Off until the user asks: each one creates a
+    /// webhook on a repository.
+    var usesWebhooks: Bool {
+        didSet {
+            defaults.set(usesWebhooks, forKey: Keys.usesWebhooks)
+            Task { await syncForwarders() }
+        }
+    }
+    let forwarders = Forwarders()
+
     private enum Keys {
+        static let usesWebhooks = "usesWebhooks"
         static let account = "selectedAccount"
         static let showingAllBots = "showingAllBots"
         static let refreshInterval = "refreshInterval"
@@ -104,6 +115,7 @@ final class AppStore {
             let parts = saved.split(separator: "/", maxSplits: 1).map(String.init)
             return parts.count == 2 ? RepositoryRef(owner: parts[0], name: parts[1]) : nil
         })
+        usesWebhooks = defaults.bool(forKey: Keys.usesWebhooks)
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
     }
@@ -131,12 +143,33 @@ final class AppStore {
     func keepFresh() async {
         var refreshedAt = Date.now
         while (try? await Task.sleep(for: .seconds(Self.activeRefreshInterval))) != nil {
+            await syncForwarders()
             guard NSApp.isActive || Date.now.timeIntervalSince(refreshedAt) >= refreshInterval else { continue }
             refreshedAt = .now
             let logins = Set(windows.allObjects.compactMap { $0.account?.login })
             await withTaskGroup(of: Void.self) { group in
                 for login in logins { group.addTask { await self.data(for: login).refresh() } }
             }
+        }
+    }
+
+    /// Runs a forwarder for each of the viewer's own repositories that a window watches, or
+    /// none when the setting is off.
+    func syncForwarders() async {
+        guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
+        let wanted = Forwarders.repositories(
+            watched: watched(in: viewer).map(\.repository), viewer: viewer, refused: forwarders.refused
+        )
+        await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
+    }
+
+    /// Loads what a webhook says changed: the pull request when Hermes holds it, and
+    /// otherwise the account, which is how a new pull request joins the lists.
+    private func reload(_ event: WebhookEvent) {
+        let data = data(for: event.repository.owner)
+        let key = event.pullRequest.map { ItemKey(repository: event.repository, number: $0) }
+        Task {
+            if let key, data.pullRequest(key) != nil { await data.refetch(key) } else { await data.refresh() }
         }
     }
 
