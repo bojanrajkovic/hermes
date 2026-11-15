@@ -69,7 +69,7 @@ using [`@octokit/webhooks-methods`](https://github.com/octokit/webhooks-methods.
 |---|---|
 | `202` | The delivery is genuine. |
 | `401` | The signature is missing or wrong. |
-| `403` | The tenant's invite code is no longer one the relay accepts. |
+| `403` | The tenant's invite code is no longer one the relay accepts. The relay closes the tenant's sockets with code `4004`. |
 | `404` | No tenant with this ID is registered. |
 
 The relay reads three things from a genuine delivery: the `X-GitHub-Event`
@@ -78,12 +78,27 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 
 | Delivery | Action |
 |---|---|
-| `installation` with action `deleted` (the App was uninstalled) | Delete everything the tenant stored. Its ID is unknown afterwards. |
-| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Access may have changed. Nothing happens yet. |
-| Any other event that names a repository | To be sent on to clients. Nothing happens yet. |
+| `installation` with action `deleted` (the App was uninstalled) | Close every socket with code `4004` and delete everything the tenant stored. Its ID is unknown afterwards. |
+| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. Close every socket with code `4001`, so each client reconnects and is checked again. |
+| Any other event that names a repository | Send it to the sockets whose user can see that repository. |
 | Anything else | Ignored. |
 
-The relay stores nothing from a delivery.
+A forwarded delivery is one text message:
+
+```json
+{
+  "type": "event",
+  "event": "pull_request",
+  "delivery": "<the X-GitHub-Delivery header>",
+  "payload": { "…": "GitHub's payload" }
+}
+```
+
+The payload is the request body, byte for byte. The relay does not re-encode
+it and knows nothing of its shape beyond `action` and `repository.id`.
+
+The relay stores nothing from a delivery. A delivery that arrives while a
+user's socket is closed never reaches that user.
 
 ### Signing in
 
@@ -168,6 +183,11 @@ to sign in again.
 A socket stays open for eight hours. Then the relay closes it with code `4001`,
 and the client reconnects, so the user's access is checked again. An alarm on
 the Durable Object fires when the oldest socket runs out.
+
+| Close code | Meaning |
+|---|---|
+| `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
+| `4004` | Stop. The App was uninstalled, or the tenant's invite code was withdrawn. |
 
 The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in
 memory. That is why the repository IDs are in storage and not in a field.

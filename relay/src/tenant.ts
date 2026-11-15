@@ -14,6 +14,8 @@ import { bearerToken, closeCode, expiry, sessionSeconds, type Session } from "./
 export type Delivery = {
   /** The `X-GitHub-Event` header. */
   event: string;
+  /** The `X-GitHub-Delivery` header. */
+  id: string;
   /** The `X-Hub-Signature-256` header. */
   signature: string;
   /** The request body, unparsed, because the signature covers its exact bytes. */
@@ -34,6 +36,15 @@ async function signed(delivery: Delivery, secret: string): Promise<boolean> {
   return verify(secret, delivery.body, delivery.signature);
 }
 
+/** Sends on a socket, and does nothing when it has just closed. */
+function send(socket: WebSocket, message: string): void {
+  try {
+    socket.send(message);
+  } catch {
+    // The client went away between the lookup and the send. Its close handler cleans up.
+  }
+}
+
 /** One tenant: an account whose owner registered its own GitHub App with the relay. */
 export class Tenant extends DurableObject<Env> {
   async register(body: unknown): Promise<RegistrationDecision["outcome"]> {
@@ -51,11 +62,58 @@ export class Tenant extends DurableObject<Env> {
     if (!registration) return "unknownTenant";
 
     if (!(await signed(delivery, registration.webhookSecret))) return "badSignature";
-    if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) return "inviteRevoked";
+    if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
+      this.closeEverySocket(closeCode.tenantGone, "invite withdrawn");
+      return "inviteRevoked";
+    }
 
     const action = classifyDelivery(delivery.event, delivery.body);
-    if (action.action === "delete") await this.ctx.storage.deleteAll();
+    switch (action.action) {
+      case "forward":
+        this.forward(delivery, action.repository);
+        break;
+      case "recheck":
+        this.closeEverySocket(closeCode.recheck, "recheck");
+        break;
+      case "delete":
+        this.closeEverySocket(closeCode.tenantGone, "uninstalled");
+        await this.ctx.storage.deleteAll();
+        break;
+      case "ignore":
+        break;
+    }
     return "accepted";
+  }
+
+  /** Sends a delivery to the sockets whose user can see its repository. */
+  private forward(delivery: Delivery, repository: number): void {
+    const sessions = new Set(
+      this.sessionRepositories
+        .exec<{ session: string }>(
+          "SELECT session FROM session_repository WHERE repository = ?",
+          repository,
+        )
+        .toArray()
+        .map((row) => row.session),
+    );
+    if (sessions.size === 0) return;
+
+    // The body goes in as GitHub sent it, so the client gets the payload byte for byte.
+    const message =
+      `{"type":"event","event":${JSON.stringify(delivery.event)},` +
+      `"delivery":${JSON.stringify(delivery.id)},"payload":${delivery.body}}`;
+
+    for (const socket of this.ctx.getWebSockets()) {
+      const session = socket.deserializeAttachment() as Session;
+      if (sessions.has(session.id)) send(socket, message);
+    }
+  }
+
+  private closeEverySocket(code: number, reason: string): void {
+    for (const socket of this.ctx.getWebSockets()) {
+      this.forget(socket);
+      socket.close(code, reason);
+    }
   }
 
   /** The tenant App's client ID, which GitHub's sign-in page needs. */

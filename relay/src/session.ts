@@ -5,6 +5,8 @@ export const sessionSeconds = 8 * 60 * 60;
 export const closeCode = {
   /** Reconnect now: the session ran out, or someone's access changed. */
   recheck: 4001,
+  /** Stop: the tenant's App was uninstalled, or its invite code was withdrawn. */
+  tenantGone: 4004,
 } as const;
 
 /** One open socket. `expiresAt` is in Unix seconds. */

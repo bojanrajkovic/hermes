@@ -46,6 +46,7 @@ app.post("/hook/:tenant", async (c) => {
 
   const outcome = await stub.deliver({
     event: c.req.header("x-github-event") ?? "",
+    id: c.req.header("x-github-delivery") ?? "",
     signature: c.req.header("x-hub-signature-256") ?? "",
     body: await c.req.text(),
   });
