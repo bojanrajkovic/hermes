@@ -116,7 +116,9 @@ struct PullRequestDetailView: View {
         case .files:
             DiffScreen(
                 source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
-                target: Binding { model.diffTarget } set: { model.diffTarget = $0 }
+                target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
+                // The review changes the reason the pull request is in the inbox, and its review decision.
+                onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )
         case .checks:
             ChecksScreen(

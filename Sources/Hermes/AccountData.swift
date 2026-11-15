@@ -88,7 +88,9 @@ final class AccountData {
             listError = describe(error)
         }
 
-        for repository in issueLists.keys { await reloadIssues(of: repository) }
+        await withTaskGroup(of: Void.self) { group in
+            for repository in issueLists.keys { group.addTask { await self.reloadIssues(of: repository) } }
+        }
     }
 
     /// The viewer's pull requests first, so their lists show while the rest of the account loads.

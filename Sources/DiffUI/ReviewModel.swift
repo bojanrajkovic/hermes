@@ -88,6 +88,8 @@ final class ReviewModel {
     /// approving or requesting changes on one's own pull request.
     private(set) var isOwnPullRequest = false
 
+    /// Called after a review is sent, so the app can load the pull request again.
+    @ObservationIgnored var onSubmitted: @MainActor () -> Void = {}
     @ObservationIgnored private let client: GitHubClient
     @ObservationIgnored private let draftsURL: URL
     @ObservationIgnored private var diff = Diff(parsing: "")
@@ -481,6 +483,7 @@ final class ReviewModel {
         pending.summary = ""
         submission = .idle
         changed()
+        onSubmitted()
         await reloadThreads()
         return true
     }

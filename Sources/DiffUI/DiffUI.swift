@@ -25,15 +25,18 @@ public struct DiffScreen: View {
     private let repoCache: RepoCache
     /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
     @Binding private var target: DeepLink.PullRequestTarget?
+    private let onReviewSubmitted: @MainActor () -> Void
 
     @State private var model: DiffModel?
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
     public init(
-        source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil)
+        source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
+        onReviewSubmitted: @escaping @MainActor () -> Void = {}
     ) {
         _target = target
+        self.onReviewSubmitted = onReviewSubmitted
         self.source = source
         self.client = client
         self.repoCache = repoCache
@@ -71,6 +74,7 @@ public struct DiffScreen: View {
         .task(id: source.key) {
             if model?.source.key != source.key {
                 model = DiffModel(source: source, client: client, repoCache: repoCache, layout: layout)
+                model?.review?.onSubmitted = onReviewSubmitted
             }
             takeTarget()
             await model?.run()
