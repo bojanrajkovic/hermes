@@ -56,7 +56,7 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
   app and opens it.
 
 * `relay/` is a Cloudflare Worker in TypeScript. After a change under `relay/`, run
-  `make relay-check`. [plans/relay.md](plans/relay.md) describes it.
+  `make relay-check`, which also runs its tests. [plans/relay.md](plans/relay.md) describes it.
 
 * For a UI change, also look at the result. Run the built executable with
   `HERMES_SNAPSHOT_DIR=<directory>` to write PNGs of every screen without opening the app.

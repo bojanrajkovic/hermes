@@ -6,5 +6,11 @@
   // Off so Cloudflare keeps no record of the requests the relay receives.
   "observability": { "enabled": false },
   // The deploy sets COMMIT to the commit it builds.
-  "vars": { "COMMIT": "dev" }
+  "vars": { "COMMIT": "dev" },
+  // INVITE_CODES: comma-separated codes; a tenant needs one to register.
+  "secrets": { "required": ["INVITE_CODES"] },
+  "durable_objects": {
+    "bindings": [{ "name": "TENANT", "class_name": "Tenant" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Tenant"] }]
 }

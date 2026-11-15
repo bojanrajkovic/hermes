@@ -117,12 +117,14 @@ What is built and works, and what is known not to work or is unverified.
 
 **Relay**
 
-- A Cloudflare Worker in `relay/` that answers `GET /version`. It is not
-  deployed, and Hermes does not call it. See [plans/relay.md](plans/relay.md).
+- A Cloudflare Worker in `relay/` that registers tenants: an account's owner
+  sends an invite code and their GitHub App's credentials, and the relay stores
+  them in that tenant's Durable Object. It is not deployed, and Hermes does not
+  call it. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**
 
-- `make relay-check` type-checks and bundles the relay.
+- `make relay-check` type-checks, tests, and bundles the relay.
 - `make build` produces a signed `build/Hermes.app`. `make test` runs the unit
   tests of every target.
 - Tests that need the network, a real terminal, or a person to look at a PNG
