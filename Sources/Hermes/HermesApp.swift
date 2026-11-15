@@ -123,6 +123,7 @@ struct WindowRoot: View {
                 model.store.windowIsUp()
                 if let url = state.url, let link = DeepLink(url: url) { model.pendingLink = link }
                 await model.start(login: state.login)
+                await model.store.discoverRelays()
             }
             .onChange(of: activeState, initial: true) {
                 if activeState == .key {

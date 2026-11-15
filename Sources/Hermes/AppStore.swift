@@ -288,15 +288,40 @@ final class AppStore {
                 await syncForwarders()
             }
         case .join(let tenant):
-            // The link can come from anyone, so the user sees where it leads before anything is sent there.
-            let alert = NSAlert()
-            alert.messageText = "Join the relay at \(tenant.server.host() ?? tenant.server.absoluteString)?"
-            alert.informativeText = "Hermes opens your browser to sign in with GitHub. The relay then sends this Mac the changes in the repositories you can see, as they happen."
-            alert.addButton(withTitle: "Join")
-            alert.addButton(withTitle: "Cancel")
-            if alert.runModal() == .alertFirstButtonReturn { relays.join(tenant) }
+            let host = tenant.server.host() ?? tenant.server.absoluteString
+            if offersRelay(tenant, question: "Join the relay at \(host)?", accept: "Join", decline: "Cancel") { relays.join(tenant) }
         }
     }
+
+    /// Asks whether to use a relay tenant. A link or a published file can come from someone
+    /// else, so the user sees the server before anything is sent to it.
+    private func offersRelay(_ tenant: RelayTenant, question: String, accept: String, decline: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = question
+        alert.informativeText = "The relay is at \(tenant.server.host() ?? tenant.server.absoluteString). Hermes opens your browser to sign in with GitHub. The relay then sends this Mac the changes in the repositories you can see, as they happen."
+        alert.addButton(withTitle: accept)
+        alert.addButton(withTitle: decline)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Looks, once a launch, for a relay tenant that each of the viewer's accounts publishes
+    /// in its `.github` repository, and offers the ones this Mac does not use. A tenant the
+    /// user turns down is not offered again.
+    func discoverRelays() async {
+        guard !hasLookedForRelays, let viewer else { return }
+        hasLookedForRelays = true
+        for account in viewer.accounts {
+            // An account with no file, and one that can't be read, publishes no relay.
+            guard let tenant = try? await client.publishedRelay(of: account.login), relays.shouldOffer(tenant) else { continue }
+            if offersRelay(tenant, question: "\(account.name ?? account.login) has a relay. Connect?", accept: "Connect", decline: "Not Now") {
+                relays.join(tenant)
+            } else {
+                relays.decline(tenant)
+            }
+        }
+    }
+
+    @ObservationIgnored private var hasLookedForRelays = false
 
     /// Called by a window once it is up, to open the links that came first.
     func windowIsUp() {

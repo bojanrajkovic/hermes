@@ -86,7 +86,50 @@ private struct RelayRow: View {
             Text(verbatim: status)
             Text(verbatim: server)
         }
+        .contextMenu {
+            if let app = membership.app {
+                Button("Publish in \(app.account)/.github…") {
+                    Task { await publishRelay(membership.tenant, for: app.account, client: store.client) }
+                }
+                Button("Copy Join Link") { copyJoinLink(membership.tenant) }
+            }
+            Button("Stop Using This Relay", role: .destructive) { store.relays.forget(membership) }
+        }
     }
+}
+
+private func copyJoinLink(_ tenant: RelayTenant) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(tenant.joinLink.absoluteString, forType: .string)
+}
+
+/// Asks the owner, then commits the tenant's file to the account's `.github` repository, where
+/// a member's Hermes finds it, and says how that went.
+@MainActor
+private func publishRelay(_ tenant: RelayTenant, for account: String, client: GitHubClient) async {
+    let question = NSAlert()
+    question.messageText = "Publish the relay in \(account)/.github?"
+    question.informativeText = "Hermes commits \(RelayDiscovery.fileName) there, with the relay's address and the tenant's ID. A member's Hermes finds it and offers to connect, so nobody needs the join link. Anyone who can see \(account)/.github can see the file."
+    question.addButton(withTitle: "Commit")
+    question.addButton(withTitle: "Cancel")
+    guard question.runModal() == .alertFirstButtonReturn else { return }
+
+    let answer = NSAlert()
+    do {
+        switch try await client.publishRelay(tenant, for: account) {
+        case .published:
+            answer.messageText = "Published in \(account)/.github"
+            answer.informativeText = "Hermes offers the relay to each member the next time they open it."
+        case .noRepository:
+            answer.messageText = "\(account) has no .github repository"
+            answer.informativeText = "Create one on GitHub to publish the relay there. Until then, send the members the join link."
+        }
+    } catch {
+        answer.alertStyle = .warning
+        answer.messageText = "Could Not Publish the Relay"
+        answer.informativeText = "\(describe(error)) The join link still works."
+    }
+    answer.runModal()
 }
 
 /// Copies a tenant's `hermes://relay.join` link, which its owner sends to the members.
@@ -94,11 +137,8 @@ private struct CopyJoinLinkButton: View {
     let tenant: RelayTenant
 
     var body: some View {
-        Button("Copy Join Link") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(tenant.joinLink.absoluteString, forType: .string)
-        }
-        .help("Members open this link in Hermes to get the account's changes")
+        Button("Copy Join Link") { copyJoinLink(tenant) }
+            .help("Members open this link in Hermes to get the account's changes")
     }
 }
 
@@ -197,6 +237,14 @@ struct RelaySetupSheet: View {
                 } label: {
                     Text("2. Send the join link to the members")
                     Text("Each member opens it in Hermes and signs in. You sign in from Settings, once the App is installed.")
+                }
+                LabeledContent {
+                    Button("Publish…") {
+                        Task { await publishRelay(membership.tenant, for: app.account, client: store.client) }
+                    }
+                } label: {
+                    Text(verbatim: "Or publish the relay in \(app.account)/.github")
+                    Text("Hermes then offers it to each member, and nobody needs the link.")
                 }
             } header: {
                 Text(verbatim: "The relay is set up for \(app.account)")

@@ -27,6 +27,25 @@ struct RelaysTests {
         #expect(next(.recheck, failures: 1, ran: 1) == .wait(delay: 60, failures: 2))
     }
 
+    @Test func aPublishedTenantIsOfferedUntilItIsJoinedOrTurnedDown() throws {
+        let suite = "relays-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let server = try #require(URL(string: "https://relay.example.invalid"))
+        let joined = try #require(RelayTenant(server: server))
+        let published = try #require(RelayTenant(server: server))
+        defaults.set(try JSONEncoder().encode([RelayMembership(tenant: joined, app: nil)]), forKey: Relays.key)
+
+        let relays = Relays(defaults: defaults)
+        #expect(!relays.shouldOffer(joined))
+        #expect(relays.shouldOffer(published))
+
+        // Turned down once, it is not offered again, on this launch or the next.
+        relays.decline(published)
+        #expect(!relays.shouldOffer(published))
+        #expect(!Relays(defaults: defaults).shouldOffer(published))
+    }
+
     @Test func aBurstOfEventsLoadsAPullRequestOnceAndThenOnceMore() {
         var bursts = EventBursts()
         let key = ItemKey(repository: airway, number: 7)

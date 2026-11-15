@@ -133,6 +133,7 @@ final class Relays {
         self.defaults = defaults
         self.api = api
         memberships = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode([RelayMembership].self, from: $0) } ?? []
+        declined = Set(defaults.stringArray(forKey: "relayDeclined") ?? [])
     }
 
     /// Starts a tenant for an account: writes the page that posts the App's manifest and
@@ -215,6 +216,20 @@ final class Relays {
     }
 
     // MARK: Joining and signing in
+
+    /// The published tenants the user was offered and turned down, by ID, so each is offered once.
+    private(set) var declined: Set<String> {
+        didSet { defaults.set(declined.sorted(), forKey: "relayDeclined") }
+    }
+
+    /// Whether to offer a tenant an account publishes: not one this Mac has, and not one the user turned down.
+    func shouldOffer(_ tenant: RelayTenant) -> Bool {
+        !memberships.contains { $0.tenant == tenant } && !declined.contains(tenant.id)
+    }
+
+    func decline(_ tenant: RelayTenant) {
+        declined.insert(tenant.id)
+    }
 
     /// Adds a tenant from a join link, when this Mac does not have it yet, and signs in to it.
     func join(_ tenant: RelayTenant) {

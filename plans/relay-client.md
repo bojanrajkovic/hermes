@@ -73,8 +73,9 @@ from that row once the App is installed, the way a member does.
 
 ## Joining and signing in
 
-A member opens the join link. Hermes asks whether to join the relay at that
-server, adds the tenant, and starts the sign-in. The owner, and a member whose
+A member opens the join link, or accepts a tenant their account publishes
+(below). Hermes asks whether to join the relay at that server, adds the
+tenant, and starts the sign-in. The owner, and a member whose
 token the relay refused, start it with Sign In on the tenant's row.
 
 ```mermaid
@@ -98,6 +99,41 @@ The relay holds the App's client secret, so it makes the exchange with GitHub.
 Hermes checks that the session link's `state` is one it sent for that tenant,
 stores the refresh token in the Keychain, and connects. The grant is good for
 ten minutes and for one use.
+
+## Finding a tenant without a link
+
+An owner can publish a tenant, so members need no join link. Publish, on the
+last page of setup and in the menu of the tenant's row in Settings, commits a
+file to the account's `.github` repository: `<org>/.github` for an
+organization, `<login>/.github` for a personal account.
+
+```json
+{
+  "server": "https://hermes-relay.services.coderinserepeat.com",
+  "tenant": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+}
+```
+
+- **Hermes asks first.** The alert names the repository and says that anyone
+  who can see it can see the file. The file holds no secret: connecting still
+  takes a sign-in through the tenant's App.
+- **The commit uses the owner's `gh` token** and goes to the repository's
+  default branch, replacing an older `hermes-relay.json`.
+- **Hermes creates no repository.** When the account has no `.github`
+  repository, it says so, and the join link stays the way in. When GitHub
+  refuses the commit, such as on a branch that takes only pull requests,
+  Hermes shows GitHub's reason.
+
+On a member's Mac, once a launch, after the first window loads,
+`AppStore.discoverRelays()` reads
+`GET /repos/<account>/.github/contents/hermes-relay.json` for each of the
+viewer's accounts, with the user's token. A `404` means the account publishes
+no relay. When the file names a tenant this Mac does not use, Hermes asks
+"<Account> has a relay. Connect?" in the alert a join link uses, and runs the
+same sign-in. A tenant the user turns down is remembered and not offered
+again. The file can be written by anyone who can write to the repository, so
+it is read like a join link: the tenant must pass `RelayTenant`'s checks, and
+the alert names the server.
 
 ## Calls
 
