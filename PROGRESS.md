@@ -40,6 +40,9 @@ What is built and works, and what is known not to work or is unverified.
 - A pull request has four tabs: Conversation, Files, Checks, and Sessions.
 - Conversation shows the description, comments, review summaries, commits,
   linked issues, and a checks summary, with Markdown rendered as on github.com.
+- Merging from the Merge menu, with the methods the repository allows:
+  merging now, merging past unmet requirements when GitHub allows a bypass, and
+  turning auto-merge on or off, with a badge in the header while it is on.
 - An issue pane shows the description, comments, assignees, labels, and the
   pull requests that close it.
 
@@ -141,8 +144,6 @@ What is built and works, and what is known not to work or is unverified.
   the playground repository. Hermes starting and stopping forwarders as the
   watched repositories change has not been run, and no organization forwarder
   has been started.
-- **Auto-merge.** Enabling and disabling it has not been sent to GitHub. The
-  playground repository does not allow auto-merge.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
   stored notary profile. The Makefile sets neither.
 
