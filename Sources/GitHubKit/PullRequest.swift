@@ -54,7 +54,7 @@ public enum Reviewer: Sendable, Hashable {
     case team(organization: String, slug: String)
 }
 
-/// An open pull request, with what a list row shows.
+/// A pull request, with what a list row shows.
 public struct PullRequest: Sendable, Hashable, Identifiable {
     /// The GraphQL node ID.
     public let id: String
@@ -90,6 +90,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     public let requestedReviewers: [Reviewer]
     /// The commit the viewer's latest submitted review was on. Nil when the viewer has not reviewed.
     public let viewerReviewedCommit: String?
+    public let state: LinkedPullRequest.State
 
     public init(
         id: String, number: Int, title: String, url: URL, repository: RepositoryRef, author: User?,
@@ -97,7 +98,8 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         headOID: String, reviewDecision: ReviewDecision?, additions: Int, deletions: Int,
         changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: StatusState?,
         stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil,
-        requestedReviewers: [Reviewer] = [], viewerReviewedCommit: String? = nil
+        requestedReviewers: [Reviewer] = [], viewerReviewedCommit: String? = nil,
+        state: LinkedPullRequest.State = .open
     ) {
         self.id = id
         self.number = number
@@ -123,6 +125,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         self.autoMergeMethod = autoMergeMethod
         self.requestedReviewers = requestedReviewers
         self.viewerReviewedCommit = viewerReviewedCommit
+        self.state = state
     }
 }
 
@@ -131,7 +134,7 @@ extension PullRequest: Decodable {
         case id, number, title, url, repository, author, isDraft, createdAt, updatedAt, headRefName
         case baseRefName, headRefOid, reviewDecision, additions, deletions, changedFiles, mergeable
         case labels, commits, stack, stackEntry, closingIssuesReferences, autoMergeRequest
-        case reviewRequests, viewerLatestReview
+        case reviewRequests, viewerLatestReview, state
     }
 
     private struct HeadCommit: Decodable {
@@ -208,6 +211,7 @@ extension PullRequest: Decodable {
         // A review the viewer started on github.com and has not submitted is not a review yet.
         let review = try container.decodeIfPresent(Review.self, forKey: .viewerLatestReview)
         viewerReviewedCommit = review?.state == "PENDING" ? nil : review?.commit?.oid
+        state = try container.decode(LinkedPullRequest.State.self, forKey: .state)
 
         let stack = try container.decodeIfPresent(Stack.self, forKey: .stack)
         let position = try container.decodeIfPresent(Position.self, forKey: .stackEntry)?.position

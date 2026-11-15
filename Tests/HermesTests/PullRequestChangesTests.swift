@@ -32,4 +32,13 @@ struct PullRequestChangesTests {
 
         #expect(PullRequestChanges.apply(to: [], changed: [reopenedThenClosed], closed: [reopenedThenClosed.id]).isEmpty)
     }
+
+    @Test func watchedPullRequestsKeepTheirOrderWithoutRepeatsUpToTheLimit() {
+        let list = (1...5).map { pullRequest($0) }
+        let keys = [3, 1, 3, 9, 2, 5].map { ItemKey(repository: airway, number: $0) }
+
+        // 9 is not in the list: it was opened by number, and loads another way.
+        #expect(PullRequestChanges.watched(keys, among: list, limit: 3) == [list[2].id, list[0].id, list[1].id])
+        #expect(PullRequestChanges.watched(keys, among: list).count == 4)
+    }
 }

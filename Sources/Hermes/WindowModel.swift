@@ -136,6 +136,7 @@ final class WindowModel {
 
     init(store: AppStore) {
         self.store = store
+        store.windows.add(self)
     }
 
     /// Makes a window model with its own store, for tests and snapshots.
@@ -221,6 +222,22 @@ final class WindowModel {
         attentionList(
             pullRequests.filter(matcher(.needsAttention)), viewer: viewer?.login ?? "", signals: data.attention, now: .now
         )
+    }
+
+    /// The open pull request, when one is.
+    var openPullRequest: ItemKey? {
+        if case .pullRequest(let key) = destination { key } else { nil }
+    }
+
+    /// The pull requests in the list on screen, top first.
+    var listedPullRequests: [PullRequest] {
+        switch scope {
+        case .filter(.needsAttention): attentionItems.map(\.pullRequest)
+        case .filter(let filter): pullRequests.filter(matcher(filter))
+        case .repository(let repository):
+            pullRequests.filter { $0.repository == repository && $0.isShown(showingAllBots: showingAllBots) }
+        case .sessions: []
+        }
     }
 
     func pullRequest(_ key: ItemKey) -> PullRequest? { data.pullRequest(key) }
@@ -492,20 +509,17 @@ extension SessionOrigin {
 
 /// A pull request or an issue, whichever a number names.
 enum FetchedItem: Decodable, Sendable {
-    case pullRequest(PullRequest, state: LinkedPullRequest.State)
+    case pullRequest(PullRequest)
     case issue(Issue)
 
     private enum CodingKeys: String, CodingKey {
         case typename = "__typename"
-        case state
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if try container.decode(String.self, forKey: .typename) == "PullRequest" {
-            self = .pullRequest(
-                try PullRequest(from: decoder), state: try container.decode(LinkedPullRequest.State.self, forKey: .state)
-            )
+            self = .pullRequest(try PullRequest(from: decoder))
         } else {
             self = .issue(try Issue(from: decoder))
         }
@@ -529,7 +543,7 @@ extension GitHubClient {
                 issueOrPullRequest(number: $number) {
                   __typename
                   ... on PullRequest {
-                    state \(PullRequest.fields)
+                    \(PullRequest.fields)
                   }
                   ... on Issue {
                     id number title url state createdAt updatedAt

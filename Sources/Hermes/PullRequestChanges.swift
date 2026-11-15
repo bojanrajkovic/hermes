@@ -15,4 +15,15 @@ enum PullRequestChanges {
         for id in closed { byID[id] = nil }
         return byID.values.sorted { ($0.createdAt, $0.number) > ($1.createdAt, $1.number) }
     }
+
+    /// The most a refresh loads again by ID: 4 requests, so about 4 points and 5 seconds.
+    static let watchLimit = 100
+
+    /// The node IDs of the watched pull requests that are in `list`, in the order of `keys`,
+    /// without repeats, up to `limit`. The rest wait for the search to report a change.
+    static func watched(_ keys: [ItemKey], among list: [PullRequest], limit: Int = watchLimit) -> [String] {
+        let ids = Dictionary(list.map { ($0.key, $0.id) }, uniquingKeysWith: { first, _ in first })
+        var seen: Set<String> = []
+        return Array(keys.compactMap { ids[$0] }.filter { seen.insert($0).inserted }.prefix(limit))
+    }
 }

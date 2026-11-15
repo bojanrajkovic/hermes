@@ -22,7 +22,6 @@ final class AccountData {
     /// ones that left a list while a window could be showing them.
     private(set) var fetchedPullRequests: [ItemKey: PullRequest] = [:]
     private(set) var fetchedIssues: [ItemKey: Issue] = [:]
-    private var fetchedStates: [ItemKey: LinkedPullRequest.State] = [:]
 
     /// True once the lists have loaded at least once.
     private(set) var hasLoaded = false
@@ -33,16 +32,21 @@ final class AccountData {
     private var pullRequestsLoadedAt: Date?
     private var repositoriesTriedAt: Date?
 
-    init(login: String, client: GitHubClient) {
+    /// The pull requests the account's windows show, most important first. Each refresh loads
+    /// these again by ID, because GitHub's search can trail a change by a minute.
+    private let watched: () -> [ItemKey]
+
+    init(login: String, client: GitHubClient, watched: @escaping () -> [ItemKey] = { [] }) {
         self.login = login
         self.client = client
+        self.watched = watched
     }
 
     /// What the attention inbox ranks by, with the head branches of pull requests Hermes saw merge.
     var attention: AttentionSignals {
         var signals = signals
-        signals.mergedBranches = Set(fetchedStates.compactMap { key, state in
-            state == .merged ? fetchedPullRequests[key].map { ItemBranch(repository: key.repository, name: $0.headRefName) } : nil
+        signals.mergedBranches = Set(fetchedPullRequests.values.filter { $0.state == .merged }.map {
+            ItemBranch(repository: $0.repository, name: $0.headRefName)
         })
         return signals
     }
@@ -124,12 +128,28 @@ final class AccountData {
         // A review request or a mention does not update the pull request, so one not held yet loads here.
         let held = Set(pullRequests.map(\.id))
         let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || signaledIDs.contains($0.id) }.map(\.id)
-        // A check that finishes does not update its pull request, so pending ones load again until they settle.
-        let pending = pullRequests.filter { $0.checkState == .pending || $0.checkState == .expected }.map(\.id)
-        let changed = try await client.pullRequests(ids: Array(Set(openIDs + pending).union(signaledIDs.subtracting(held))))
-        let reloaded = PullRequestChanges.apply(to: pullRequests, changed: changed, closed: Set(closedIDs))
+        // A check that finishes or runs again does not update its pull request, so any whose checks have not passed load again.
+        let unsettled = pullRequests.filter { $0.checkState != nil && $0.checkState != .success }.map(\.id)
+        let watched = watched()
+        let watchedIDs = PullRequestChanges.watched(watched, among: pullRequests)
+        async let fetched: Void = refetchFetched(watched)
+        let changed = try await client.pullRequests(
+            ids: Array(Set(openIDs + unsettled + watchedIDs).union(signaledIDs.subtracting(held))), perRequest: 25
+        )
+        await fetched
+
+        // A pull request loaded by ID says itself when it has closed, before the search does.
+        let reloaded = PullRequestChanges.apply(
+            to: pullRequests, changed: changed.filter { $0.state == .open },
+            closed: Set(closedIDs).union(changed.filter { $0.state != .open }.map(\.id))
+        )
         keepLeaving(pullRequests: reloaded)
         pullRequests = reloaded
+    }
+
+    /// Loads again the watched pull requests that are not in the open list: ones opened by number.
+    private func refetchFetched(_ watched: [ItemKey]) async {
+        for key in watched where fetchedPullRequests[key]?.state == .open { await refetch(key) }
     }
 
     /// Searches for the viewer's review requests, reviews, and mentions, in that order. The pull
@@ -175,13 +195,10 @@ final class AccountData {
     /// Keeps an item loaded by number.
     func store(_ item: FetchedItem, for key: ItemKey) {
         switch item {
-        case .pullRequest(let pullRequest, let state):
+        case .pullRequest(let pullRequest):
             let listed = pullRequests.firstIndex { $0.key == key }
             if let listed { pullRequests[listed] = pullRequest }
-            if listed == nil || state != .open {
-                fetchedPullRequests[key] = pullRequest
-                fetchedStates[key] = state
-            }
+            if listed == nil || pullRequest.state != .open { fetchedPullRequests[key] = pullRequest }
         case .issue(let issue):
             if let listed = issueLists[key.repository]?.items.firstIndex(where: { $0.number == key.number }) {
                 issueLists[key.repository]?.items[listed] = issue
@@ -267,7 +284,7 @@ final class AccountData {
 
     /// Merged or closed, for a pull request that is not in the open list. Nil when unknown.
     func closedState(of key: ItemKey) -> LinkedPullRequest.State? {
-        fetchedStates[key]
+        fetchedPullRequests[key]?.state
     }
 
     func issue(_ key: ItemKey) -> Issue? {

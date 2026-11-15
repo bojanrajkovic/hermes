@@ -59,14 +59,14 @@ sequenceDiagram
     App->>C: pullRequests(ids not loaded yet)
 
     loop every refresh
-        App->>API: search updated:>=last refresh (open), (closed), and the attention searches
-        App->>C: pullRequests(changed ids)
+        App->>API: one request: search updated:>=last refresh (open), (closed), and the attention searches
+        App->>C: pullRequests(changed, watched, and unsettled ids)
     end
     App->>C: repositories(owner) on ⌘R or 10 minutes after the last try
 
     Note over App,API: When a pull request opens
     App->>C: pullRequestDetail, pullRequestDiff, checks
-    loop every 10 seconds
+    loop every 10 seconds while its diff shows
         App->>C: pullRequestRevision
     end
 ```
@@ -75,7 +75,9 @@ sequenceDiagram
 |------|--------|-------|
 | `viewer()` | REST `/user` and GraphQL | The profile comes from REST because GraphQL's `email` needs a scope `gh` does not request. |
 | `pullRequestHits(matching:)` | GraphQL search | The pull requests a search finds, each with whether the viewer can push to its repository, 100 per page and at most 1,000. `pullRequestIDs(matching:)` returns only the IDs. `PullRequestSearch` builds the queries. |
-| `pullRequests(ids:)` | GraphQL | Pull request fields by ID, 10 per request and up to 8 requests at once. |
+| `pullRequestHits(matchingEach:)` | GraphQL search | Several searches as one request, which costs one point. A search with more than 100 results runs again through `pullRequestHits(matching:)`. |
+| `pullRequests(ids:perRequest:)` | GraphQL | Pull request fields by ID, 2 requests at a time. A first load asks for 10 per request, a refresh for 25. |
+| `viewerTeams()` | REST `/user/teams` | The teams the viewer is on, to match against a pull request's requested reviewers. |
 | `openPullRequests(owner:)` | GraphQL search | Both of the above for every open pull request in the account's non-archived repositories. |
 | `repositories(owner:)` | GraphQL | Non-archived repositories the account owns that the viewer can push to (write, maintain, or admin), with open issue counts. Pages every repository with only its permission, then counts issues for the ones kept. |
 | `issues(repository:pageSize:after:)` | GraphQL | One page of a repository's open issues. Loaded when the list is shown. |
@@ -156,6 +158,23 @@ sits beside the ordinary merge entries. It has no confirmation, because it can
 be turned off before it fires. While it is on, the header shows an
 "Auto-merge" badge with the method, and the menu offers "Disable Auto-Merge".
 Stacked pull requests do not get it, because they merge through `gh stack`.
+
+## What a refresh loads again
+
+GitHub's search can trail a change by up to a minute, and some changes never
+reach it: a check that finishes does not update its pull request. So each
+refresh also loads by ID, which is exact:
+
+- the pull requests the account's windows show, up to 100
+  (`PullRequestChanges.watchLimit`): the open ones, those with a session, the
+  attention inbox, then the lists on screen, in that order. `AppStore` collects
+  them from its windows.
+- every held pull request whose checks have not passed, so a finished check or
+  a re-run shows.
+
+A pull request loaded this way carries its `state`, so one that merged or
+closed leaves the list without waiting for the search. A pull request opened by
+number, which is in no list, loads again on its own.
 
 ## Writes
 

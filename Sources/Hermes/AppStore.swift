@@ -24,6 +24,8 @@ final class AppStore {
     private(set) var startup: Startup = .loading
     /// The window that was key last. Links open there.
     @ObservationIgnored weak var frontmost: WindowModel?
+    /// Every window that is up.
+    @ObservationIgnored let windows = NSHashTable<WindowModel>.weakObjects()
     /// Opens a window. Set by the first window, since only a view can open one.
     @ObservationIgnored var openWindow: ((WindowState) -> Void)?
     /// Links that arrived before any window was up.
@@ -152,8 +154,19 @@ final class AppStore {
     /// One account's data, made on first use. An empty login is the data of a window with no account yet.
     func data(for login: String) -> AccountData {
         if let data = accounts[login] { return data }
-        let data = AccountData(login: login, client: client)
+        let data = AccountData(login: login, client: client) { [weak self] in self?.watched(in: login) ?? [] }
         accounts[login] = data
         return data
+    }
+
+    /// The pull requests an account's windows show, most important first: the open ones,
+    /// those with a session, the attention inbox, then the lists on screen.
+    private func watched(in login: String) -> [ItemKey] {
+        let windows = windows.allObjects.filter { $0.account?.login == login }
+        guard let window = windows.first else { return [] }
+        return windows.compactMap(\.openPullRequest)
+            + sessions.sessions.compactMap { window.linkedPullRequest(of: $0)?.key }
+            + window.attentionItems.map(\.pullRequest.key)
+            + windows.flatMap(\.listedPullRequests).map(\.key)
     }
 }

@@ -4,7 +4,7 @@ private let userFields = "__typename login avatarUrl"
 extension PullRequest {
     /// The GraphQL fields `PullRequest` decodes from, for any query that loads one.
     public static let fields = """
-        id number title url isDraft createdAt updatedAt headRefName baseRefName headRefOid
+        id number title url state isDraft createdAt updatedAt headRefName baseRefName headRefOid
         reviewDecision additions deletions changedFiles mergeable autoMergeRequest { mergeMethod }
         repository { name owner { login } }
         author { \(userFields) }
@@ -141,10 +141,14 @@ extension GitHubClient {
 
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no
     /// longer names a pull request is left out.
-    public func pullRequests(ids: [String]) async throws -> [PullRequest] {
-        // 10 to a request keeps each under 2 seconds. At most 2 run at once: more
-        // in a large organization trips GitHub's secondary rate limit on bursts.
-        let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
+    ///
+    /// - Parameter perRequest: How many to ask for at once. GitHub spends about 100 ms on each,
+    ///   and charges each request a point. 10 shows a first load's progress sooner; a refresh
+    ///   asks for more, to spend fewer points.
+    public func pullRequests(ids: [String], perRequest: Int = 10) async throws -> [PullRequest] {
+        // At most 2 requests run at once: more in a large organization trips GitHub's
+        // secondary rate limit on bursts.
+        let chunks = stride(from: 0, to: ids.count, by: perRequest).map { Array(ids[$0..<min($0 + perRequest, ids.count)]) }
         var byID: [String: PullRequest] = [:]
         try await withThrowingTaskGroup(of: [PullRequest].self) { group in
             for (index, chunk) in chunks.enumerated() {

@@ -101,19 +101,6 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: current, initial: true) { opened.insert(current) }
-        .task {
-            // The lists reload each minute. An open pull request asks for its head
-            // every 10 seconds and loads itself again on a change, so a push shows
-            // up in the header and checks sooner.
-            let key = pullRequest.key
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
-                guard !Task.isCancelled, let shown = model.pullRequest(key),
-                      let revision = try? await model.client.pullRequestRevision(repository: key.repository, number: key.number)
-                else { continue }
-                if revision.headOID != shown.headOID || revision.updatedAt > shown.updatedAt { await model.refetch(key) }
-            }
-        }
         .task(id: LoadID(updatedAt: pullRequest.updatedAt, attempt: detail.attempt)) {
             await detail.load {
                 try await model.client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
