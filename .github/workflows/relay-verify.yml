@@ -5,22 +5,31 @@ name: Relay verify
 on:
   schedule:
     - cron: "17 * * * *"
-  workflow_run:
-    workflows: [Relay deploy]
-    types: [completed]
+  # Relay deploy calls this after each deploy.
+  workflow_call:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  attestations: read
+permissions: {}
+
+# A newer check replaces one in progress.
+concurrency:
+  group: relay-verify
+  cancel-in-progress: true
 
 jobs:
   verify:
-    # Skipped until the repository names the Cloudflare account the relay runs in.
-    if: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    name: Compare the deployed script with the attested bundles
     runs-on: ubuntu-latest
+    # The Cloudflare account and a token that can read the Worker's script belong to this
+    # environment, which only runs from main.
+    environment: relay-verify
+    permissions:
+      contents: read # check out the repository
+      attestations: read # look up the bundle's attestation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26

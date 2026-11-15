@@ -214,7 +214,7 @@ The `INVITE_CODES` secret holds the codes the relay accepts, separated by
 commas. Any number of tenants can register with one code. Taking a code off the list
 stops the relay accepting deliveries for the tenants that registered with it.
 
-The deploy workflow sets `INVITE_CODES` from the repository secret
+The deploy workflow sets `INVITE_CODES` from the `relay` environment's secret
 `RELAY_INVITE_CODES` on every deploy. To change the list, edit that secret and
 run the `Relay deploy` workflow. To make a code:
 
@@ -225,8 +225,7 @@ openssl rand -hex 8
 ## Deploying
 
 The `Relay deploy` workflow runs on a push to `main` that changes `relay/`, and
-by hand. It is skipped until the repository variable `CLOUDFLARE_ACCOUNT_ID` is
-set. It:
+by hand. It:
 
 1. Runs the same check as `make relay-check`, which writes the bundle to
    `relay/dist/index.js`.
@@ -245,8 +244,8 @@ gh attestation verify relay/dist/index.js --repo bojanrajkovic/hermes
 ```
 
 The attestation covers the bundle, not what Cloudflare runs, and `/version` is
-the Worker's own report. The `Relay verify` workflow closes that gap. Every
-hour, and after each deploy, it:
+the Worker's own report. The `Relay verify` workflow closes that gap. It runs
+every hour, and `Relay deploy` calls it after each deploy. It:
 
 1. Downloads the script Cloudflare is running, with
    `relay/scripts/deployed-script.mjs`. Cloudflare's
@@ -258,19 +257,31 @@ hour, and after each deploy, it:
 A red `Relay verify` run means the relay is running something this
 repository's workflow did not build. Its runs and logs are public.
 
-The workflows need:
+The workflows' settings live in two GitHub environments, not in the
+repository, so only the job that names an environment can read its values. Both
+environments allow only the `main` branch.
 
-| Setting | Kind | Value |
-|---|---|---|
-| `CLOUDFLARE_ACCOUNT_ID` | Repository variable | The Cloudflare account the relay runs in. Both workflows are skipped without it. |
-| `CLOUDFLARE_API_TOKEN` | Repository secret | A token that can edit Workers scripts in that account. |
-| `RELAY_INVITE_CODES` | Repository secret | The invite codes, separated by commas. |
+| Environment | Used by | Setting | Kind | Value |
+|---|---|---|---|---|
+| `relay` | The deploy job | `CLOUDFLARE_ACCOUNT_ID` | Variable | The Cloudflare account the relay runs in. |
+| | | `CLOUDFLARE_API_TOKEN` | Secret | A token that can deploy the `hermes-relay` Worker. |
+| | | `RELAY_INVITE_CODES` | Secret | The invite codes, separated by commas. |
+| `relay-verify` | The verify job | `CLOUDFLARE_ACCOUNT_ID` | Variable | The same account. |
+| | | `CLOUDFLARE_API_TOKEN` | Secret | A token that can read the Worker's script. It needs no more than that. |
+
+The verify job runs every hour, so it has its own environment and can hold a
+token that cannot deploy.
 
 The Worker is reached at its `workers.dev` address. No custom domain is
 configured.
 
 Every workflow pins each action to a commit, so a moved tag can't change what
-builds, deploys, or verifies the relay.
+builds, deploys, or verifies the relay. The workflows pass
+[zizmor](https://docs.zizmor.sh) with its `auditor` persona and online checks:
+
+```bash
+GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
+```
 
 ## Layout
 

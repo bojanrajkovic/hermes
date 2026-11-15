@@ -8,30 +8,35 @@ on:
       - ".github/workflows/relay-deploy.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
-concurrency: relay-deploy
+# One deploy at a time. A deploy in progress finishes before the next starts.
+concurrency:
+  group: relay-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    # Skipped until the repository names the Cloudflare account to deploy to.
-    if: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    name: Attest and deploy
     runs-on: ubuntu-latest
+    # The Cloudflare account, the deploy token, and the invite codes belong to this environment,
+    # which only runs from main.
+    environment: relay
     permissions:
-      contents: read
-      id-token: write
-      attestations: write
+      contents: read # check out the repository
+      id-token: write # sign the bundle's attestation
+      attestations: write # store the attestation
     defaults:
       run:
         working-directory: relay
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No dependency cache here: what this job installs is what it deploys.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
-          cache: npm
-          cache-dependency-path: relay/package-lock.json
       - run: npm ci --no-audit --no-fund
 
       # Type-checks, runs the tests, and writes the bundle to dist/index.js.
@@ -51,3 +56,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RELAY_INVITE_CODES: ${{ secrets.RELAY_INVITE_CODES }}
+
+  verify:
+    name: Verify the deploy
+    needs: deploy
+    permissions:
+      contents: read # check out the repository
+      attestations: read # look up the bundle's attestation
+    uses: $/.github/workflows/relay-verify.yml
