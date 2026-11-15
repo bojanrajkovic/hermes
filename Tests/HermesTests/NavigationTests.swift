@@ -6,14 +6,14 @@ import Testing
 
 @Suite struct InboxFilterTests {
     private let mine = pullRequest(1, author: user("bojan"))
-    private let theirs = pullRequest(2, author: user("alice"), draft: true)
+    private let theirs = pullRequest(2, author: user("alice"), draft: true, requested: [.user(login: "bojan")])
     private let failing = pullRequest(3, author: user("alice"), checks: .failure)
-    private let quietBot = pullRequest(4, author: user("renovate", bot: true))
+    private let quietBot = pullRequest(4, author: user("renovate", bot: true), requested: [.user(login: "bojan")])
     private let failingBot = pullRequest(5, author: user("renovate", bot: true), checks: .error)
 
     private func numbers(_ filter: InboxFilter, showingAllBots: Bool = false) -> [Int] {
         [mine, theirs, failing, quietBot, failingBot]
-            .filter { filter.matches($0, viewer: "bojan", attention: AttentionSignals(directRequests: [theirs.id, quietBot.id]), now: .now, showingAllBots: showingAllBots) }
+            .filter { filter.matches($0, viewer: "bojan", attention: AttentionSignals(), now: .now, showingAllBots: showingAllBots) }
             .map(\.number)
     }
 

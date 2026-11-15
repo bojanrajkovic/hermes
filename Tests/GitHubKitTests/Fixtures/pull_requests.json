@@ -24,6 +24,12 @@
           "changedFiles": 6,
           "mergeable": "MERGEABLE",
           "autoMergeRequest": { "mergeMethod": "SQUASH" },
+          "reviewRequests": { "nodes": [
+            { "requestedReviewer": { "login": "alice" } },
+            { "requestedReviewer": { "slug": "reviewers", "organization": { "login": "acme" } } },
+            { "requestedReviewer": null }
+          ] },
+          "viewerLatestReview": { "state": "COMMENTED", "commit": { "oid": "abc123" } },
           "repository": {
             "name": "airway",
             "owner": {

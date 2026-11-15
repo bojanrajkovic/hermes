@@ -11,12 +11,10 @@ final class AccountData {
     /// Empty for the copy a window uses before it has an account.
     let login: String
     private let client: GitHubClient
-    /// The signed-in user's login, once known. Review searches are about them, not the account.
-    private let viewer: () -> String?
 
     private(set) var pullRequests: [PullRequest] = []
     private(set) var repositories: [Repository] = []
-    /// The viewer's part in each pull request: review requests, reviews, and mentions.
+    /// The viewer's teams and mentions.
     private var signals = AttentionSignals()
     private(set) var issueLists: [RepositoryRef: IssueList] = [:]
     /// Pull requests and issues loaded one at a time, by number, because they
@@ -35,10 +33,9 @@ final class AccountData {
     private var pullRequestsLoadedAt: Date?
     private var repositoriesTriedAt: Date?
 
-    init(login: String, client: GitHubClient, viewer: @escaping () -> String?) {
+    init(login: String, client: GitHubClient) {
         self.login = login
         self.client = client
-        self.viewer = viewer
     }
 
     /// What the attention inbox ranks by, with the head branches of pull requests Hermes saw merge.
@@ -79,6 +76,8 @@ final class AccountData {
             }
             pullRequestsLoadedAt = started
             if let repositories = try await loadedRepositories { self.repositories = repositories }
+            // Teams change as rarely as repositories do. A failed load keeps the last answer.
+            if everything || reposAreStale, let teams = try? await client.viewerTeams() { signals.teams = teams }
             listError = nil
             lastRefresh = .now
         } catch {
@@ -132,25 +131,17 @@ final class AccountData {
         pullRequests = reloaded
     }
 
-    /// Searches for the viewer's review requests, reviews, and mentions, and the commit of each
-    /// of their latest reviews. Returns every pull request they name, to load from any repository.
+    /// Searches for the viewer's review requests, reviews, and mentions. Returns every pull
+    /// request they name, to load from any repository: the pull request itself says who it asks
+    /// and what the viewer reviewed, so the searches only find the ones not held yet.
     private func loadSignals() async throws -> Set<String> {
-        async let direct = client.pullRequestIDs(matching: PullRequestSearch.directlyRequested(owner: login))
         async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
         async let reviewed = client.pullRequestIDs(matching: PullRequestSearch.reviewedByViewer(owner: login))
         async let mentions = client.pullRequestIDs(matching: PullRequestSearch.mentioningViewer(owner: login))
-        let (directIDs, requestedIDs, reviewedIDs, mentionIDs) = try await (direct, requested, reviewed, mentions)
-        let commits = if let viewer = viewer() {
-            try await client.latestReviewCommits(pullRequestIDs: reviewedIDs, viewer: viewer)
-        } else {
-            [String: String]()
-        }
+        let (requestedIDs, reviewedIDs, mentionIDs) = try await (requested, reviewed, mentions)
 
-        signals = AttentionSignals(
-            directRequests: Set(directIDs), teamRequests: Set(requestedIDs).subtracting(directIDs),
-            reviewedCommits: commits, mentions: Set(mentionIDs)
-        )
-        return Set(directIDs + requestedIDs + reviewedIDs + mentionIDs)
+        signals.mentions = Set(mentionIDs)
+        return Set(requestedIDs + reviewedIDs + mentionIDs)
     }
 
     /// Reloads when the lists are older than a few seconds, for app activation.

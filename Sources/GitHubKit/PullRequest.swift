@@ -48,6 +48,12 @@ public struct StackEntry: Sendable, Hashable {
     }
 }
 
+/// Someone a pull request asks for a review.
+public enum Reviewer: Sendable, Hashable {
+    case user(login: String)
+    case team(organization: String, slug: String)
+}
+
 /// An open pull request, with what a list row shows.
 public struct PullRequest: Sendable, Hashable, Identifiable {
     /// The GraphQL node ID.
@@ -80,13 +86,18 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     public let closingIssueNumbers: [Int]
     /// The method GitHub will merge with once requirements pass. `nil` when auto-merge is off.
     public let autoMergeMethod: MergeMethod?
+    /// The people and teams asked for a review who have not given one. At most 20.
+    public let requestedReviewers: [Reviewer]
+    /// The commit the viewer's latest submitted review was on. Nil when the viewer has not reviewed.
+    public let viewerReviewedCommit: String?
 
     public init(
         id: String, number: Int, title: String, url: URL, repository: RepositoryRef, author: User?,
         isDraft: Bool, createdAt: Date, updatedAt: Date, headRefName: String, baseRefName: String,
         headOID: String, reviewDecision: ReviewDecision?, additions: Int, deletions: Int,
         changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: StatusState?,
-        stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil
+        stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil,
+        requestedReviewers: [Reviewer] = [], viewerReviewedCommit: String? = nil
     ) {
         self.id = id
         self.number = number
@@ -110,6 +121,8 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         self.stack = stack
         self.closingIssueNumbers = closingIssueNumbers
         self.autoMergeMethod = autoMergeMethod
+        self.requestedReviewers = requestedReviewers
+        self.viewerReviewedCommit = viewerReviewedCommit
     }
 }
 
@@ -118,6 +131,7 @@ extension PullRequest: Decodable {
         case id, number, title, url, repository, author, isDraft, createdAt, updatedAt, headRefName
         case baseRefName, headRefOid, reviewDecision, additions, deletions, changedFiles, mergeable
         case labels, commits, stack, stackEntry, closingIssuesReferences, autoMergeRequest
+        case reviewRequests, viewerLatestReview
     }
 
     private struct HeadCommit: Decodable {
@@ -136,6 +150,31 @@ extension PullRequest: Decodable {
     }
 
     private struct AutoMerge: Decodable { let mergeMethod: MergeMethod }
+    private struct ReviewRequest: Decodable {
+        struct Requested: Decodable {
+            struct Organization: Decodable { let login: String }
+            let login: String?
+            let slug: String?
+            let organization: Organization?
+        }
+        /// Nil when the viewer may not see the team.
+        let requestedReviewer: Requested?
+
+        var reviewer: Reviewer? {
+            if let slug = requestedReviewer?.slug, let organization = requestedReviewer?.organization {
+                .team(organization: organization.login, slug: slug)
+            } else {
+                requestedReviewer?.login.map { .user(login: $0) }
+            }
+        }
+    }
+
+    private struct Review: Decodable {
+        struct Commit: Decodable { let oid: String }
+        let state: String
+        let commit: Commit?
+    }
+
     private struct Position: Decodable { let position: Int }
     private struct Number: Decodable { let number: Int }
 
@@ -164,6 +203,11 @@ extension PullRequest: Decodable {
         closingIssueNumbers = try container.decode(Connection<Number>.self, forKey: .closingIssuesReferences)
             .nodes.map(\.number)
         autoMergeMethod = try container.decodeIfPresent(AutoMerge.self, forKey: .autoMergeRequest)?.mergeMethod
+        requestedReviewers = try container.decodeIfPresent(Connection<ReviewRequest>.self, forKey: .reviewRequests)?
+            .nodes.compactMap(\.reviewer) ?? []
+        // A review the viewer started on github.com and has not submitted is not a review yet.
+        let review = try container.decodeIfPresent(Review.self, forKey: .viewerLatestReview)
+        viewerReviewedCommit = review?.state == "PENDING" ? nil : review?.commit?.oid
 
         let stack = try container.decodeIfPresent(Stack.self, forKey: .stack)
         let position = try container.decodeIfPresent(Position.self, forKey: .stackEntry)?.position

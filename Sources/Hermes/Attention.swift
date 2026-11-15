@@ -62,14 +62,10 @@ struct ItemBranch: Hashable, Sendable {
     let name: String
 }
 
-/// What Hermes knows about the viewer's part in each pull request, besides the pull request itself.
+/// What Hermes knows about the viewer's part in pull requests, besides what each pull request holds.
 struct AttentionSignals: Equatable, Sendable {
-    /// Node IDs of pull requests that ask for the viewer's review by name.
-    var directRequests: Set<String> = []
-    /// Node IDs of pull requests that ask a team the viewer is on, and not the viewer by name.
-    var teamRequests: Set<String> = []
-    /// The commit of the viewer's latest review, by pull request node ID.
-    var reviewedCommits: [String: String] = [:]
+    /// The teams the viewer is on.
+    var teams: Set<Reviewer> = []
     /// Node IDs of pull requests that mention the viewer.
     var mentions: Set<String> = []
     /// Head branches of pull requests Hermes knows merged.
@@ -81,9 +77,9 @@ func attentionReason(for pullRequest: PullRequest, viewer: String, signals: Atte
     let isMine = pullRequest.author?.login == viewer
     var reasons: [AttentionReason] = []
 
-    if signals.directRequests.contains(pullRequest.id) { reasons.append(.reviewRequested) }
-    if signals.teamRequests.contains(pullRequest.id) { reasons.append(.teamReviewRequested) }
-    if !isMine, let reviewed = signals.reviewedCommits[pullRequest.id], reviewed != pullRequest.headOID {
+    if pullRequest.requestedReviewers.contains(.user(login: viewer)) { reasons.append(.reviewRequested) }
+    if !signals.teams.isDisjoint(with: pullRequest.requestedReviewers) { reasons.append(.teamReviewRequested) }
+    if !isMine, let reviewed = pullRequest.viewerReviewedCommit, reviewed != pullRequest.headOID {
         reasons.append(.newCommits)
     }
     if signals.mentions.contains(pullRequest.id) { reasons.append(.mentioned) }

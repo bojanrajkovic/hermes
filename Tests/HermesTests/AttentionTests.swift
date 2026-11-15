@@ -14,17 +14,19 @@ import Testing
     // MARK: Reviewer
 
     @Test func directAndTeamRequestsAreTold() {
-        let theirs = pullRequest(1, author: user("alice"))
+        let team = Reviewer.team(organization: "acme", slug: "reviewers")
+        let mine = AttentionSignals(teams: [team])
 
-        #expect(reason(theirs, AttentionSignals(directRequests: [theirs.id])) == .reviewRequested)
-        #expect(reason(theirs, AttentionSignals(teamRequests: [theirs.id])) == .teamReviewRequested)
+        #expect(reason(pullRequest(1, author: user("alice"), requested: [.user(login: "bojan")])) == .reviewRequested)
+        #expect(reason(pullRequest(1, author: user("alice"), requested: [.user(login: "carol")])) == nil)
+        #expect(reason(pullRequest(1, author: user("alice"), requested: [team]), mine) == .teamReviewRequested)
+        #expect(reason(pullRequest(1, author: user("alice"), requested: [team])) == nil)
+        #expect(reason(pullRequest(1, author: user("alice"), requested: [team, .user(login: "bojan")]), mine) == .reviewRequested)
     }
 
     @Test func newCommitsSinceYourReview() {
-        let theirs = pullRequest(1, author: user("alice"), head: "new")
-
-        #expect(reason(theirs, AttentionSignals(reviewedCommits: [theirs.id: "old"])) == .newCommits)
-        #expect(reason(theirs, AttentionSignals(reviewedCommits: [theirs.id: "new"])) == nil)
+        #expect(reason(pullRequest(1, author: user("alice"), head: "new", reviewed: "old")) == .newCommits)
+        #expect(reason(pullRequest(1, author: user("alice"), head: "new", reviewed: "new")) == nil)
     }
 
     @Test func mentions() {
@@ -76,12 +78,12 @@ import Testing
 
     @Test func listIsRankedThenNewestFirst() {
         // Equal update times fall back to the higher number, the newer pull request.
-        let older = pullRequest(1, author: user("alice"))
-        let newer = pullRequest(2, author: user("alice"))
+        let older = pullRequest(1, author: user("alice"), requested: [.user(login: "bojan")])
+        let newer = pullRequest(2, author: user("alice"), requested: [.user(login: "bojan")])
         let failing = pullRequest(3, author: user("bojan"), checks: .failure)
         let mentioned = pullRequest(4, author: user("alice"))
         let quiet = pullRequest(5, author: user("alice"))
-        let signals = AttentionSignals(directRequests: [older.id, newer.id], mentions: [mentioned.id])
+        let signals = AttentionSignals(mentions: [mentioned.id])
 
         let ranked = attentionList([mentioned, quiet, failing, older, newer], viewer: viewer, signals: signals, now: now)
 

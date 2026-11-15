@@ -13,6 +13,10 @@ extension PullRequest {
         stack { id number size baseRefName }
         stackEntry { position }
         closingIssuesReferences(first: 20) { nodes { number } }
+        reviewRequests(first: 20) {
+          nodes { requestedReviewer { ... on User { login } ... on Bot { login } ... on Team { slug organization { login } } } }
+        }
+        viewerLatestReview { state commit { oid } }
         """
 }
 
@@ -32,6 +36,18 @@ extension GitHubClient {
             as: OrganizationsData.self
         )
         return ViewerProfile(user: user, organizations: organizations)
+    }
+
+    /// The teams the signed-in user is on, in every organization. At most 100.
+    public func viewerTeams() async throws -> Set<Reviewer> {
+        struct Team: Decodable, Sendable {
+            struct Organization: Decodable, Sendable { let login: String }
+            let slug: String
+            let organization: Organization
+        }
+        return Set(try await get("/user/teams?per_page=100", as: [Team].self).map {
+            .team(organization: $0.organization.login, slug: $0.slug)
+        })
     }
 }
 
@@ -99,38 +115,6 @@ extension GitHubClient {
             cursor = page.nextCursor
         } while cursor != nil
         return hits
-    }
-
-    /// The commit each pull request's latest review by `viewer` was on, by pull request node ID.
-    /// A pull request with no review by the viewer is left out. 50 to a request, one at a time.
-    public func latestReviewCommits(pullRequestIDs ids: [String], viewer: String) async throws -> [String: String] {
-        struct Data: Decodable, Sendable {
-            struct Node: Decodable, Sendable {
-                struct Review: Decodable, Sendable {
-                    struct Commit: Decodable, Sendable { let oid: String }
-                    let commit: Commit?
-                }
-                let id: String?
-                let reviews: Connection<Review>?
-            }
-            let nodes: [Node?]
-        }
-        let query = """
-            query($ids: [ID!]!, $viewer: String!) {
-              nodes(ids: $ids) { ... on PullRequest { id reviews(last: 1, author: $viewer) { nodes { commit { oid } } } } }
-            }
-            """
-        var commits: [String: String] = [:]
-        for start in stride(from: 0, to: ids.count, by: 50) {
-            let chunk = ids[start..<min(start + 50, ids.count)].map(JSONValue.string)
-            let nodes = try await retryingReads {
-                try await self.graphQL(query, variables: ["ids": .array(chunk), "viewer": .string(viewer)], as: Data.self).nodes
-            }
-            for case let node? in nodes {
-                if let id = node.id, let oid = node.reviews?.nodes.last?.commit?.oid { commits[id] = oid }
-            }
-        }
-        return commits
     }
 
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no

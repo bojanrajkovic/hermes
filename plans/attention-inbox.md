@@ -27,16 +27,26 @@ applies here as in the other lists.
 ## Signals
 
 `attentionReason(for:viewer:signals:now:)` in `Sources/Hermes/Attention.swift`
-decides, from the pull request and `AttentionSignals`. Most reasons come from
-the pull request's own fields. The rest come from searches scoped to the
-account, run on every refresh:
+decides, from the pull request and `AttentionSignals`. The pull request holds
+most of what a reason needs, so a reason is as current as the pull request:
 
-- `user-review-requested:@me`: requests by name.
-- `review-requested:@me`: requests by name or team. Team requests are these
-  minus the ones by name.
-- `reviewed-by:@me`: pull requests you reviewed. For these, one more request
-  loads the commit of your latest review, to compare with the head.
-- `mentions:@me`: mentions.
+- `requestedReviewers`: the people and teams it asks. A request by name is
+  "Review requested". A request to a team in `AttentionSignals.teams` is
+  "Team review".
+- `viewerReviewedCommit`: the commit of your latest submitted review, to
+  compare with the head.
+
+`AttentionSignals` holds the rest:
+
+- `teams`: the teams you are on, from `GET /user/teams`. They reload with the
+  repositories, every 10 minutes.
+- `mentions`: from the search `mentions:@me`, run on every refresh. GitHub has
+  no field for it on the pull request.
+- `mergedBranches`: head branches of pull requests Hermes saw merge.
+
+Three searches scoped to the account run on every refresh to find pull requests
+Hermes does not hold yet: `review-requested:@me`, `reviewed-by:@me`, and
+`mentions:@me`.
 
 Every pull request these searches name loads, even from a repository you
 cannot push to, which the org-wide lists leave out.

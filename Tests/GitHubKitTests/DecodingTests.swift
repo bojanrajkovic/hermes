@@ -54,11 +54,15 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         ))
         #expect(top.closingIssueNumbers == [6])
         #expect(top.autoMergeMethod == .squash)
+        #expect(top.requestedReviewers == [.user(login: "alice"), .team(organization: "acme", slug: "reviewers")])
+        #expect(top.viewerReviewedCommit == "abc123")
 
         let releaseBot = pullRequests[3]
         #expect(releaseBot.author?.isBot == true)
         #expect(releaseBot.stack == nil)
         #expect(releaseBot.autoMergeMethod == nil)
+        #expect(releaseBot.requestedReviewers.isEmpty)
+        #expect(releaseBot.viewerReviewedCommit == nil)
         #expect(!releaseBot.labels.isEmpty)
 
         #expect(pullRequests[4].checkState == .failure)
