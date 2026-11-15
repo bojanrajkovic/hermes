@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hermes-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // Off so Cloudflare keeps no record of the requests the relay receives.
+  "observability": { "enabled": false },
+  // The deploy sets COMMIT to the commit it builds.
+  "vars": { "COMMIT": "dev" }
+}

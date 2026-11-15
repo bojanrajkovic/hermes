@@ -55,7 +55,7 @@ NOTES_FILE       ?=
 
 .PHONY: all deps build check test release run clean install uninstall register help \
         icon check-version notary-setup sign zip-notary notarize staple zip-release \
-        checksum verify-release dist github-release print-version
+        checksum verify-release dist github-release print-version relay-check
 
 all: build
 
@@ -64,7 +64,8 @@ help:
 	@echo "  make / build      Build $(CONFIG) into ./$(APP)  (default)"
 	@echo "  check             Compile only (swift build) — no bundle/sign; CI/agent gate"
 	@echo "  test              Run the SwiftPM test suite"
-	@echo "  release           Build release into ./$(APP)"
+	@echo "  relay-check       Type-check and bundle the relay Worker in ./relay (needs Node)"
+	@echo "  release          Build release into ./$(APP)"
 	@echo "  run               Build and launch $(APP_NAME)"
 	@echo "  icon              Regenerate build/AppIcon.icns from scripts/make-icon.swift"
 	@echo "  clean             Remove ./build/ ./.build/ ./dist/"
@@ -141,6 +142,11 @@ check: deps
 test: deps
 	swift test
 	@echo "✓ tests pass"
+
+# Type-check the relay Worker and bundle it without deploying.
+relay-check:
+	cd relay && npm ci --no-audit --no-fund && npm run check
+	@echo "✓ relay checks"
 
 print-version:
 	@echo "VERSION=$(VERSION)"

@@ -1,0 +1,16 @@
+{
+  "name": "hermes-relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit && wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "hono": "^4.13.18"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "wrangler": "^4.162.0"
+  }
+}
