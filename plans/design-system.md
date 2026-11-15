@@ -83,7 +83,7 @@ prose column, to fit code blocks and tables.
 
 | View | What it shows |
 |------|---------------|
-| `StatusGlyph` | A CI state as a symbol with a tint: passed, failed, pending, or none. Each state has its own shape, so color is never the only signal. |
+| `StatusGlyph` | A CI state as a symbol with a tint: passed, failed, warning (only optional checks failed), pending, or none. Each state has its own shape, so color is never the only signal. |
 | `Badge` | A short label in a tinted capsule, such as "Draft" or "Running". |
 | `LabelChip` | A GitHub label in its own color, adjusted to stay legible in light and dark. |
 | `AvatarView` | A round avatar, loaded once per URL through `AvatarCache`. |

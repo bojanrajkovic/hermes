@@ -167,7 +167,45 @@ extension GitHubClient {
                 for pullRequest in loaded { byID[pullRequest.id] = pullRequest }
             }
         }
-        return ids.compactMap { byID[$0] }
+        return try await settlingFailedChecks(ids.compactMap { byID[$0] })
+    }
+
+    /// Asks, for each pull request whose checks failed, whether a check its base branch requires
+    /// did. GitHub answers that per pull request, so the question cannot be part of
+    /// `PullRequest.fields`.
+    private func settlingFailedChecks(_ pullRequests: [PullRequest]) async throws -> [PullRequest] {
+        let failed = pullRequests.filter { $0.checkState == .failed }.map(\.id)
+        var rollups: [String: ChecksRollup] = [:]
+        for start in stride(from: 0, to: failed.count, by: 25) {
+            let chunk = Array(failed[start..<min(start + 25, failed.count)])
+            let parameters = chunk.indices.map { "$p\($0): ID!" }.joined(separator: ", ")
+            // shortcut: reads a commit's first 100 checks, page them when a repository runs more.
+            let nodes = chunk.indices.map { """
+                p\($0): node(id: $p\($0)) { ... on PullRequest { commits(last: 1) { nodes { commit { statusCheckRollup {
+                  contexts(first: 100) { nodes {
+                    __typename
+                    ... on CheckRun { databaseId name status conclusion checkSuite { app { name } } isRequired(pullRequestId: $p\($0)) }
+                    ... on StatusContext { context state isRequired(pullRequestId: $p\($0)) }
+                  } }
+                } } } } } }
+                """
+            }
+            let variables = Dictionary(uniqueKeysWithValues: chunk.enumerated().map { ("p\($0)", JSONValue.string($1)) })
+            let found = try await retryingReads {
+                try await self.graphQL(
+                    "query(\(parameters)) { \(nodes.joined(separator: " ")) }", variables: variables, as: [String: RequiredChecks?].self
+                )
+            }
+            for (index, id) in chunk.enumerated() {
+                guard let required = found["p\(index)"]??.outcomes else { continue }
+                rollups[id] = .settled(required: required)
+            }
+        }
+        return pullRequests.map { pullRequest in
+            var pullRequest = pullRequest
+            if let rollup = rollups[pullRequest.id] { pullRequest.checkState = rollup }
+            return pullRequest
+        }
     }
 
     /// Runs a read again, up to two more times, when GitHub answers HTTP 502
@@ -602,6 +640,37 @@ extension PullRequestHit: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         canPush = try container.decodeIfPresent(Repository.self, forKey: .repository)?.viewerPermission?.canPush ?? false
+    }
+}
+
+/// The outcomes of the checks a pull request's base branch requires, among those on its head commit.
+struct RequiredChecks: Decodable, Sendable {
+    private struct Context: Decodable {
+        let isRequired: Bool
+        let check: Check
+
+        private enum CodingKeys: String, CodingKey { case isRequired }
+
+        init(from decoder: any Decoder) throws {
+            isRequired = try decoder.container(keyedBy: CodingKeys.self).decode(Bool.self, forKey: .isRequired)
+            check = try Check(from: decoder)
+        }
+    }
+    private struct HeadCommit: Decodable {
+        struct Commit: Decodable {
+            struct Rollup: Decodable { let contexts: Connection<Context> }
+            let statusCheckRollup: Rollup?
+        }
+        let commit: Commit
+    }
+    private enum CodingKeys: String, CodingKey { case commits }
+
+    /// Nil when the head commit has no checks any more.
+    let outcomes: [Check.Outcome]?
+
+    init(from decoder: any Decoder) throws {
+        outcomes = try decoder.container(keyedBy: CodingKeys.self).decode(Connection<HeadCommit>.self, forKey: .commits)
+            .nodes.last?.commit.statusCheckRollup?.contexts.nodes.filter(\.isRequired).map(\.check.outcome)
     }
 }
 

@@ -36,15 +36,15 @@ import Testing
     }
 
     @Test func someoneElsesPullRequestWithNoSignalIsNotListed() {
-        #expect(reason(pullRequest(1, author: user("alice"), checks: .failure, review: .changesRequested)) == nil)
+        #expect(reason(pullRequest(1, author: user("alice"), checks: .failed, review: .changesRequested)) == nil)
     }
 
     // MARK: Author
 
     @Test func yourPullRequestNeedsAction() {
         #expect(reason(pullRequest(1, author: user("bojan"), review: .changesRequested)) == .changesRequested)
-        #expect(reason(pullRequest(1, author: user("bojan"), checks: .failure)) == .failingChecks)
-        #expect(reason(pullRequest(1, author: user("bojan"), checks: .error)) == .failingChecks)
+        #expect(reason(pullRequest(1, author: user("bojan"), checks: .failed)) == .failingChecks)
+        #expect(reason(pullRequest(1, author: user("bojan"), checks: .optionalFailed)) == nil)
         #expect(reason(pullRequest(1, author: user("bojan"), mergeable: .conflicting)) == .conflicts)
     }
 
@@ -58,6 +58,7 @@ import Testing
     @Test func readyToMergeNeedsApprovalGreenChecksAndNoConflicts() {
         #expect(reason(pullRequest(1, author: user("bojan"), review: .approved)) == .readyToMerge)
         #expect(reason(pullRequest(1, author: user("bojan"), checks: nil, review: .approved)) == .readyToMerge)
+        #expect(reason(pullRequest(1, author: user("bojan"), checks: .optionalFailed, review: .approved)) == .readyToMerge)
         #expect(reason(pullRequest(1, author: user("bojan"), checks: .pending, review: .approved)) == nil)
         #expect(reason(pullRequest(1, author: user("bojan"), draft: true, review: .approved)) == nil)
         #expect(reason(pullRequest(1, author: user("bojan"), review: .approved, mergeable: .unknown)) == nil)
@@ -71,7 +72,7 @@ import Testing
     // MARK: Ranking
 
     @Test func theStrongestReasonWins() {
-        let mine = pullRequest(1, author: user("bojan"), checks: .failure, created: now, review: .changesRequested)
+        let mine = pullRequest(1, author: user("bojan"), checks: .failed, created: now, review: .changesRequested)
 
         #expect(reason(mine, AttentionSignals(mentions: [mine.id])) == .changesRequested)
     }
@@ -80,7 +81,7 @@ import Testing
         // Equal update times fall back to the higher number, the newer pull request.
         let older = pullRequest(1, author: user("alice"), requested: [.user(login: "bojan")])
         let newer = pullRequest(2, author: user("alice"), requested: [.user(login: "bojan")])
-        let failing = pullRequest(3, author: user("bojan"), checks: .failure)
+        let failing = pullRequest(3, author: user("bojan"), checks: .failed)
         let mentioned = pullRequest(4, author: user("alice"))
         let quiet = pullRequest(5, author: user("alice"))
         let signals = AttentionSignals(mentions: [mentioned.id])

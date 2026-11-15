@@ -76,7 +76,7 @@ sequenceDiagram
 | `viewer()` | REST `/user` and GraphQL | The profile comes from REST because GraphQL's `email` needs a scope `gh` does not request. |
 | `pullRequestHits(matching:)` | GraphQL search | The pull requests a search finds, each with whether the viewer can push to its repository, 100 per page and at most 1,000. `pullRequestIDs(matching:)` returns only the IDs. `PullRequestSearch` builds the queries. |
 | `pullRequestHits(matchingEach:)` | GraphQL search | Several searches as one request, which costs one point. A search with more than 100 results runs again through `pullRequestHits(matching:)`. |
-| `pullRequests(ids:perRequest:)` | GraphQL | Pull request fields by ID, 2 requests at a time. A first load asks for 10 per request, a refresh for 25. |
+| `pullRequests(ids:perRequest:)` | GraphQL | Pull request fields by ID, 2 requests at a time. A first load asks for 10 per request, a refresh for 25. Then one more request per 25 pull requests whose checks failed, to learn whether a required check did. |
 | `viewerTeams()` | REST `/user/teams` | The teams the viewer is on, to match against a pull request's requested reviewers. |
 | `openPullRequests(owner:)` | GraphQL search | Both of the above for every open pull request in the account's non-archived repositories. |
 | `repositories(owner:)` | GraphQL | Non-archived repositories the account owns that the viewer can push to (write, maintain, or admin), with open issue counts. Pages every repository with only its permission, then counts issues for the ones kept. |
@@ -112,8 +112,29 @@ number and loaded again, since a window may be showing it.
 
 `PullRequest.isShown(showingAllBots:)` decides whether a list shows a pull
 request. A person's pull request always shows. A bot's shows only when
-`needsAttention` is true: its check rollup is `failure` or `error`, or it has
-merge conflicts. The Show All Bot Pull Requests setting turns the filter off.
+`needsAttention` is true: a required check failed, or it has merge conflicts.
+The Show All Bot Pull Requests setting turns the filter off.
+
+## Required and optional checks
+
+`PullRequest.checkState` is a `ChecksRollup`: passed, pending, failed, or
+optional failed. GitHub's own rollup is `FAILURE` when any check fails, required
+or not. So for each pull request with a failed rollup, `pullRequests(ids:)`
+reads the head commit's first 100 checks with `isRequired(pullRequestId:)`,
+which takes the pull request as an argument and so cannot be part of
+`PullRequest.fields`.
+
+| The required checks | `checkState` |
+| --- | --- |
+| One failed | `failed` |
+| None failed, one is still running | `pending` |
+| None failed, all finished, or there are none | `optionalFailed` |
+
+A repository that requires no checks has only optional ones, so a failure
+there is `optionalFailed`. Only `failed` counts as failing: in the Failing
+filter, the bot filter, and the attention inbox. `optionalFailed` shows as a
+yellow warning triangle, "Optional checks failed", and does not stop a pull
+request from being "Ready to merge".
 
 ## Stacks
 

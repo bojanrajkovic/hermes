@@ -85,14 +85,15 @@ func attentionReason(for pullRequest: PullRequest, viewer: String, signals: Atte
     if signals.mentions.contains(pullRequest.id) { reasons.append(.mentioned) }
 
     if isMine {
-        let failing = pullRequest.checkState == .failure || pullRequest.checkState == .error
+        let failing = pullRequest.checkState == .failed
         if pullRequest.reviewDecision == .changesRequested { reasons.append(.changesRequested) }
         if failing { reasons.append(.failingChecks) }
         if pullRequest.mergeable == .conflicting { reasons.append(.conflicts) }
         if signals.mergedBranches.contains(ItemBranch(repository: pullRequest.repository, name: pullRequest.baseRefName)) {
             reasons.append(.needsRebase)
         }
-        let checksPass = pullRequest.checkState == nil || pullRequest.checkState == .success
+        // Checks that merging does not require do not hold it back.
+        let checksPass = pullRequest.checkState != .failed && pullRequest.checkState != .pending
         if pullRequest.reviewDecision == .approved, checksPass, pullRequest.mergeable == .mergeable, !pullRequest.isDraft {
             reasons.append(.readyToMerge)
         }

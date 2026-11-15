@@ -49,7 +49,7 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(top.deletions == 1)
         #expect(top.changedFileCount == 6)
         #expect(top.mergeable == .mergeable)
-        #expect(top.checkState == .success)
+        #expect(top.checkState == .passed)
         #expect(top.stack == StackEntry(
             stackID: "PRS_kwDOVkPx6c4AMxgs", stackNumber: 97, size: 3, baseRefName: "main", position: 3
         ))
@@ -66,7 +66,7 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(releaseBot.viewerReviewedCommit == nil)
         #expect(!releaseBot.labels.isEmpty)
 
-        #expect(pullRequests[4].checkState == .failure)
+        #expect(pullRequests[4].checkState == .failed)
     }
 
     @Test func repositoriesDecodeOpenCounts() throws {

@@ -171,6 +171,28 @@ actor TokenCounter {
         #expect(bodies[0].contains(#""q0":"first""#) && bodies[0].contains(#""q1":"second""#))
     }
 
+    @Test func failedChecksAreAskedAboutAgainAndCountOnlyWhenRequired() async throws {
+        let json = try JSONSerialization.jsonObject(with: fixture("pull_requests")) as? [String: [String: [String: Any]]]
+        let failed = try #require((json?["data"]?["search"]?["nodes"] as? [[String: Any]])?[4])
+        let node = String(decoding: try JSONSerialization.data(withJSONObject: failed), as: UTF8.self)
+        let id = try #require(failed["id"] as? String)
+        let client = client { request in
+            guard request.body.contains("isRequired(pullRequestId: $p0)") else { return .init(body: #"{"data": {"nodes": [\#(node)]}}"#) }
+            return .init(body: """
+                {"data": {"p0": {"commits": {"nodes": [{"commit": {"statusCheckRollup": {"contexts": {"nodes": [
+                  {"__typename": "CheckRun", "databaseId": 1, "name": "test", "status": "COMPLETED", "conclusion": "SUCCESS",
+                   "checkSuite": {"app": null}, "isRequired": true},
+                  {"__typename": "StatusContext", "context": "coverage", "state": "FAILURE", "isRequired": false}
+                ]}}}}]}}}}
+                """)
+        }
+
+        let pullRequests = try await client.pullRequests(ids: [id])
+
+        #expect(pullRequests.map(\.checkState) == [.optionalFailed])
+        #expect(StubProtocol.requests.withLock { $0.last?.body.contains(#""p0":"\#(id)""#) } == true)
+    }
+
     @Test func pullRequestListRetriesAGatewayTimeout() async throws {
         let respond = try pullRequestList()
         let failed = OSAllocatedUnfairLock<Set<String>>(initialState: [])

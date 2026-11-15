@@ -118,7 +118,7 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .needsAttention: return attentionReason(for: pullRequest, viewer: viewer, signals: attention, now: now) != nil
         case .yours: return pullRequest.author?.login == viewer
-        case .failing: return pullRequest.checkState == .failure || pullRequest.checkState == .error
+        case .failing: return pullRequest.checkState == .failed
         case .drafts: return pullRequest.isDraft
         case .bots, .all: return true
         }
@@ -173,11 +173,12 @@ func repositorySections(
 }
 
 extension StatusKind {
-    init(_ state: StatusState?) {
+    init(_ state: ChecksRollup?) {
         switch state {
-        case .success: self = .passed
-        case .failure, .error: self = .failed
-        case .pending, .expected: self = .pending
+        case .passed: self = .passed
+        case .failed: self = .failed
+        case .optionalFailed: self = .warning
+        case .pending: self = .pending
         case nil: self = .none
         }
     }

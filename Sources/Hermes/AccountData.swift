@@ -131,7 +131,7 @@ final class AccountData {
         let held = Set(pullRequests.map(\.id))
         let openIDs = openHits.filter { $0.canPush || held.contains($0.id) || signaledIDs.contains($0.id) }.map(\.id)
         // A check that finishes or runs again does not update its pull request, so any whose checks have not passed load again.
-        let unsettled = pullRequests.filter { $0.checkState != nil && $0.checkState != .success }.map(\.id)
+        let unsettled = pullRequests.filter { $0.checkState != nil && $0.checkState != .passed }.map(\.id)
         let watched = watched()
         let watchedIDs = PullRequestChanges.watched(watched, among: pullRequests)
         async let fetched: Void = refetchFetched(watched)

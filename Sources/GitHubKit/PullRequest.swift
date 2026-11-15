@@ -26,6 +26,30 @@ public enum StatusState: String, Sendable, Hashable, Decodable {
     case expected = "EXPECTED"
 }
 
+/// What the checks on a pull request's head commit amount to.
+public enum ChecksRollup: Sendable, Hashable {
+    case passed
+    /// A check is queued or running, and no required check has failed.
+    case pending
+    /// A check failed. After `GitHubClient.pullRequests(ids:perRequest:)`, a check the base branch requires.
+    case failed
+    /// Checks failed, but none that the base branch requires, and every required check has finished.
+    case optionalFailed
+
+    init(_ state: StatusState) {
+        switch state {
+        case .success: self = .passed
+        case .failure, .error: self = .failed
+        case .pending, .expected: self = .pending
+        }
+    }
+
+    /// What a failed rollup amounts to, given the outcomes of the checks the base branch requires.
+    static func settled(required: [Check.Outcome]) -> ChecksRollup {
+        if required.contains(.failed) { .failed } else if required.contains(.pending) { .pending } else { .optionalFailed }
+    }
+}
+
 /// A pull request's place in a stack of dependent pull requests.
 public struct StackEntry: Sendable, Hashable {
     /// The stack's node ID.
@@ -79,7 +103,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     public let mergeable: MergeableState
     public let labels: [GitHubLabel]
     /// The rollup of every check on the head commit. Nil when it has none.
-    public let checkState: StatusState?
+    public internal(set) var checkState: ChecksRollup?
     /// Nil when the pull request is not part of a stack.
     public let stack: StackEntry?
     /// The numbers of the issues that merging this pull request closes.
@@ -96,7 +120,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         id: String, number: Int, title: String, url: URL, repository: RepositoryRef, author: User?,
         isDraft: Bool, createdAt: Date, updatedAt: Date, headRefName: String, baseRefName: String,
         headOID: String, reviewDecision: ReviewDecision?, additions: Int, deletions: Int,
-        changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: StatusState?,
+        changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: ChecksRollup?,
         stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil,
         requestedReviewers: [Reviewer] = [], viewerReviewedCommit: String? = nil,
         state: LinkedPullRequest.State = .open
@@ -202,7 +226,7 @@ extension PullRequest: Decodable {
         mergeable = try container.decode(MergeableState.self, forKey: .mergeable)
         labels = try container.decode(Connection<GitHubLabel>.self, forKey: .labels).nodes
         checkState = try container.decode(Connection<HeadCommit>.self, forKey: .commits)
-            .nodes.last?.commit.statusCheckRollup?.state
+            .nodes.last?.commit.statusCheckRollup.map { ChecksRollup($0.state) }
         closingIssueNumbers = try container.decode(Connection<Number>.self, forKey: .closingIssuesReferences)
             .nodes.map(\.number)
         autoMergeMethod = try container.decodeIfPresent(AutoMerge.self, forKey: .autoMergeRequest)?.mergeMethod
@@ -229,10 +253,10 @@ extension PullRequest: Decodable {
 // MARK: Bot filter
 
 extension PullRequest {
-    /// True when something is wrong that a person has to look at: the CI
-    /// rollup is `failure` or `error`, or there are merge conflicts.
+    /// True when something is wrong that a person has to look at: a required
+    /// check failed, or there are merge conflicts.
     public var needsAttention: Bool {
-        checkState == .failure || checkState == .error || mergeable == .conflicting
+        checkState == .failed || mergeable == .conflicting
     }
 
     /// Whether the pull request list shows this pull request.

@@ -13,11 +13,11 @@ strongest. Within a reason, the most recently updated comes first.
 |------|--------|------|
 | 1 | Review requested | GitHub asks you by name |
 | 2 | Changes requested | Yours, and a review asks for changes |
-| 3 | Checks failing, Conflicts, Needs rebase | Yours, and a check fails, it conflicts with its base, or its base branch is the head of a pull request Hermes saw merge |
+| 3 | Checks failing, Conflicts, Needs rebase | Yours, and a required check fails, it conflicts with its base, or its base branch is the head of a pull request Hermes saw merge |
 | 4 | Team review | GitHub asks a team you're on, and not you by name |
 | 5 | New commits | Not yours, and its head moved past the commit of your latest review |
 | 6 | Mentioned | Someone mentioned you |
-| 7 | Ready to merge | Yours, approved, its checks pass or it has none, it can merge, and it is not a draft |
+| 7 | Ready to merge | Yours, approved, no required check failed and none is running, it can merge, and it is not a draft |
 | 8 | Opened recently | Yours, opened in the last 24 hours |
 
 A stack shows whole, as one node at the rank of its most urgent member.

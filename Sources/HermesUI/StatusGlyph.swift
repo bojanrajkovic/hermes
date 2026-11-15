@@ -4,6 +4,8 @@ import SwiftUI
 public enum StatusKind: Sendable, Hashable {
     case passed
     case failed
+    /// Checks failed, but none that merging requires.
+    case warning
     case pending
     /// Nothing reported.
     case none
@@ -12,6 +14,7 @@ public enum StatusKind: Sendable, Hashable {
         switch self {
         case .passed: "Checks passed"
         case .failed: "Checks failed"
+        case .warning: "Optional checks failed"
         case .pending: "Checks running"
         case .none: "No checks"
         }
@@ -21,6 +24,7 @@ public enum StatusKind: Sendable, Hashable {
         switch self {
         case .passed: "checkmark.circle.fill"
         case .failed: "xmark.octagon.fill"
+        case .warning: "exclamationmark.triangle.fill"
         case .pending: "clock.fill"
         case .none: "circle.dashed"
         }
@@ -30,6 +34,7 @@ public enum StatusKind: Sendable, Hashable {
         switch self {
         case .passed: .green
         case .failed: .red
+        case .warning: .yellow
         case .pending: .orange
         case .none: .secondary
         }

@@ -11,7 +11,7 @@ func user(_ login: String, bot: Bool = false) -> User {
 
 func pullRequest(
     _ number: Int, in repository: RepositoryRef = airway, title: String = "A pull request", author: User? = user("bojan"),
-    draft: Bool = false, checks: StatusState? = .success, stack: StackEntry? = nil, created: Date = .distantPast,
+    draft: Bool = false, checks: ChecksRollup? = .passed, stack: StackEntry? = nil, created: Date = .distantPast,
     review: ReviewDecision? = nil, mergeable: MergeableState = .mergeable, head: String = "abc", base: String = "main",
     requested: [Reviewer] = [], reviewed: String? = nil
 ) -> PullRequest {

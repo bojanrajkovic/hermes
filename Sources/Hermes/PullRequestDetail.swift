@@ -378,7 +378,7 @@ struct MergeButton: View {
     private struct MergeInput: Hashable {
         let head: String
         let updatedAt: Date
-        let checks: StatusState?
+        let checks: ChecksRollup?
     }
 
     private var help: String {

@@ -5,7 +5,7 @@ import Testing
 private func pullRequest(
     _ number: Int,
     bot: Bool = false,
-    checkState: StatusState? = .success,
+    checkState: ChecksRollup? = .passed,
     mergeable: MergeableState = .mergeable,
     stack: StackEntry? = nil
 ) -> PullRequest {
@@ -27,11 +27,11 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
 @Suite struct BotFilterTests {
     @Test func pullRequestsByPeopleAreAlwaysShown() {
         #expect(pullRequest(1).isShown(showingAllBots: false))
-        #expect(pullRequest(1, checkState: .failure).isShown(showingAllBots: false))
+        #expect(pullRequest(1, checkState: .failed).isShown(showingAllBots: false))
     }
 
-    @Test(arguments: [StatusState.success, .pending, .expected, nil])
-    func healthyBotPullRequestsAreHidden(checkState: StatusState?) {
+    @Test(arguments: [ChecksRollup.passed, .pending, .optionalFailed, nil])
+    func healthyBotPullRequestsAreHidden(checkState: ChecksRollup?) {
         #expect(!pullRequest(1, bot: true, checkState: checkState).isShown(showingAllBots: false))
     }
 
@@ -39,9 +39,15 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
         #expect(!pullRequest(1, bot: true, mergeable: .unknown).isShown(showingAllBots: false))
     }
 
-    @Test(arguments: [StatusState.failure, .error])
-    func botPullRequestsWithFailedChecksAreShown(checkState: StatusState) {
-        #expect(pullRequest(1, bot: true, checkState: checkState).isShown(showingAllBots: false))
+    @Test func botPullRequestsWithFailedChecksAreShown() {
+        #expect(pullRequest(1, bot: true, checkState: .failed).isShown(showingAllBots: false))
+    }
+
+    @Test func failedChecksCountOnlyWhenRequiredAndWaitForRequiredOnesStillRunning() {
+        #expect(ChecksRollup.settled(required: [.passed, .failed, .pending]) == .failed)
+        #expect(ChecksRollup.settled(required: [.passed, .pending]) == .pending)
+        #expect(ChecksRollup.settled(required: [.passed, .skipped]) == .optionalFailed)
+        #expect(ChecksRollup.settled(required: []) == .optionalFailed)
     }
 
     @Test func botPullRequestsWithConflictsAreShown() {
