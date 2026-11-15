@@ -36,6 +36,23 @@ through associated domains, so Hermes cannot claim them. A link router such as
 Finicky, Velja or Switchbar can send them to Hermes by rule, and Hermes reads
 github.com URLs the same as `hermes://` ones.
 
+## Relay links
+
+Three links belong to the [relay](relay.md), not to a place in a window. Their
+host has a dot, which a GitHub login cannot have, so none reads as
+`hermes://owner/repo`.
+
+| Link | Meaning |
+|---|---|
+| `hermes://relay.setup?code=…&state=…` | GitHub's redirect after an owner creates a tenant's App |
+| `hermes://relay.session?tenant=…&grant=…&state=…` | The relay's redirect after a member signs in |
+| `hermes://relay.join?server=…&tenant=…` | An invitation to a tenant |
+
+`RelayLink` (GitHubKit) reads them, and `RelayTenant.joinLink` writes the
+invitation. A tenant's ID is 32 lowercase hex characters, and its server is an
+`https` URL, or `http` on `localhost`. Hermes reads these links but does not
+act on them.
+
 ## Windows
 
 A link opens in the frontmost window. A link that ends in `?window=new` opens
