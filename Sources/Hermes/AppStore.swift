@@ -152,6 +152,10 @@ final class AppStore {
         forwardedOrganizations = Set(defaults.stringArray(forKey: Keys.forwardedOrganizations) ?? [])
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
+        relays.onEvent = { [weak self] event in
+            guard let webhook = WebhookEvent(payload: event.payload) else { return }
+            self?.reload(webhook, part: EventCounts.part(ofEvent: event.name))
+        }
     }
 
     /// Loads the signed-in user once. Windows that open later reuse it.
@@ -188,41 +192,68 @@ final class AppStore {
     }
 
     /// Runs a forwarder for each organization the user picked and each of the viewer's own
-    /// repositories that a window watches, or none when the setting is off.
+    /// repositories that a window watches, or none when the setting is off. A repository a
+    /// relay covers gets none.
     func syncForwarders() async {
+        relays.sync()
         guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
         let logins = Set(windows.allObjects.compactMap { $0.account?.login })
         let wanted = Forwarders.targets(
             watched: logins.sorted().flatMap { watched(in: $0) }.map(\.repository), viewer: viewer,
-            organizations: hasOrganizationHookScope == true ? forwardedOrganizations.intersection(ownedOrganizations) : [], waiting: forwarders.waiting
+            organizations: hasOrganizationHookScope == true ? forwardedOrganizations.intersection(ownedOrganizations) : [],
+            waiting: forwarders.waiting, covered: relays.covered
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
 
+    /// How often a relay has said each pull request's review threads or checks changed. The
+    /// screens that show those reload when their count rises.
+    private(set) var eventCounts: [ItemKey: EventCounts] = [:]
+
     /// Loads what a webhook says changed: the pull request when Hermes holds it, and
     /// otherwise the account, which is how a new pull request joins the lists.
-    private func reload(_ event: WebhookEvent) {
+    ///
+    /// - Parameter part: The count to raise for the pull request, when the event's name says
+    ///   which part of it changed. A forwarder's deliveries carry no name.
+    private func reload(_ event: WebhookEvent, part: EventCounts.Part? = nil) {
+        // A relay sends events for every repository the user can see. One in an account no
+        // window shows has nothing to update.
+        guard windows.allObjects.contains(where: { $0.account?.login == event.repository.owner }) else { return }
         let data = data(for: event.repository.owner)
+        // A status names only a commit, and a check often does, so those find the pull request by its head.
         let key = event.pullRequest.map { ItemKey(repository: event.repository, number: $0) }
-        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(event.pullRequest ?? 0)")
+            ?? event.commit.flatMap { commit in
+                data.pullRequests.first { $0.repository == event.repository && $0.headOID == commit }?.key
+            }
+        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(key?.number ?? 0)")
+
+        guard let key, data.pullRequest(key) != nil else {
+            // A status or a check on a commit that is no held pull request's head changes nothing Hermes shows.
+            if event.pullRequest != nil || event.commit == nil { Task { await data.refresh() } }
+            return
+        }
+        guard bursts.shouldLoad(key, part: part) else { return }
+        if let part { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }
 
         Task {
-            if let key, data.pullRequest(key) != nil { await data.refetch(key) } else { await data.refresh() }
+            while true {
+                await data.refetch(key)
+                try? await Task.sleep(for: Self.eventSpacing)
+                guard let parts = bursts.loaded(key) else { break }
+                for part in parts { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }
+            }
         }
     }
+
+    /// How long after loading a pull request for an event Hermes waits before loading it
+    /// again for the events that came meanwhile.
+    static let eventSpacing: Duration = .seconds(5)
+    @ObservationIgnored private var bursts = EventBursts()
 
     /// Opens a link in the frontmost window, or in a new window when it ends in `?window=new`
     /// or no window is up. A link Hermes can't read is reported in the frontmost window.
     func open(_ url: URL) {
-        if case .setup(let code, let state) = RelayLink(url: url) {
-            // GitHub sends back the state Hermes gave it. Any other link was not asked for.
-            guard relays.setup?.state == state else {
-                frontmost?.resolveError = "This relay setup link does not belong to a setup Hermes started."
-                return
-            }
-            Task { await relays.finishSetup(code: code) }
-            return
-        }
+        if let link = RelayLink(url: url) { return open(link) }
         guard let link = DeepLink(url: url) else {
             frontmost?.resolveError = "Hermes can't open \(url.absoluteString)."
             return
@@ -235,6 +266,35 @@ final class AppStore {
             openWindow(WindowState(url: url))
         } else {
             waitingLinks.append(url)
+        }
+    }
+
+    /// Takes one step of setting up or joining a relay tenant. A link that fails is reported
+    /// in the frontmost window.
+    private func open(_ link: RelayLink) {
+        switch link {
+        case .setup(let code, let state):
+            // GitHub sends back the state Hermes gave it. Any other link was not asked for.
+            guard relays.setup?.state == state else {
+                frontmost?.resolveError = "This relay setup link does not belong to a setup Hermes started."
+                return
+            }
+            Task { await relays.finishSetup(code: code) }
+        case .session(let tenantID, let grant, let state):
+            Task {
+                if let error = await relays.finishSignIn(tenantID: tenantID, grant: grant, state: state) {
+                    frontmost?.resolveError = error
+                }
+                await syncForwarders()
+            }
+        case .join(let tenant):
+            // The link can come from anyone, so the user sees where it leads before anything is sent there.
+            let alert = NSAlert()
+            alert.messageText = "Join the relay at \(tenant.server.host() ?? tenant.server.absoluteString)?"
+            alert.informativeText = "Hermes opens your browser to sign in with GitHub. The relay then sends this Mac the changes in the repositories you can see, as they happen."
+            alert.addButton(withTitle: "Join")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn { relays.join(tenant) }
         }
     }
 

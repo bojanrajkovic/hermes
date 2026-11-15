@@ -12,18 +12,25 @@ public struct ChecksScreen: View {
     private let commitOID: String
     private let client: GitHubClient
     private let initiallySelected: Check.ID?
+    private let changes: Int
 
     @State private var model = ChecksModel()
     @State private var refreshCount = 0
 
-    /// - Parameter initiallySelected: The check to show first, such as the one
-    ///   clicked in a ``ChecksSummary``. Passing a different check later
-    ///   selects it. With `nil`, the first failed check is selected.
-    public init(repository: RepositoryRef, commitOID: String, client: GitHubClient, initiallySelected: Check? = nil) {
+    /// - Parameters:
+    ///   - initiallySelected: The check to show first, such as the one
+    ///     clicked in a ``ChecksSummary``. Passing a different check later
+    ///     selects it. With `nil`, the first failed check is selected.
+    ///   - changes: A count the host raises when it hears that the commit's checks
+    ///     changed. Each new value reloads them at once, ahead of the screen's own polling.
+    public init(
+        repository: RepositoryRef, commitOID: String, client: GitHubClient, initiallySelected: Check? = nil, changes: Int = 0
+    ) {
         self.repository = repository
         self.commitOID = commitOID
         self.client = client
         self.initiallySelected = initiallySelected?.id
+        self.changes = changes
     }
 
     public var body: some View {
@@ -55,7 +62,7 @@ public struct ChecksScreen: View {
             }
             .frame(minWidth: Metrics.detailMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount)) {
+        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount, changes: changes)) {
             await model.run(
                 repository: repository, commitOID: commitOID, client: client, preferredSelection: initiallySelected
             )
@@ -98,14 +105,19 @@ public struct ChecksSummary: View {
     private let commitOID: String
     private let client: GitHubClient
     private let onSelect: (Check) -> Void
+    private let changes: Int
 
     @State private var model = ChecksModel()
     @State private var refreshCount = 0
 
-    public init(repository: RepositoryRef, commitOID: String, client: GitHubClient, onSelect: @escaping (Check) -> Void) {
+    /// - Parameter changes: As for ``ChecksScreen``.
+    public init(
+        repository: RepositoryRef, commitOID: String, client: GitHubClient, changes: Int = 0, onSelect: @escaping (Check) -> Void
+    ) {
         self.repository = repository
         self.commitOID = commitOID
         self.client = client
+        self.changes = changes
         self.onSelect = onSelect
     }
 
@@ -121,7 +133,7 @@ public struct ChecksSummary: View {
                     .lineLimit(2)
             }
         }
-        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount)) {
+        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount, changes: changes)) {
             await model.run(repository: repository, commitOID: commitOID, client: client)
         }
     }
@@ -131,6 +143,7 @@ private struct LoadKey: Hashable {
     let repository: RepositoryRef
     let commitOID: String
     let refreshCount: Int
+    let changes: Int
 }
 
 /// Shows `content` once the checks have loaded and there are some; otherwise

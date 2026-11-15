@@ -99,6 +99,7 @@ only when an environment variable is set:
 |----------|-----------|
 | `HERMES_LIVE=1` | Read-only calls to github.com in `GitHubKitTests`, and a fetch from github.com in `RepoKitTests`. |
 | `HERMES_LIVE_WEBHOOKS=1` | The `WebhookForwarderTests` test that forwards `bojanrajkovic/hermes-playground` and comments on a pull request there. Needs the `cli/gh-webhook` extension. |
+| `HERMES_LIVE_RELAY=<url>` | The `RelayLiveTests` in `GitHubKitTests`: a relay's `/version`, and a connection to a tenant it does not have. They sign in to nothing and store nothing on the relay. |
 | `HERMES_LIVE_DIR=<dir>` | `SessionsUITests` that start real terminals and write PNGs. `HERMES_LIVE_CLAUDE=1` adds the ones that start `claude`. |
 | `HERMES_SNAPSHOT_DIR=<dir>` | `ChecksUITests` snapshots written as PNGs. |
 | `DIFFUI_RENDER=<dir>` | `DiffUITests` renders of the diff viewer written as PNGs. |

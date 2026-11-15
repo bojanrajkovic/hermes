@@ -117,13 +117,14 @@ struct PullRequestDetailView: View {
             DiffScreen(
                 source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
+                threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? 0,
                 // The review changes the reason the pull request is in the inbox, and its review decision.
                 onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                initiallySelected: model.checkToOpen
+                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks ?? 0
             )
         case .sessions:
             ScrollView {
@@ -527,7 +528,8 @@ struct ConversationView: View {
 
                 PaneSection("Checks") {
                     ChecksSummary(
-                        repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client
+                        repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
+                        changes: model.store.eventCounts[pullRequest.key]?.checks ?? 0
                     ) { check in
                         model.checkToOpen = check
                         model.pullRequestTab = .checks

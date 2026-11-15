@@ -131,6 +131,10 @@ sequenceDiagram
   keep the scroll position.
 - A commit's checks reload every 10 seconds while any check is queued or
   running.
+- A webhook forwarder or a relay tenant reports a change within seconds.
+  Hermes then loads the pull request it names. A relay's event also says
+  which part changed, so the review threads or the checks on screen reload at
+  once. See [webhooks.md](webhooks.md) and [relay-client.md](relay-client.md).
 - A local diff of a session's worktree reloads when files under the worktree
   change. `RepoKit` watches with FSEvents and debounces. The diff of one
   branch of a local stack loads once.

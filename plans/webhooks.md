@@ -5,7 +5,12 @@ in about two seconds instead: GitHub pushes the repository's webhook deliveries
 down a WebSocket, and Hermes reloads what a delivery names.
 
 The forwarder is `gh webhook forward`, from the `cli/gh-webhook` extension of
-the GitHub CLI. Only GitHub sees the deliveries. There is no Hermes server.
+the GitHub CLI. Only GitHub sees a forwarder's deliveries: no server sits
+between it and Hermes.
+
+A forwarder needs admin rights on its repository. For repositories where the
+user has none, an account's owner can set up a [relay](relay-client.md)
+tenant. A repository that a connected tenant covers gets no forwarder.
 
 ```mermaid
 sequenceDiagram
@@ -23,10 +28,17 @@ sequenceDiagram
 ## What it is for
 
 A delivery is only a signal. Hermes reads the repository and the pull request
-number from it and loads the pull request the usual way. A delivery that names
-no pull request Hermes holds, such as a commit status or a newly opened pull
-request, refreshes the account. The timer refresh never stops, so a forwarder
-that ends costs nothing but the delay.
+number from it and loads the pull request the usual way. A commit status names
+no pull request, and a check suite often names none, so Hermes finds theirs by
+the commit: the open pull request whose head it is. One on any other commit is
+dropped, because it changes nothing Hermes shows. Any other delivery that names
+no pull request Hermes holds, such as a newly opened pull request, refreshes
+the account. The timer refresh never stops, so a forwarder that ends costs
+nothing but the delay.
+
+`AppStore.reload` does this for a relay's events too. A burst of deliveries
+about one pull request loads it on the first and once more after, not once
+per delivery. [relay-client.md](relay-client.md) has the rule.
 
 ## Which repositories
 
@@ -42,6 +54,9 @@ in the list on screen.
   covers every repository of the organization.
 - **Repositories the signed-in user owns** that have a watched pull request, at
   most 20. Each forwarder is a process and a webhook.
+- **None that a relay covers.** A connected relay tenant lists the repositories
+  it sends events for. Those are left out before the two rules above, so an
+  organization whose watched repositories are all covered gets no forwarder.
 - **Nothing else.** A repository of an organization gets no forwarder of its
   own. The webhook is named `cli` and says nothing of who made it, which the
   other admins of a shared repository would have to puzzle over. An
@@ -100,7 +115,9 @@ extension reported, and when the repository is tried again.
   `check_suite`, and `status`.
 - Each delivery is one line of JSON on stdout. The event's type is not in it,
   so `WebhookEvent` reads the keys that name a pull request: `pull_request`,
-  `issue` with a `pull_request` key, and `check_suite.pull_requests`.
+  `issue` with a `pull_request` key, and the `pull_requests` of a `check_suite`
+  or a `check_run`. It reads the commit from a status's `sha` and a check's
+  `head_sha`.
 - A forwarder's target is a repository (`--repo`) or an organization (`--org`).
 - GitHub deletes the webhook when the process ends, however it ends.
 - GitHub allows one forwarder per target. An organization's forwarder and a

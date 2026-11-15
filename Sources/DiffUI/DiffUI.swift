@@ -26,16 +26,21 @@ public struct DiffScreen: View {
     /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
     @Binding private var target: DeepLink.PullRequestTarget?
     private let onReviewSubmitted: @MainActor () -> Void
+    private let threadChanges: Int
 
     @State private var model: DiffModel?
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
+    /// - Parameter threadChanges: A count the host raises when it hears that the pull
+    ///   request's review threads changed. Each new value reloads them at once, ahead of
+    ///   the screen's own polling.
     public init(
         source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
-        onReviewSubmitted: @escaping @MainActor () -> Void = {}
+        threadChanges: Int = 0, onReviewSubmitted: @escaping @MainActor () -> Void = {}
     ) {
         _target = target
+        self.threadChanges = threadChanges
         self.onReviewSubmitted = onReviewSubmitted
         self.source = source
         self.client = client
@@ -69,6 +74,9 @@ public struct DiffScreen: View {
         }
         .onChange(of: layout) { model?.layout = layout }
         .onChange(of: target) { takeTarget() }
+        .onChange(of: threadChanges) {
+            Task { _ = await model?.review?.reloadThreads() }
+        }
         // The task ends when the screen goes off screen, which stops the
         // polling. Coming back reuses the model, so the diff reloads in place.
         .task(id: source.key) {

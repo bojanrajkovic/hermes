@@ -16,6 +16,7 @@ What is built and works, and what is known not to work or is unverified.
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
 - Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own and picked, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
 - Relay setup: "Set Up a Relay…" in Settings and in first-run setup takes an account the user owns, a relay server, and an invite code. It opens GitHub to create the account's App, hands the App's secrets to the relay, and then offers the App's install page and the join link for members. Several accounts can each have a tenant. See [plans/relay-client.md](plans/relay-client.md).
+- Relay tenants: opening a `hermes://relay.join` link joins a tenant and signs in through the browser. Each tenant keeps a connection to its relay, and a change in a repository the tenant covers reloads its pull request, and the review threads or checks on screen, at once. Those repositories get no webhook forwarder. Settings shows each tenant's connection and its relay's commit.
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
 - Local stacks: a repository with a checkout has a Local tab of its stacked
@@ -164,6 +165,10 @@ What is built and works, and what is known not to work or is unverified.
 - **Relay setup.** The manifest, the page that posts it, and the requests are
   tested against fixed values. No App has been created from Hermes, and no
   relay has been registered with.
+- **Relay sign-in and events.** The connection was run against a stand-in
+  WebSocket server, which showed its messages, the `4001` close code, and a
+  refused token, and against a deployed relay for a tenant it does not have.
+  Hermes has not signed in to a relay or received an event from one.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
   stored notary profile. The Makefile sets neither.
 

@@ -6,10 +6,14 @@ public struct WebhookEvent: Sendable, Hashable {
     public let repository: RepositoryRef
     /// The pull request the event is about. Nil when it names none, such as a commit status.
     public let pullRequest: Int?
+    /// The commit a status or a check is on. A check names its pull requests only some of
+    /// the time, and a status never does, so the commit is how either finds its pull request.
+    public let commit: String?
 
-    public init(repository: RepositoryRef, pullRequest: Int?) {
+    public init(repository: RepositoryRef, pullRequest: Int?, commit: String? = nil) {
         self.repository = repository
         self.pullRequest = pullRequest
+        self.commit = commit
     }
 
     /// Reads one delivery's JSON body. Nil for a body that names no repository, and for the
@@ -27,7 +31,10 @@ public struct WebhookEvent: Sendable, Hashable {
                 /// Present when the issue is a pull request.
                 let pull_request: Empty?
             }
-            struct Checks: Decodable { let pull_requests: [Numbered]? }
+            struct Checks: Decodable {
+                let pull_requests: [Numbered]?
+                let head_sha: String?
+            }
             struct Empty: Decodable {}
 
             let zen: String?
@@ -35,6 +42,9 @@ public struct WebhookEvent: Sendable, Hashable {
             let pull_request: Numbered?
             let issue: Issue?
             let check_suite: Checks?
+            let check_run: Checks?
+            /// The commit of a `status` event.
+            let sha: String?
         }
         guard let payload = try? JSONDecoder().decode(Payload.self, from: payload),
               payload.zen == nil, let repository = payload.repository else { return nil }
@@ -42,6 +52,8 @@ public struct WebhookEvent: Sendable, Hashable {
         pullRequest = payload.pull_request?.number
             ?? payload.issue.flatMap { $0.pull_request == nil ? nil : $0.number }
             ?? payload.check_suite?.pull_requests?.first?.number
+            ?? payload.check_run?.pull_requests?.first?.number
+        commit = payload.sha ?? payload.check_suite?.head_sha ?? payload.check_run?.head_sha
     }
 }
 

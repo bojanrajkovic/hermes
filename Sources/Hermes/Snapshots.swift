@@ -51,7 +51,7 @@ enum Snapshots {
         let defaults = UserDefaults(suiteName: "hermes-snapshots")!
         defaults.removePersistentDomain(forName: "hermes-snapshots")
         // A relay tenant, so Settings shows a row for one. No relay is contacted.
-        if let tenant = RelayTenant(server: RelayTenant.defaultServer, id: String(repeating: "0a", count: 16)) {
+        if let tenant = RelayTenant(server: URL(string: "https://relay.example.invalid")!, id: String(repeating: "0a", count: 16)) {
             let membership = RelayMembership(tenant: tenant, app: .init(account: "acme", slug: "hermes-acme"))
             defaults.set(try? JSONEncoder().encode([membership]), forKey: Relays.key)
         }

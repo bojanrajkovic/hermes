@@ -26,8 +26,16 @@ struct WebhookForwarderTests {
         #expect(event(#""check_suite": {"pull_requests": []}, \#(repository)"#) == WebhookEvent(repository: airway, pullRequest: nil))
     }
 
-    @Test func aStatusNamesOnlyItsRepository() {
-        #expect(event(#""state": "success", "sha": "abc", \#(repository)"#) == WebhookEvent(repository: airway, pullRequest: nil))
+    @Test func aStatusNamesItsCommitAndNoPullRequest() {
+        #expect(event(#""state": "success", "sha": "abc", \#(repository)"#)
+            == WebhookEvent(repository: airway, pullRequest: nil, commit: "abc"))
+    }
+
+    @Test func aCheckNamesItsCommitAndItsPullRequestWhenItHasOne() {
+        #expect(event(#""check_run": {"head_sha": "abc", "pull_requests": [{"number": 7}]}, \#(repository)"#)
+            == WebhookEvent(repository: airway, pullRequest: 7, commit: "abc"))
+        #expect(event(#""check_suite": {"head_sha": "abc", "pull_requests": []}, \#(repository)"#)
+            == WebhookEvent(repository: airway, pullRequest: nil, commit: "abc"))
     }
 
     @Test func aPingAndABodyThatIsNotADeliveryAreNotEvents() {

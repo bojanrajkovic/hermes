@@ -20,20 +20,53 @@ struct RelaySection: View {
         } header: {
             Text("Relay")
         } footer: {
-            Text("A relay sends an account's changes to its members as they happen, with no webhook of their own. Setting one up creates a GitHub App that the account owns.")
+            Text("A relay sends an account's changes to its members as they happen, with no webhook of their own. Setting one up creates a GitHub App that the account owns. To join one, open the link its owner sent you.")
                 .foregroundStyle(.secondary)
         }
+        .task { await store.relays.loadVersions() }
     }
 }
 
-/// One tenant: whose it is, where its relay runs, and what its owner does next.
+/// One tenant: whose it is, what its connection is doing, where its relay runs, and what
+/// the user does next.
 private struct RelayRow: View {
     @Environment(AppStore.self) private var store
     let membership: RelayMembership
 
+    private var state: RelayState? { store.relays.states[membership.id] }
+
+    /// The account that set the tenant up, or the owners of the repositories it covers.
+    private var title: String {
+        if let app = membership.app { return app.account }
+        guard case .connected(let repositories) = state, !repositories.isEmpty else { return "Joined by link" }
+        return Set(repositories.map(\.owner)).sorted().joined(separator: ", ")
+    }
+
+    private var status: String {
+        switch state {
+        case nil: "Not connected"
+        case .signedOut: "Not signed in"
+        case .connecting: "Connecting…"
+        case .connected(let repositories): repositories.count == 1 ? "Connected, 1 repository" : "Connected, \(repositories.count) repositories"
+        case .waiting(_, let error): error.isEmpty ? "Reconnecting" : "Reconnecting: \(error)"
+        case .gone: "The relay no longer has this tenant"
+        }
+    }
+
+    /// The server's host, and the commit its relay runs once the server has answered.
+    private var server: String {
+        let host = membership.tenant.server.host() ?? membership.tenant.server.absoluteString
+        guard let commit = store.relays.versions[membership.tenant.server] else { return host }
+        return "\(host), commit \(commit.prefix(7))"
+    }
+
     var body: some View {
         LabeledContent {
             HStack(spacing: 8) {
+                if state == .signedOut {
+                    Button("Sign In") { store.relays.signIn(membership) }
+                        .help("Sign in with GitHub in your browser, through the account's App")
+                }
                 if let app = membership.app {
                     Link("Install…", destination: RelayAppManifest.installURL(slug: app.slug))
                         .help("Install \(app.slug) on \(app.account), on GitHub")
@@ -46,11 +79,12 @@ private struct RelayRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Stop using this relay on this Mac")
-                .accessibilityLabel("Stop using the relay for \(membership.app?.account ?? membership.tenant.server.host() ?? "")")
+                .accessibilityLabel("Stop using the relay for \(title)")
             }
         } label: {
-            Text(verbatim: membership.app?.account ?? "Joined by link")
-            Text(verbatim: membership.tenant.server.host() ?? membership.tenant.server.absoluteString)
+            Text(verbatim: title)
+            Text(verbatim: status)
+            Text(verbatim: server)
         }
     }
 }
@@ -162,7 +196,7 @@ struct RelaySetupSheet: View {
                     CopyJoinLinkButton(tenant: membership.tenant)
                 } label: {
                     Text("2. Send the join link to the members")
-                    Text("Each member opens it in Hermes. Both steps stay in Settings.")
+                    Text("Each member opens it in Hermes and signs in. You sign in from Settings, once the App is installed.")
                 }
             } header: {
                 Text(verbatim: "The relay is set up for \(app.account)")
