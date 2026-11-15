@@ -32,7 +32,7 @@ extension GitHubClient {
     public func viewer() async throws -> ViewerProfile {
         let user = try await get("/user", as: RESTUser.self)
         let organizations = try await graphQL(
-            "{ viewer { organizations(first: 100) { nodes { login name avatarUrl } } } }",
+            "{ viewer { organizations(first: 100) { nodes { login name avatarUrl viewerCanAdminister } } } }",
             as: OrganizationsData.self
         )
         return ViewerProfile(user: user, organizations: organizations)
@@ -554,6 +554,7 @@ struct OrganizationsData: Decodable, Sendable {
         let login: String
         let name: String?
         let avatarUrl: URL
+        let viewerCanAdminister: Bool
     }
     let viewer: Viewer
 }
@@ -564,7 +565,10 @@ extension ViewerProfile {
             login: user.login, name: user.name, avatarURL: user.avatar_url, bio: user.bio,
             company: user.company, location: user.location, email: user.email, profileURL: user.html_url,
             organizations: organizations.viewer.organizations.nodes.map {
-                Account(kind: .organization, login: $0.login, name: $0.name, avatarURL: $0.avatarUrl)
+                Account(
+                    kind: .organization, login: $0.login, name: $0.name, avatarURL: $0.avatarUrl,
+                    canAdminister: $0.viewerCanAdminister
+                )
             }
         )
     }

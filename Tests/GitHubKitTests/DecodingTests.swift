@@ -25,6 +25,7 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(profile.organizations.count == 1)
         #expect(profile.accounts.first?.kind == .personal)
         #expect(profile.accounts.map(\.login) == ["bojanrajkovic", "Freenode-Csharp"])
+        #expect(profile.accounts.map(\.canAdminister) == [false, true])
     }
 
     @Test func pullRequestsDecodeStackAuthorAndRollup() throws {

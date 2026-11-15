@@ -14,7 +14,7 @@ What is built and works, and what is known not to work or is unverified.
 - Open pull requests and repositories per account. Issues load per repository,
   30 at a time.
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
-- Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
+- Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
 - Local stacks: a repository with a checkout has a Local tab of its stacked
@@ -139,7 +139,8 @@ What is built and works, and what is known not to work or is unverified.
   own pull request. Hermes disables them there, so neither has been sent.
 - **Webhook forwarders in the app.** The forwarder itself is verified against
   the playground repository. Hermes starting and stopping forwarders as the
-  watched repositories change has not been run.
+  watched repositories change has not been run, and no organization forwarder
+  has been started.
 - **Auto-merge.** Enabling and disabling it has not been sent to GitHub. The
   playground repository does not allow auto-merge.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a

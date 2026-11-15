@@ -45,19 +45,42 @@ public struct WebhookEvent: Sendable, Hashable {
     }
 }
 
-/// One running `gh webhook forward`: GitHub sends a repository's webhook deliveries down a
-/// WebSocket, and the `cli/gh-webhook` extension prints each as a line of JSON.
+/// One running `gh webhook forward`: GitHub sends a repository's or an organization's webhook
+/// deliveries down a WebSocket, and the `cli/gh-webhook` extension prints each as a line of JSON.
 ///
-/// Starting one creates a webhook named `cli` on the repository, which needs admin rights
-/// there. GitHub allows one per repository and deletes it when the process ends.
+/// Starting one creates a webhook named `cli` on its target, which needs admin rights there.
+/// GitHub allows one per target and deletes it when the process ends.
 public final class WebhookForwarder: Sendable {
+    /// What a forwarder listens to.
+    public enum Target: Sendable, Hashable, CustomStringConvertible {
+        case repository(RepositoryRef)
+        /// Every repository of an organization. Needs the token scope `admin:org_hook`.
+        case organization(String)
+
+        public var description: String {
+            switch self {
+            case .repository(let repository): repository.description
+            case .organization(let login): login
+            }
+        }
+
+        var arguments: [String] {
+            switch self {
+            case .repository(let repository): ["--repo", repository.description]
+            case .organization(let login): ["--org", login]
+            }
+        }
+    }
+
+    /// The token scope an organization's forwarder needs. `gh` does not ask for it at login.
+    public static let organizationScope = "admin:org_hook"
     /// The events that change what a pull request's row or pane shows.
     static let events = "pull_request,pull_request_review,pull_request_review_comment,issue_comment,check_suite,status"
     /// Passed as the webhook's secret. It marks the processes Hermes started, so a launch can
     /// find the ones a crash left behind.
     static let marker = "hermes-forwarder"
 
-    public let repository: RepositoryRef
+    public let target: Target
     private let process = Process()
 
     /// The extension's program, when it is installed. Hermes runs it directly: `gh webhook`
@@ -80,7 +103,7 @@ public final class WebhookForwarder: Sendable {
         }
     }
 
-    /// Ends the forwarders an earlier run of Hermes left behind. Each holds its repository's
+    /// Ends the forwarders an earlier run of Hermes left behind. Each holds its target's
     /// one webhook, so a new forwarder there fails until it is gone.
     public static func endLeftovers() {
         let pkill = Process()
@@ -90,7 +113,7 @@ public final class WebhookForwarder: Sendable {
         pkill.waitUntilExit()
     }
 
-    /// Starts forwarding a repository's events.
+    /// Starts forwarding a target's events.
     ///
     /// - Parameters:
     ///   - token: A GitHub token. The extension cannot read the one `gh` keeps in the keychain.
@@ -100,13 +123,13 @@ public final class WebhookForwarder: Sendable {
     ///     within a few seconds: the viewer is not an admin, or the repository already has a
     ///     forwarder.
     public init(
-        repository: RepositoryRef, binary: URL, token: String,
+        target: Target, binary: URL, token: String,
         onEvent: @escaping @Sendable (WebhookEvent) -> Void, onExit: @escaping @Sendable (_ error: String) -> Void
     ) throws {
-        self.repository = repository
+        self.target = target
         let output = Pipe()
         process.executableURL = binary
-        process.arguments = ["forward", "--repo", repository.description, "--events", Self.events, "--secret", Self.marker]
+        process.arguments = ["forward"] + target.arguments + ["--events", Self.events, "--secret", Self.marker]
         process.environment = ProcessInfo.processInfo.environment.merging(["GH_TOKEN": token]) { _, new in new }
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output

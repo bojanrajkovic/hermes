@@ -23,6 +23,23 @@ public enum GitHubAuth {
         return token
     }
 
+    /// The scopes of the token `gh` holds now, read again on each call because
+    /// `gh auth refresh` changes them. Empty when they cannot be read, and for a
+    /// fine-grained token, which has none.
+    public static func scopes(session: URLSession = .shared) async -> Set<String> {
+        guard let token = try? await token() else { return [] }
+        var request = URLRequest(url: URL(string: "https://api.github.com/user")!)
+        request.httpMethod = "HEAD"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (_, response) = try? await session.data(for: request) else { return [] }
+        return scopes(inHeader: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "X-OAuth-Scopes"))
+    }
+
+    /// The scopes in GitHub's `X-OAuth-Scopes` header, such as `repo, admin:org`.
+    static func scopes(inHeader header: String?) -> Set<String> {
+        Set((header ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
     static func locateGH() async -> URL? {
         let files = FileManager.default
         for path in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"] where files.isExecutableFile(atPath: path) {

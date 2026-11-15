@@ -30,16 +30,20 @@ that ends costs nothing but the delay.
 
 ## Which repositories
 
-`Forwarders.repositories(watched:viewer:refused:)` in
-`Sources/Hermes/Forwarders.swift` decides, every 15 seconds:
+`Forwarders.targets(watched:viewer:organizations:waiting:)` in
+`Sources/Hermes/Forwarders.swift` decides, every 15 seconds. A watched pull
+request is the open one, one with a session, one in the attention inbox, or one
+in the list on screen.
 
-- Only repositories the signed-in user owns. The webhook is named `cli` and
-  says nothing of who made it, which an organization's other admins would have
-  to puzzle over. An organization-wide forwarder also needs the
-  `admin:org_hook` scope, which a `gh` login does not have by default.
-- Only repositories with a watched pull request: the open one, ones with a
-  session, the attention inbox, and the list on screen.
-- At most 20. Each forwarder is a process and a webhook.
+- **Organizations the signed-in user owns**, when one has a watched pull
+  request and the `gh` token has the `admin:org_hook` scope. One forwarder
+  covers every repository of the organization.
+- **Repositories the signed-in user owns** that have a watched pull request, at
+  most 20. Each forwarder is a process and a webhook.
+- **Nothing else.** A repository of an organization gets no forwarder of its
+  own. The webhook is named `cli` and says nothing of who made it, which the
+  other admins of a shared repository would have to puzzle over. An
+  organization's forwarder is one webhook that its owner chose.
 - Not the ones waiting to retry. A forwarder that ends on its own may start
   again after 30 seconds. The wait doubles each time it ends again, up to 30
   minutes, and starts over once a forwarder has run for 5 minutes. GitHub
@@ -53,6 +57,21 @@ Settings has "Get changes as they happen", off by default, because turning it
 on writes a webhook to repositories. The last page of first-run setup offers
 the same switch. When the extension is missing, both offer to install it with
 `gh extension install cli/gh-webhook`.
+
+## Organizations
+
+`gh auth login` does not ask for `admin:org_hook`, and `admin:org` does not
+include it. To add it:
+
+```bash
+gh auth refresh -h github.com -s admin:org_hook
+```
+
+Hermes reads the token's scopes from the `X-OAuth-Scopes` header of
+`HEAD /user` when the setting is turned on and each time Hermes comes to the
+front, with the token `gh` holds at that moment. When the user owns an
+organization and the scope is missing, Settings shows the command with a Copy
+button. `viewerCanAdminister` on the organization says whether the user owns it.
 
 ## Logs
 
@@ -79,9 +98,10 @@ extension reported, and when the repository is tried again.
 - Each delivery is one line of JSON on stdout. The event's type is not in it,
   so `WebhookEvent` reads the keys that name a pull request: `pull_request`,
   `issue` with a `pull_request` key, and `check_suite.pull_requests`.
+- A forwarder's target is a repository (`--repo`) or an organization (`--org`).
 - GitHub deletes the webhook when the process ends, however it ends.
 - Hermes stops its forwarders when it quits. A crash leaves them running,
-  holding their repositories' webhooks. Each is started with the webhook secret
+  holding their targets' webhooks. Each is started with the webhook secret
   `hermes-forwarder`, and the next launch ends every process that has it.
 
 ## Testing

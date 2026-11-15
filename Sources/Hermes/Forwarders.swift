@@ -9,6 +9,8 @@ import os
 @Observable
 @MainActor
 final class Forwarders {
+    typealias Target = WebhookForwarder.Target
+
     /// Each forwarder is a process and a webhook on its repository.
     static let limit = 20
     /// A forwarder that ran this long was working, so its end is not counted with earlier ones.
@@ -24,53 +26,60 @@ final class Forwarders {
         min(30 * pow(2, Double(max(failures, 1) - 1)), 1800)
     }
 
-    /// The repositories to forward, most important first: the watched ones the viewer owns,
-    /// without repeats and without those waiting to retry, up to `limit`.
+    /// What to forward, most important first: the organizations of watched repositories, then
+    /// the watched repositories the viewer owns, up to `limit` of those. No repeats, and none
+    /// that is waiting to retry.
     ///
-    /// Only the viewer's own repositories: the webhook is named `cli` and says nothing of who
-    /// made it, which an organization's other admins would have to puzzle over.
-    static func repositories(
-        watched: [RepositoryRef], viewer: String, waiting: Set<RepositoryRef>, limit: Int = limit
-    ) -> [RepositoryRef] {
-        var seen: Set<RepositoryRef> = []
-        return Array(watched.filter { $0.owner == viewer && !waiting.contains($0) && seen.insert($0).inserted }.prefix(limit))
+    /// A repository of an organization gets no forwarder of its own: the webhook is named `cli`
+    /// and says nothing of who made it, which the other admins of a shared repository would
+    /// have to puzzle over. An organization's own forwarder is one webhook its owner chose.
+    ///
+    /// - Parameter organizations: The organizations to forward whole: the ones the viewer
+    ///   owns, when the token has the scope for it.
+    static func targets(
+        watched: [RepositoryRef], viewer: String, organizations: Set<String>, waiting: Set<Target>, limit: Int = limit
+    ) -> [Target] {
+        var seen: Set<Target> = []
+        let wanted = watched.filter { organizations.contains($0.owner) }.map { Target.organization($0.owner) }
+            + watched.filter { $0.owner == viewer }.map(Target.repository).uniqued().prefix(limit)
+        return wanted.filter { !waiting.contains($0) && seen.insert($0).inserted }
     }
 
-    private(set) var running: [RepositoryRef: WebhookForwarder] = [:]
-    /// When each running forwarder started, which also tells it from an earlier one of its repository.
-    private var startedAt: [RepositoryRef: Date] = [:]
-    /// How often each repository's forwarder has ended in a row, and when it may start again.
-    private var failures: [RepositoryRef: (count: Int, retryAt: Date)] = [:]
+    private(set) var running: [Target: WebhookForwarder] = [:]
+    /// When each running forwarder started, which also tells it from an earlier one of its target.
+    private var startedAt: [Target: Date] = [:]
+    /// How often each target's forwarder has ended in a row, and when it may start again.
+    private var failures: [Target: (count: Int, retryAt: Date)] = [:]
     private static let log = Logger(subsystem: "com.coderinserepeat.hermes", category: "webhooks")
 
-    /// The repositories whose forwarder ended and may not start again yet. They refresh on the timer.
-    var waiting: Set<RepositoryRef> {
+    /// The targets whose forwarder ended and may not start again yet. They refresh on the timer.
+    var waiting: Set<Target> {
         Set(failures.filter { $0.value.retryAt > .now }.keys)
     }
 
-    /// Starts a forwarder for each wanted repository that has none, and stops the others.
+    /// Starts a forwarder for each wanted target that has none, and stops the others.
     /// Does nothing when the extension is not installed or `gh` has no token.
-    func sync(to wanted: [RepositoryRef], onEvent: @escaping @MainActor (WebhookEvent) -> Void) async {
-        for (repository, forwarder) in running where !wanted.contains(repository) {
-            running[repository] = nil
-            startedAt[repository] = nil
+    func sync(to wanted: [Target], onEvent: @escaping @MainActor (WebhookEvent) -> Void) async {
+        for (target, forwarder) in running where !wanted.contains(target) {
+            running[target] = nil
+            startedAt[target] = nil
             forwarder.stop()
         }
         let missing = wanted.filter { running[$0] == nil }
         guard !missing.isEmpty, let binary = WebhookForwarder.binary, let token = try? await GitHubAuth.token() else { return }
 
-        for repository in missing where running[repository] == nil {
+        for target in missing where running[target] == nil {
             let started = Date.now
-            startedAt[repository] = started
+            startedAt[target] = started
             do {
-                running[repository] = try WebhookForwarder(
-                    repository: repository, binary: binary, token: token,
+                running[target] = try WebhookForwarder(
+                    target: target, binary: binary, token: token,
                     onEvent: { event in Task { @MainActor in onEvent(event) } },
-                    onExit: { [weak self] error in Task { @MainActor in self?.ended(repository, started: started, error: error) } }
+                    onExit: { [weak self] error in Task { @MainActor in self?.ended(target, started: started, error: error) } }
                 )
-                Self.log.info("forwarding \(repository.description, privacy: .public)")
+                Self.log.info("forwarding \(target.description, privacy: .public)")
             } catch {
-                ended(repository, started: started, error: error.localizedDescription)
+                ended(target, started: started, error: error.localizedDescription)
             }
         }
     }
@@ -81,20 +90,28 @@ final class Forwarders {
         startedAt = [:]
     }
 
-    /// Forgets a forwarder that ended on its own, and sets when its repository may have another.
-    /// One that was stopped has no start time, or by now the start time of its repository's next one.
-    private func ended(_ repository: RepositoryRef, started: Date, error: String) {
-        guard startedAt[repository] == started else { return }
-        running[repository] = nil
-        startedAt[repository] = nil
+    /// Forgets a forwarder that ended on its own, and sets when its target may have another.
+    /// One that was stopped has no start time, or by now the start time of its target's next one.
+    private func ended(_ target: Target, started: Date, error: String) {
+        guard startedAt[target] == started else { return }
+        running[target] = nil
+        startedAt[target] = nil
 
         let ran = Date.now.timeIntervalSince(started)
-        let count = ran >= Self.settledAfter ? 1 : (failures[repository]?.count ?? 0) + 1
+        let count = ran >= Self.settledAfter ? 1 : (failures[target]?.count ?? 0) + 1
         let delay = Self.retryDelay(afterFailures: count)
-        failures[repository] = (count, Date.now.addingTimeInterval(delay))
+        failures[target] = (count, Date.now.addingTimeInterval(delay))
         Self.log.error("""
-            forwarder for \(repository.description, privacy: .public) ended after \(Int(ran)) s, \
+            forwarder for \(target.description, privacy: .public) ended after \(Int(ran)) s, \
             retry in \(Int(delay)) s: \(error.isEmpty ? "no error reported" : error, privacy: .public)
             """)
+    }
+}
+
+private extension Sequence where Element: Hashable {
+    /// The elements in order, each once.
+    func uniqued() -> [Element] {
+        var seen: Set<Element> = []
+        return filter { seen.insert($0).inserted }
     }
 }

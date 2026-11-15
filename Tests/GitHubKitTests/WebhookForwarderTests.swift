@@ -36,6 +36,16 @@ struct WebhookForwarderTests {
         #expect(WebhookEvent(payload: Data("Forwarding".utf8)) == nil)
     }
 
+    @Test func aTargetIsARepositoryOrAnOrganization() {
+        #expect(WebhookForwarder.Target.repository(airway).arguments == ["--repo", "bojan/airway"])
+        #expect(WebhookForwarder.Target.organization("acme").arguments == ["--org", "acme"])
+    }
+
+    @Test func scopesAreReadFromTheHeader() {
+        #expect(GitHubAuth.scopes(inHeader: "repo, admin:org_hook,gist") == ["repo", "admin:org_hook", "gist"])
+        #expect(GitHubAuth.scopes(inHeader: nil).isEmpty)
+    }
+
     @Test func theFailureIsWhatTheExtensionPrintsBeforeItsUsage() {
         let refused = """
             Error: error creating webhook: HTTP 422: Validation Failed (https://api.github.com/repos/o/r/hooks)
@@ -62,7 +72,7 @@ struct WebhookForwarderTests {
         let exited = OSAllocatedUnfairLock(initialState: false)
 
         let forwarder = try WebhookForwarder(
-            repository: playground, binary: binary, token: try await GitHubAuth.token(),
+            target: .repository(playground), binary: binary, token: try await GitHubAuth.token(),
             onEvent: { event in events.withLock { $0.append(event) } }, onExit: { _ in exited.withLock { $0 = true } }
         )
         try await Task.sleep(for: .seconds(4))

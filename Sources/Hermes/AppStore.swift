@@ -85,10 +85,26 @@ final class AppStore {
     var usesWebhooks: Bool {
         didSet {
             defaults.set(usesWebhooks, forKey: Keys.usesWebhooks)
-            Task { await syncForwarders() }
+            Task {
+                await checkOrganizationHookScope()
+                await syncForwarders()
+            }
         }
     }
     let forwarders = Forwarders()
+    /// Whether the `gh` token may create an organization's webhook. Checked when Hermes
+    /// comes to the front, which is when a `gh auth refresh` in a terminal has just finished.
+    private(set) var hasOrganizationHookScope = false
+
+    /// The organizations the viewer owns. Each can have one forwarder for all its repositories.
+    var ownedOrganizations: [String] {
+        (viewer?.organizations ?? []).filter(\.canAdminister).map(\.login)
+    }
+
+    func checkOrganizationHookScope() async {
+        guard usesWebhooks, !ownedOrganizations.isEmpty else { return }
+        hasOrganizationHookScope = await GitHubAuth.scopes().contains(WebhookForwarder.organizationScope)
+    }
 
     private enum Keys {
         static let usesWebhooks = "usesWebhooks"
@@ -153,12 +169,14 @@ final class AppStore {
         }
     }
 
-    /// Runs a forwarder for each of the viewer's own repositories that a window watches, or
-    /// none when the setting is off.
+    /// Runs a forwarder for each organization the viewer owns and each of the viewer's own
+    /// repositories that a window watches, or none when the setting is off.
     func syncForwarders() async {
         guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
-        let wanted = Forwarders.repositories(
-            watched: watched(in: viewer).map(\.repository), viewer: viewer, waiting: forwarders.waiting
+        let logins = Set(windows.allObjects.compactMap { $0.account?.login })
+        let wanted = Forwarders.targets(
+            watched: logins.sorted().flatMap { watched(in: $0) }.map(\.repository), viewer: viewer,
+            organizations: hasOrganizationHookScope ? Set(ownedOrganizations) : [], waiting: forwarders.waiting
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }

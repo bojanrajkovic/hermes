@@ -46,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await store.keepFresh() }
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { await store.checkOrganizationHookScope() }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         store.forwarders.stopAll()
     }
@@ -253,7 +257,7 @@ struct WebhooksSection: View {
         Section {
             Toggle(isOn: $model.usesWebhooks) {
                 Text("Get changes as they happen")
-                Text("Adds a webhook named \"cli\" to up to 20 of your own repositories, the ones with pull requests on screen. GitHub removes it when Hermes quits. Other repositories refresh on the timer.")
+                Text("Adds a webhook named \"cli\" to up to 20 of your own repositories, the ones with pull requests on screen, and to organizations you own. GitHub removes it when Hermes quits. Other repositories refresh on the timer.")
             }
             if store.usesWebhooks, !isInstalled {
                 LabeledContent {
@@ -265,7 +269,20 @@ struct WebhooksSection: View {
                         .foregroundStyle(installError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
                 }
             } else if store.usesWebhooks {
-                LabeledContent("Repositories forwarded", value: store.forwarders.running.count, format: .number)
+                LabeledContent("Forwarders running", value: store.forwarders.running.count, format: .number)
+                if !store.ownedOrganizations.isEmpty, !store.hasOrganizationHookScope {
+                    let command = "gh auth refresh -h github.com -s \(WebhookForwarder.organizationScope)"
+                    LabeledContent {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(command, forType: .string)
+                        }
+                    } label: {
+                        Text("Organizations need one more permission")
+                        Text("To cover \(store.ownedOrganizations.formatted(.list(type: .and))), run this in a terminal, then come back to Hermes.")
+                        Text(verbatim: command).font(.body.monospaced()).textSelection(.enabled)
+                    }
+                }
             }
         }
     }

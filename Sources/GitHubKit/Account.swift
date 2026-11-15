@@ -40,14 +40,17 @@ public struct Account: Sendable, Hashable, Identifiable {
     /// The display name. Nil when the account has not set one.
     public let name: String?
     public let avatarURL: URL
+    /// Whether the viewer is an owner of the organization. False for the personal account.
+    public let canAdminister: Bool
 
     public var id: String { login }
 
-    public init(kind: Kind, login: String, name: String?, avatarURL: URL) {
+    public init(kind: Kind, login: String, name: String?, avatarURL: URL, canAdminister: Bool = false) {
         self.kind = kind
         self.login = login
         self.name = name
         self.avatarURL = avatarURL
+        self.canAdminister = canAdminister
     }
 }
 
