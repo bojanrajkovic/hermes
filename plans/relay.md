@@ -20,6 +20,9 @@ code it used and the App's ID, client ID, client secret, and webhook secret.
 | `GET /version` | `200 {"commit": "<sha>"}`: the commit the running Worker was built from. A local run reports `dev`. |
 | `PUT /tenants/<tenant>` | Registers a tenant. See below. |
 | `POST /hook/<tenant>` | Takes a webhook delivery from GitHub. See below. |
+| `GET /t/<tenant>/login?state=<s>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
+| `GET /t/<tenant>/callback` | Where GitHub sends the browser after sign-in. Redirects to a `hermes://relay.session` link. |
+| `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
 
 A path with a malformed tenant ID answers `404`.
 
@@ -74,6 +77,49 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 
 The relay stores nothing from a delivery.
 
+### Signing in
+
+A user signs in through the tenant's own GitHub App, so the token GitHub issues
+can read only what both the App and the user can.
+
+```mermaid
+sequenceDiagram
+    participant H as Hermes
+    participant B as Browser
+    participant R as Relay
+    participant GH as GitHub
+    H->>B: open /t/<tenant>/login?state=s
+    B->>R: GET /t/<tenant>/login?state=s
+    R-->>B: 302 to GitHub's authorize page
+    B->>GH: sign in and authorize the App
+    GH-->>B: 302 /t/<tenant>/callback?code=c&state=s
+    B->>R: GET /t/<tenant>/callback?code=c&state=s
+    R-->>B: 302 hermes://relay.session?tenant=…&grant=c&state=s
+    B->>H: open the link
+    H->>R: POST /t/<tenant>/session {"grant": "c"}
+    R->>GH: exchange the code, with the App's client secret
+    GH-->>R: access token, refresh token
+    R-->>H: {"refreshToken": "…"}
+```
+
+The grant is GitHub's own code, passed through unchanged, so the relay holds
+nothing between the browser's sign-in and the client's request. GitHub accepts
+a code once, for ten minutes. The relay returns the refresh token and discards
+the access token.
+
+`POST /t/<tenant>/session` takes `{"grant": "<code>"}`:
+
+| Status | Meaning |
+|---|---|
+| `200` | `{"refreshToken": "<token>"}` |
+| `400` | The body has no grant. |
+| `403` | GitHub refused the code, the tenant's invite code was withdrawn, or the App's user tokens don't expire. |
+| `404` | No tenant with this ID is registered. |
+
+The App must have "Expire user authorization tokens" on, which is GitHub's
+default. With it off GitHub issues no refresh token. The calls to GitHub use
+[`@octokit/oauth-methods`](https://github.com/octokit/oauth-methods.js).
+
 ## Invite codes
 
 The `INVITE_CODES` secret holds the codes the relay accepts, separated by
@@ -97,7 +143,8 @@ relay/
 │   ├── index.ts          the routes: parse the request, call the tenant, map the result
 │   ├── tenant.ts         the Tenant Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
-│   └── delivery.ts       decides what to do with a webhook delivery
+│   ├── delivery.ts       decides what to do with a webhook delivery
+│   └── github.ts         the calls to GitHub
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
