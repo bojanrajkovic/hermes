@@ -30,7 +30,7 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
         #expect(pullRequest(1, checkState: .failed).isShown(showingAllBots: false))
     }
 
-    @Test(arguments: [ChecksRollup.passed, .pending, .optionalFailed, nil])
+    @Test(arguments: [ChecksRollup.passed, .pending, nil])
     func healthyBotPullRequestsAreHidden(checkState: ChecksRollup?) {
         #expect(!pullRequest(1, bot: true, checkState: checkState).isShown(showingAllBots: false))
     }
@@ -39,8 +39,9 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
         #expect(!pullRequest(1, bot: true, mergeable: .unknown).isShown(showingAllBots: false))
     }
 
-    @Test func botPullRequestsWithFailedChecksAreShown() {
-        #expect(pullRequest(1, bot: true, checkState: .failed).isShown(showingAllBots: false))
+    @Test(arguments: [ChecksRollup.failed, .optionalFailed])
+    func botPullRequestsWithFailedChecksAreShown(checkState: ChecksRollup) {
+        #expect(pullRequest(1, bot: true, checkState: checkState).isShown(showingAllBots: false))
     }
 
     @Test func failedChecksCountOnlyWhenRequiredAndWaitForRequiredOnesStillRunning() {

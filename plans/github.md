@@ -112,7 +112,9 @@ number and loaded again, since a window may be showing it.
 
 `PullRequest.isShown(showingAllBots:)` decides whether a list shows a pull
 request. A person's pull request always shows. A bot's shows only when
-`needsAttention` is true: a required check failed, or it has merge conflicts.
+`needsAttention` is true: a check failed, required or not, or it has merge
+conflicts. An optional failure counts here because a person still has to look
+at the pull request to merge it.
 The Show All Bot Pull Requests setting turns the filter off.
 
 ## Required and optional checks
@@ -131,8 +133,8 @@ which takes the pull request as an argument and so cannot be part of
 | None failed, all finished, or there are none | `optionalFailed` |
 
 A repository that requires no checks has only optional ones, so a failure
-there is `optionalFailed`. Only `failed` counts as failing: in the Failing
-filter, the bot filter, and the attention inbox. `optionalFailed` shows as a
+there is `optionalFailed`. Only `failed` counts as failing in the Failing
+filter and the attention inbox. `optionalFailed` shows as a
 yellow warning triangle, "Optional checks failed", and does not stop a pull
 request from being "Ready to merge".
 

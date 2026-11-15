@@ -22,11 +22,11 @@ What is built and works, and what is known not to work or is unverified.
   its parent. The stack switcher includes local branches above a pull request.
 - Stacks: stacked pull requests are grouped in the lists, and the detail pane
   has a stack switcher.
-- The bot filter: a bot's pull request shows only when a required check fails
-  or it has merge conflicts.
+- The bot filter: a bot's pull request shows only when a check fails or it
+  has merge conflicts.
 - Failed checks that merging does not require show as a yellow warning, not a
-  red failure, and do not count as failing in the Failing filter, the bot
-  filter, or the attention inbox.
+  red failure, and do not count as failing in the Failing filter or the
+  attention inbox.
 - The lists refresh every 15 seconds while Hermes is in front, on a timer in
   the background (30 seconds to 5 minutes, 1 minute by default), when the app
   becomes active, and on ⌘R. The first load shows the viewer's own pull

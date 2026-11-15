@@ -253,10 +253,10 @@ extension PullRequest: Decodable {
 // MARK: Bot filter
 
 extension PullRequest {
-    /// True when something is wrong that a person has to look at: a required
-    /// check failed, or there are merge conflicts.
+    /// True when something is wrong that a person has to look at: a check
+    /// failed, required or not, or there are merge conflicts.
     public var needsAttention: Bool {
-        checkState == .failed || mergeable == .conflicting
+        checkState == .failed || checkState == .optionalFailed || mergeable == .conflicting
     }
 
     /// Whether the pull request list shows this pull request.
