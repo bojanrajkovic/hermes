@@ -103,6 +103,8 @@ extension reported, and when the repository is tried again.
   `issue` with a `pull_request` key, and `check_suite.pull_requests`.
 - A forwarder's target is a repository (`--repo`) or an organization (`--org`).
 - GitHub deletes the webhook when the process ends, however it ends.
+- GitHub allows one forwarder per target. An organization's forwarder and a
+  forwarder of one of its repositories can run at once.
 - Hermes stops its forwarders when it quits. A crash leaves them running,
   holding their targets' webhooks. Each is started with the webhook secret
   `hermes-forwarder`, and the next launch ends every process that has it.
