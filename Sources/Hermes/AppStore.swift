@@ -158,7 +158,7 @@ final class AppStore {
     func syncForwarders() async {
         guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
         let wanted = Forwarders.repositories(
-            watched: watched(in: viewer).map(\.repository), viewer: viewer, refused: forwarders.refused
+            watched: watched(in: viewer).map(\.repository), viewer: viewer, waiting: forwarders.waiting
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }

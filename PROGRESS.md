@@ -30,8 +30,8 @@ What is built and works, and what is known not to work or is unverified.
   requests before the rest of the account; later refreshes fetch what changed
   and load the pull requests on screen again by ID, so they do not wait for
   GitHub's search. Only repositories the viewer can push to load in full.
-- First-run setup: a sheet confirms the signed-in account and asks where
-  checkouts live.
+- First-run setup: a sheet confirms the signed-in account, asks where
+  checkouts live, and offers webhook forwarders.
 - The command palette: fuzzy search over repositories, pull requests, and
   issues, and `repo#123` references to items outside the lists.
 

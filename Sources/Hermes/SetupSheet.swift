@@ -4,10 +4,10 @@ import SessionsUI
 import SwiftUI
 
 /// First-run setup, shown once over the first window after sign-in: who
-/// Hermes signed in as, then where the user's checkouts live. Both stay
-/// editable in Settings.
+/// Hermes signed in as, where the user's checkouts live, and whether to get
+/// changes through webhooks. The last two stay editable in Settings.
 struct SetupSheet: View {
-    enum Page { case account, checkouts }
+    enum Page: Int, CaseIterable { case account, checkouts, updates }
 
     let viewer: ViewerProfile
     let finish: () -> Void
@@ -18,19 +18,22 @@ struct SetupSheet: View {
             switch page {
             case .account: account
             case .checkouts: checkouts
+            case .updates: updates
             }
             Divider()
             HStack {
-                Text(page == .account ? "Step 1 of 2" : "Step 2 of 2")
+                Text("Step \(page.rawValue + 1) of \(Page.allCases.count)")
                     .font(Theme.Fonts.meta)
                     .foregroundStyle(.secondary)
                 Spacer()
-                if page == .checkouts {
-                    Button("Back") { page = .account }
-                    Button("Done", action: finish)
+                if let previous = Page(rawValue: page.rawValue - 1) {
+                    Button("Back") { page = previous }
+                }
+                if let next = Page(rawValue: page.rawValue + 1) {
+                    Button("Continue") { page = next }
                         .keyboardShortcut(.defaultAction)
                 } else {
-                    Button("Continue") { page = .checkouts }
+                    Button("Done", action: finish)
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -71,6 +74,17 @@ struct SetupSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             CheckoutFoldersSection()
+        }
+        .formStyle(.grouped)
+    }
+
+    private var updates: some View {
+        Form {
+            Section {
+                Text("Hermes refreshes its lists every 15 seconds. For your own repositories it can also hear about a change from GitHub within a couple of seconds.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            WebhooksSection()
         }
         .formStyle(.grouped)
     }

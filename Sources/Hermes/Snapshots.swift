@@ -65,6 +65,7 @@ enum Snapshots {
         let setupSize = NSSize(width: Theme.setupWidth, height: Theme.setupHeight)
         try await scene("setup-account", size: setupSize, SetupSheet(viewer: viewer, finish: {}), model: model)
         try await scene("setup-checkouts", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .checkouts), model: model)
+        try await scene("setup-updates", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .updates), model: model)
         model.store.hasFinishedSetup = true
 
         // The personal account.

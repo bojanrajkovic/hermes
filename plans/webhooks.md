@@ -40,16 +40,29 @@ that ends costs nothing but the delay.
 - Only repositories with a watched pull request: the open one, ones with a
   session, the attention inbox, and the list on screen.
 - At most 20. Each forwarder is a process and a webhook.
-- Not the ones GitHub refused. A forwarder that ends within 30 seconds of
-  starting was refused: the user is not an admin of the repository, or it
-  already has a forwarder. GitHub allows one per repository. A refused
-  repository stays on the timer until Hermes quits.
+- Not the ones waiting to retry. A forwarder that ends on its own may start
+  again after 30 seconds. The wait doubles each time it ends again, up to 30
+  minutes, and starts over once a forwarder has run for 5 minutes. GitHub
+  refuses a forwarder within seconds when the user is not an admin of the
+  repository or it already has one (GitHub allows one per repository), so such
+  a repository is tried twice an hour and otherwise stays on the timer.
 
 ## The setting
 
 Settings has "Get changes as they happen", off by default, because turning it
-on writes a webhook to repositories. When the extension is missing, Settings
-offers to install it with `gh extension install cli/gh-webhook`.
+on writes a webhook to repositories. The last page of first-run setup offers
+the same switch. When the extension is missing, both offer to install it with
+`gh extension install cli/gh-webhook`.
+
+## Logs
+
+`Forwarders` logs under the `com.coderinserepeat.hermes` subsystem, category
+`webhooks`: each start, and each end with how long the forwarder ran, what the
+extension reported, and when the repository is tried again.
+
+```bash
+/usr/bin/log stream --predicate 'subsystem == "com.coderinserepeat.hermes" AND category == "webhooks"'
+```
 
 ## The process
 

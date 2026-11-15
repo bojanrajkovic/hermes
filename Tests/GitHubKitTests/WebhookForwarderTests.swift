@@ -36,6 +36,21 @@ struct WebhookForwarderTests {
         #expect(WebhookEvent(payload: Data("Forwarding".utf8)) == nil)
     }
 
+    @Test func theFailureIsWhatTheExtensionPrintsBeforeItsUsage() {
+        let refused = """
+            Error: error creating webhook: HTTP 422: Validation Failed (https://api.github.com/repos/o/r/hooks)
+            Hook already exists on this repository
+            Usage:
+              forward --events=<types> [--url=<url>] [flags]
+            """
+
+        #expect(WebhookForwarder.failure(in: refused) == """
+            Error: error creating webhook: HTTP 422: Validation Failed (https://api.github.com/repos/o/r/hooks)
+            Hook already exists on this repository
+            """)
+        #expect(WebhookForwarder.failure(in: "[LOG] received event \"ping\"\n") == "")
+    }
+
     /// Forwards `bojanrajkovic/hermes-playground`, comments on its pull request 53, and deletes
     /// the comment. Needs the `cli/gh-webhook` extension and admin rights on the repository.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["HERMES_LIVE_WEBHOOKS"] == "1"))
@@ -48,7 +63,7 @@ struct WebhookForwarderTests {
 
         let forwarder = try WebhookForwarder(
             repository: playground, binary: binary, token: try await GitHubAuth.token(),
-            onEvent: { event in events.withLock { $0.append(event) } }, onExit: { exited.withLock { $0 = true } }
+            onEvent: { event in events.withLock { $0.append(event) } }, onExit: { _ in exited.withLock { $0 = true } }
         )
         try await Task.sleep(for: .seconds(4))
         #expect(!exited.withLock { $0 })

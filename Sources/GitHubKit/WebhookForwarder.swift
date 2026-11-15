@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// What a webhook delivery says changed.
 public struct WebhookEvent: Sendable, Hashable {
@@ -94,12 +95,13 @@ public final class WebhookForwarder: Sendable {
     /// - Parameters:
     ///   - token: A GitHub token. The extension cannot read the one `gh` keeps in the keychain.
     ///   - onEvent: Called for each delivery, on a background queue.
-    ///   - onExit: Called once when the process ends for any reason, `stop()` included. GitHub
-    ///     refusing the webhook ends it within a few seconds: the viewer is not an admin, or
-    ///     the repository already has a forwarder.
+    ///   - onExit: Called once when the process ends for any reason, `stop()` included, with
+    ///     what the extension reported, or an empty string. GitHub refusing the webhook ends it
+    ///     within a few seconds: the viewer is not an admin, or the repository already has a
+    ///     forwarder.
     public init(
         repository: RepositoryRef, binary: URL, token: String,
-        onEvent: @escaping @Sendable (WebhookEvent) -> Void, onExit: @escaping @Sendable () -> Void
+        onEvent: @escaping @Sendable (WebhookEvent) -> Void, onExit: @escaping @Sendable (_ error: String) -> Void
     ) throws {
         self.repository = repository
         let output = Pipe()
@@ -108,7 +110,15 @@ public final class WebhookForwarder: Sendable {
         process.environment = ProcessInfo.processInfo.environment.merging(["GH_TOKEN": token]) { _, new in new }
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
+        let errors = Pipe()
+        process.standardError = errors
+
+        // The extension logs each delivery to stderr too. Only what it says when it gives up is kept.
+        let reported = OSAllocatedUnfairLock(initialState: "")
+        errors.fileHandleForReading.readabilityHandler = { handle in
+            let text = String(decoding: handle.availableData, as: UTF8.self)
+            reported.withLock { $0 = Self.failure(in: $0 + text) }
+        }
 
         // One delivery is one line, and a read can end in the middle of one.
         nonisolated(unsafe) var buffer = Data()
@@ -121,9 +131,19 @@ public final class WebhookForwarder: Sendable {
         }
         process.terminationHandler = { _ in
             output.fileHandleForReading.readabilityHandler = nil
-            onExit()
+            errors.fileHandleForReading.readabilityHandler = nil
+            onExit(reported.withLock { $0 })
         }
         try process.run()
+    }
+
+    /// The lines of the extension's stderr that say why it gave up: from `Error:` up to the
+    /// usage text it prints after. Empty when it has reported no error.
+    static func failure(in stderr: String) -> String {
+        guard let start = stderr.range(of: "Error:") else { return "" }
+        let message = stderr[start.lowerBound...]
+        return message[..<(message.range(of: "\nUsage:")?.lowerBound ?? message.endIndex)]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func stop() {
