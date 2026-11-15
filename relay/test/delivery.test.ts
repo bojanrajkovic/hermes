@@ -34,6 +34,15 @@ describe("classifyDelivery", () => {
     });
   });
 
+  it("reads an event whose repository is null", () => {
+    expect(classifyDelivery("installation", body({ action: "deleted", repository: null }))).toEqual({
+      action: "delete",
+    });
+    expect(classifyDelivery("organization", body({ action: "member_removed", repository: null }))).toEqual(
+      { action: "recheck" },
+    );
+  });
+
   it.each(["created", "suspend", "unsuspend", "new_permissions_accepted"])(
     "ignores installation %s",
     (action) => {

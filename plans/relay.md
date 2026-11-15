@@ -15,7 +15,9 @@ list of tenants. A tenant's Durable Object stores two things:
 - Its registration: the invite code it used and the App's ID, client ID, client
   secret, and webhook secret.
 - For each open socket, the IDs of the repositories that socket's user can see.
-  They are deleted when the socket closes.
+  They are deleted when the socket closes. Each connect and each alarm also
+  deletes the IDs of any session that has no open socket, because a socket that
+  ends when the Durable Object shuts down may never report its close.
 
 A person in several organizations uses one tenant per organization, each with
 its own sign-in and its own socket.
@@ -32,7 +34,9 @@ its own sign-in and its own socket.
 | `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
 | `GET /t/<tenant>/connect` | Opens a WebSocket for a signed-in user. See below. |
 
-A path with a malformed tenant ID answers `404`.
+A path with a malformed tenant ID answers `404`. A request the relay fails to
+handle, such as one that needs GitHub while GitHub is down, answers `500` with
+no body. The relay prints nothing about it.
 
 ### Registering a tenant
 
@@ -138,6 +142,7 @@ the access token.
 | `400` | The body has no grant. |
 | `403` | GitHub refused the code, the tenant's invite code was withdrawn, or the App's user tokens don't expire. |
 | `404` | No tenant with this ID is registered. |
+| `500` | GitHub could not be reached. The code may still be good. |
 
 The App must have "Expire user authorization tokens" on, which is GitHub's
 default. With it off GitHub issues no refresh token. The calls to GitHub use
@@ -154,6 +159,7 @@ token in an `Authorization: Bearer <token>` header.
 | `401` | There is no token, or GitHub refused it. The user must sign in again. |
 | `404` | No tenant with this ID is registered, or its invite code was withdrawn. |
 | `426` | The request is not a WebSocket upgrade. |
+| `500` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
 
 Before it opens the socket, the relay:
 
@@ -175,6 +181,14 @@ The first message on the socket is the session:
   "repositories": ["acme/site", "acme/api"]
 }
 ```
+
+A delivery can arrive while the relay is waiting on GitHub in steps 1 and 2:
+
+- If it deleted the tenant, the request answers `404`.
+- If it closed every socket because someone's access changed, the list just
+  read may be out of date. The relay opens the socket, sends the session so the
+  client gets its new refresh token, stores no repository IDs, and closes the
+  socket with code `4001`.
 
 The client must store the new refresh token at once. If the connection drops
 before this message arrives, the client holds a spent token, and the user has

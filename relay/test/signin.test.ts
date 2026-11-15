@@ -123,6 +123,15 @@ describe("POST /t/:tenant/session", () => {
     expect((await requestSession(tenant, { grant: "gh-code" })).status).toBe(403);
   });
 
+  it("reports an error, not a refusal, when GitHub is down", async () => {
+    const tenant = await registeredTenant();
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response("unavailable", { status: 503 }),
+    );
+
+    expect((await requestSession(tenant, { grant: "gh-code" })).status).toBe(500);
+  });
+
   it("does not ask GitHub about an unregistered tenant or a missing grant", async () => {
     const gitHub = gitHubAnswers({});
 

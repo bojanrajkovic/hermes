@@ -141,6 +141,15 @@ describe("GET /t/:tenant/connect", () => {
     expect((await connect(tenant, upgrade)).status).toBe(401);
   });
 
+  it("reports an error, not a refusal, when GitHub is down, so the client keeps its token", async () => {
+    const tenant = await registeredTenant();
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response("unavailable", { status: 503 }),
+    );
+
+    expect((await connect(tenant, upgrade)).status).toBe(500);
+  });
+
   it("asks GitHub nothing without a token, an upgrade, or a registered tenant", async () => {
     const tenant = await registeredTenant();
     const calls = gitHub(refreshed);
@@ -161,11 +170,36 @@ describe("GET /t/:tenant/connect", () => {
     await vi.waitFor(async () => expect(await storedRepositories(tenant)).toEqual([]));
   });
 
+  it("deletes the repositories of a session whose socket is gone", async () => {
+    const tenant = await registeredTenant();
+    gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]]);
+    await open(tenant);
+    const stub = env.TENANT.getByName(tenant);
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec(
+        "INSERT INTO session_repository (repository, session) VALUES (9, 'left-behind')",
+      );
+    });
+
+    await runDurableObjectAlarm(stub);
+
+    expect(await storedRepositories(tenant)).toEqual([7]);
+  });
+
   it("closes a socket after eight hours so the client reconnects", async () => {
     const tenant = await registeredTenant();
     gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]]);
-    const { socket } = await open(tenant);
+    const { socket, first } = await open(tenant);
     const code = closed(socket);
+    const stub = env.TENANT.getByName(tenant);
+    const { expiresAt } = first as { expiresAt: number };
+
+    // The alarm is set for the moment the session runs out, and running it early closes nothing.
+    const alarm = () => runInDurableObject(stub, (_instance, state) => state.storage.getAlarm());
+    expect(await alarm()).toBe(expiresAt * 1000);
+    await runDurableObjectAlarm(stub);
+    expect(await storedRepositories(tenant)).toEqual([7]);
+    expect(await alarm()).toBe(expiresAt * 1000);
 
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000 + 1000);

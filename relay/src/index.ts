@@ -7,6 +7,9 @@ type App = { Bindings: Env };
 
 const app = new Hono<App>();
 
+// Hono's default handler prints the error. The relay prints nothing.
+app.onError((_error, c) => c.body(null, 500));
+
 const tenantID = /^[0-9a-f]{32}$/;
 
 /** The Durable Object for the tenant named in the path, or undefined when the ID is malformed. */

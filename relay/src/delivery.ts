@@ -3,7 +3,7 @@ import { z } from "zod";
 // The only fields of a GitHub payload the relay reads.
 const Routing = z.object({
   action: z.string().optional(),
-  repository: z.object({ id: z.number() }).optional(),
+  repository: z.object({ id: z.number() }).nullish(),
 });
 
 export type DeliveryAction =

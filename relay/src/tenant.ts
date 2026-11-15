@@ -31,9 +31,13 @@ export type SignIn =
 
 /** Whether GitHub signed this delivery with the tenant's webhook secret. */
 async function signed(delivery: Delivery, secret: string): Promise<boolean> {
-  // `verify` throws on an empty argument.
+  // `verify` throws on an empty argument, and on a signature that is not `sha256=<hex>`.
   if (delivery.signature === "" || delivery.body === "") return false;
-  return verify(secret, delivery.body, delivery.signature);
+  try {
+    return await verify(secret, delivery.body, delivery.signature);
+  } catch {
+    return false;
+  }
 }
 
 /** Sends on a socket, and does nothing when it has just closed. */
@@ -47,6 +51,13 @@ function send(socket: WebSocket, message: string): void {
 
 /** One tenant: an account whose owner registered its own GitHub App with the relay. */
 export class Tenant extends DurableObject<Env> {
+  /**
+   * How many times every socket has been closed. A connect that was waiting on GitHub
+   * compares it, to see whether its repository list went out of date meanwhile. A field is
+   * enough: a waiting request keeps this object in memory.
+   */
+  private closures = 0;
+
   async register(body: unknown): Promise<RegistrationDecision["outcome"]> {
     const existing = await this.registration();
     const decision = decideRegistration(body, this.env.INVITE_CODES, existing);
@@ -87,8 +98,9 @@ export class Tenant extends DurableObject<Env> {
 
   /** Sends a delivery to the sockets whose user can see its repository. */
   private forward(delivery: Delivery, repository: number): void {
+    if (!this.hasSessionTable) return;
     const sessions = new Set(
-      this.sessionRepositories
+      this.ctx.storage.sql
         .exec<{ session: string }>(
           "SELECT session FROM session_repository WHERE repository = ?",
           repository,
@@ -110,6 +122,7 @@ export class Tenant extends DurableObject<Env> {
   }
 
   private closeEverySocket(code: number, reason: string): void {
+    this.closures += 1;
     for (const socket of this.ctx.getWebSockets()) {
       this.forget(socket);
       socket.close(code, reason);
@@ -144,8 +157,14 @@ export class Tenant extends DurableObject<Env> {
     }
     const token = bearerToken(request.headers.get("authorization"));
     if (!token) return new Response(null, { status: 401 });
+    const closures = this.closures;
     const access = await accessForRefreshToken(registration, token);
     if (!access) return new Response(null, { status: 401 });
+
+    // Deliveries ran while GitHub answered. One may have deleted the tenant, or closed every
+    // socket because someone's access changed, which makes the list just read out of date.
+    if (!(await this.registration())) return new Response(null, { status: 404 });
+    const outOfDate = closures !== this.closures;
 
     const session: Session = {
       id: crypto.randomUUID(),
@@ -154,12 +173,15 @@ export class Tenant extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(session);
-    for (const repository of access.repositories) {
-      this.sessionRepositories.exec(
-        "INSERT OR IGNORE INTO session_repository (repository, session) VALUES (?, ?)",
-        repository.id,
-        session.id,
-      );
+    if (!outOfDate) {
+      this.createSessionTable();
+      for (const repository of access.repositories) {
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO session_repository (repository, session) VALUES (?, ?)",
+          repository.id,
+          session.id,
+        );
+      }
     }
     await this.closeExpiredSessions();
 
@@ -171,6 +193,9 @@ export class Tenant extends DurableObject<Env> {
         repositories: access.repositories.map((repository) => repository.fullName),
       }),
     );
+    // The old refresh token is spent, so the client needs the session message either way.
+    // With an out-of-date list it then reconnects for a fresh one.
+    if (outOfDate) server.close(closeCode.recheck, "recheck");
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -179,6 +204,10 @@ export class Tenant extends DurableObject<Env> {
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> {
+    this.forget(socket);
+  }
+
+  async webSocketError(socket: WebSocket): Promise<void> {
     this.forget(socket);
   }
 
@@ -195,17 +224,38 @@ export class Tenant extends DurableObject<Env> {
         socket.close(closeCode.recheck, "recheck");
       }
     }
+    this.forgetSessionsWithoutSocket(sessions.filter((session) => !expired.includes(session)));
     if (next !== undefined) await this.ctx.storage.setAlarm(next * 1000);
+  }
+
+  /**
+   * Deletes the repository IDs of sessions that have no open socket. A socket that ends when
+   * the Durable Object shuts down may never report its close.
+   */
+  private forgetSessionsWithoutSocket(open: Session[]): void {
+    if (!this.hasSessionTable) return;
+    const stored = this.ctx.storage.sql
+      .exec<{ session: string }>("SELECT DISTINCT session FROM session_repository")
+      .toArray();
+    for (const { session } of stored) {
+      if (!open.some((other) => other.id === session)) {
+        this.ctx.storage.sql.exec("DELETE FROM session_repository WHERE session = ?", session);
+      }
+    }
   }
 
   /** Deletes the repository IDs kept for a socket's session. */
   private forget(socket: WebSocket): void {
+    if (!this.hasSessionTable) return;
     const session = socket.deserializeAttachment() as Session;
-    this.sessionRepositories.exec("DELETE FROM session_repository WHERE session = ?", session.id);
+    this.ctx.storage.sql.exec("DELETE FROM session_repository WHERE session = ?", session.id);
   }
 
-  /** The table of which session can see which repository. Created on use, because deleting a tenant drops it. */
-  private get sessionRepositories(): SqlStorage {
+  /**
+   * Creates the table of which session can see which repository. Only a connect creates it,
+   * so a deleted tenant, whose sockets report their close afterwards, keeps nothing stored.
+   */
+  private createSessionTable(): void {
     this.ctx.storage.sql.exec(
       `CREATE TABLE IF NOT EXISTS session_repository (
         repository INTEGER NOT NULL,
@@ -213,7 +263,13 @@ export class Tenant extends DurableObject<Env> {
         PRIMARY KEY (repository, session)
       ) WITHOUT ROWID`,
     );
-    return this.ctx.storage.sql;
+  }
+
+  private get hasSessionTable(): boolean {
+    const tables = this.ctx.storage.sql.exec(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_repository'",
+    );
+    return tables.toArray().length > 0;
   }
 
   private registration(): Promise<Registration | undefined> {

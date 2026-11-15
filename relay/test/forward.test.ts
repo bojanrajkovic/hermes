@@ -54,11 +54,36 @@ function userSees(...repositories: number[]) {
   });
 }
 
-/** An open socket whose messages and close code can be awaited in order. */
-async function open(tenant: string) {
-  const response = await exports.default.fetch(`https://relay.test/t/${tenant}/connect`, {
+/** Like `userSees`, but GitHub holds back the repository list until `release` is called. */
+function userSeesAfterAWait(...repositories: number[]) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let asked = false;
+  userSees(...repositories);
+  const answer = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith("/repositories")) {
+      asked = true;
+      await held;
+    }
+    return answer(input, init);
+  });
+  return { release, asked: () => asked };
+}
+
+function connect(tenant: string): Promise<Response> {
+  return exports.default.fetch(`https://relay.test/t/${tenant}/connect`, {
     headers: { upgrade: "websocket", authorization: "Bearer ghr_old" },
   });
+}
+
+/** An open socket whose messages and close code can be awaited in order. */
+async function open(tenant: string) {
+  return watch(await connect(tenant));
+}
+
+async function watch(response: Response) {
   const socket = response.webSocket!;
   const messages: string[] = [];
   let closeCode: number | undefined;
@@ -88,9 +113,12 @@ async function deliver(tenant: string, event: string, body: string): Promise<num
 }
 
 function storedSessions(tenant: string): Promise<number> {
-  return runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
-    state.storage.sql.exec("SELECT DISTINCT session FROM session_repository").toArray().length,
-  );
+  return runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) => {
+    const sql = state.storage.sql;
+    const created = sql.exec("SELECT 1 FROM sqlite_master WHERE name = 'session_repository'");
+    if (created.toArray().length === 0) return 0;
+    return sql.exec("SELECT DISTINCT session FROM session_repository").toArray().length;
+  });
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -142,6 +170,34 @@ describe("a change in who can see what", () => {
   });
 });
 
+describe("a delivery that arrives while a client is connecting", () => {
+  it("gives the client its new token, then has it reconnect, when access changed", async () => {
+    const tenant = await registeredTenant();
+    const gitHub = userSeesAfterAWait(7);
+    const connecting = connect(tenant);
+    await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
+
+    await deliver(tenant, "member", '{"action":"removed","repository":{"id":7}}');
+    gitHub.release();
+    const socket = await watch(await connecting);
+
+    await vi.waitFor(() => expect(socket.closeCode()).toBe(4001));
+    expect(await storedSessions(tenant)).toBe(0);
+  });
+
+  it("opens no socket when the App was uninstalled", async () => {
+    const tenant = await registeredTenant();
+    const gitHub = userSeesAfterAWait(7);
+    const connecting = connect(tenant);
+    await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
+
+    await deliver(tenant, "installation", '{"action":"deleted"}');
+    gitHub.release();
+
+    expect((await connecting).status).toBe(404);
+  });
+});
+
 describe("a tenant that ends", () => {
   it("tells clients to stop when the App is uninstalled", async () => {
     const tenant = await registeredTenant();
@@ -151,6 +207,14 @@ describe("a tenant that ends", () => {
     await deliver(tenant, "installation", '{"action":"deleted"}');
 
     await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
+    // The client's close reaches the relay after the tenant is deleted, and must leave nothing.
+    const left = await runInDurableObject(env.TENANT.getByName(tenant), async (_instance, state) => ({
+      keys: (await state.storage.list()).size,
+      tables: state.storage.sql
+        .exec("SELECT name FROM sqlite_master WHERE name = 'session_repository'")
+        .toArray().length,
+    }));
+    expect(left).toEqual({ keys: 0, tables: 0 });
   });
 
   it("tells clients to stop when the invite code is withdrawn", async () => {

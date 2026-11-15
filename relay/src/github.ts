@@ -88,7 +88,11 @@ export async function accessForRefreshToken(
   return { refreshToken: authentication.refreshToken, repositories };
 }
 
-/** Octokit gives an error a status when GitHub answered, and none when the request failed. */
+/**
+ * Octokit puts a status on every error: GitHub's own, 400 for an OAuth error such as a spent
+ * token, and 500 when the request failed. Only a 4xx means GitHub refused.
+ */
 function refusedByGitHub(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "status" in error;
+  if (typeof error !== "object" || error === null || !("status" in error)) return false;
+  return typeof error.status === "number" && error.status >= 400 && error.status < 500;
 }
