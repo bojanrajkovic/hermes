@@ -125,7 +125,9 @@ What is built and works, and what is known not to work or is unverified.
   the relay closes after eight hours. It sends each delivery, unchanged, to the
   sockets of the users who can see its repository, and closes every socket
   when a delivery says someone's access changed. A workflow attests the
-  bundle and deploys it, once the repository names a Cloudflare account. It is not deployed, and Hermes does not
+  bundle and deploys it, and another checks hourly that the script Cloudflare
+  runs is one the first attested, once the repository names a Cloudflare
+  account. It is not deployed, and Hermes does not
   call it. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**

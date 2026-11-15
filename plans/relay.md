@@ -211,14 +211,13 @@ memory. That is why the repository IDs are in storage and not in a field.
 The `INVITE_CODES` secret holds the codes the relay accepts, separated by
 commas. Any number of tenants can register with one code. Taking a code off the list
 stops the relay accepting deliveries for the tenants that registered with it.
-To make a code and set the list:
+
+The deploy workflow sets `INVITE_CODES` from the repository secret
+`RELAY_INVITE_CODES` on every deploy. To change the list, edit that secret and
+run the `Relay deploy` workflow. To make a code:
 
 ```bash
 openssl rand -hex 8
-```
-
-```bash
-cd relay && npx wrangler secret put INVITE_CODES
 ```
 
 ## Deploying
@@ -234,7 +233,8 @@ set. It:
    The attestation records the bundle's SHA-256, this repository, the workflow,
    and the commit, and goes into Sigstore's public log.
 3. Uploads that file with `wrangler deploy --no-bundle`, which does not rebuild
-   it, and sets `COMMIT` to the commit.
+   it. The same step sets `COMMIT` to the commit and `INVITE_CODES` from the
+   `RELAY_INVITE_CODES` secret.
 
 Anyone can check that a bundle they built came from this repository's workflow:
 
@@ -242,22 +242,33 @@ Anyone can check that a bundle they built came from this repository's workflow:
 gh attestation verify relay/dist/index.js --repo bojanrajkovic/hermes
 ```
 
-The attestation covers the bundle, not what Cloudflare runs. Nothing compares
-the deployed script with the attested bundle yet, and `/version` is the
-Worker's own report.
+The attestation covers the bundle, not what Cloudflare runs, and `/version` is
+the Worker's own report. The `Relay verify` workflow closes that gap. Every
+hour, and after each deploy, it:
 
-The workflow needs:
+1. Downloads the script Cloudflare is running, with
+   `relay/scripts/deployed-script.mjs`. Cloudflare's
+   `GET /accounts/{id}/workers/scripts/{name}/content/v2` returns the uploaded
+   modules byte for byte.
+2. Runs `gh attestation verify` on it, which fails unless the `Relay deploy`
+   workflow of this repository attested a file with the same hash.
+
+A red `Relay verify` run means the relay is running something this
+repository's workflow did not build. Its runs and logs are public.
+
+The workflows need:
 
 | Setting | Kind | Value |
 |---|---|---|
-| `CLOUDFLARE_ACCOUNT_ID` | Repository variable | The Cloudflare account to deploy to. |
+| `CLOUDFLARE_ACCOUNT_ID` | Repository variable | The Cloudflare account the relay runs in. Both workflows are skipped without it. |
 | `CLOUDFLARE_API_TOKEN` | Repository secret | A token that can edit Workers scripts in that account. |
+| `RELAY_INVITE_CODES` | Repository secret | The invite codes, separated by commas. |
 
-After the first deploy, set `INVITE_CODES` as described above. The Worker is
-reached at its `workers.dev` address. No custom domain is configured.
+The Worker is reached at its `workers.dev` address. No custom domain is
+configured.
 
-Both workflows pin each action to a commit, so a moved tag can't change what
-builds and deploys the relay.
+Every workflow pins each action to a commit, so a moved tag can't change what
+builds, deploys, or verifies the relay.
 
 ## Layout
 
@@ -270,6 +281,8 @@ relay/
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        how long a socket lasts and which have run out
 │   └── github.ts         the calls to GitHub
+├── scripts/
+│   └── deployed-script.mjs   downloads the script Cloudflare is running
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
