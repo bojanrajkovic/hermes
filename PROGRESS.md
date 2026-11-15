@@ -121,8 +121,9 @@ What is built and works, and what is known not to work or is unverified.
   sends an invite code and their GitHub App's credentials, and the relay stores
   them in that tenant's Durable Object. It checks the signature of the App's
   webhook deliveries and deletes a tenant when its App is uninstalled. A user
-  can sign in through the tenant's App in the browser. It does not send
-  deliveries anywhere yet. It is not deployed, and Hermes does not
+  can sign in through the tenant's App in the browser and open a socket, which
+  the relay closes after eight hours. It does not send deliveries down the
+  socket yet. It is not deployed, and Hermes does not
   call it. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**

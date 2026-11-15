@@ -10,8 +10,15 @@ with the relay. The owner's client picks the tenant's ID: 32 lowercase hex
 characters.
 
 Each tenant is one Durable Object, named by the tenant's ID. The relay keeps no
-list of tenants. A tenant's Durable Object stores its registration: the invite
-code it used and the App's ID, client ID, client secret, and webhook secret.
+list of tenants. A tenant's Durable Object stores two things:
+
+- Its registration: the invite code it used and the App's ID, client ID, client
+  secret, and webhook secret.
+- For each open socket, the IDs of the repositories that socket's user can see.
+  They are deleted when the socket closes.
+
+A person in several organizations uses one tenant per organization, each with
+its own sign-in and its own socket.
 
 ## Requests
 
@@ -23,6 +30,7 @@ code it used and the App's ID, client ID, client secret, and webhook secret.
 | `GET /t/<tenant>/login?state=<s>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
 | `GET /t/<tenant>/callback` | Where GitHub sends the browser after sign-in. Redirects to a `hermes://relay.session` link. |
 | `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
+| `GET /t/<tenant>/connect` | Opens a WebSocket for a signed-in user. See below. |
 
 A path with a malformed tenant ID answers `404`.
 
@@ -120,6 +128,50 @@ The App must have "Expire user authorization tokens" on, which is GitHub's
 default. With it off GitHub issues no refresh token. The calls to GitHub use
 [`@octokit/oauth-methods`](https://github.com/octokit/oauth-methods.js).
 
+### Connecting
+
+The client opens a WebSocket at `GET /t/<tenant>/connect` with its refresh
+token in an `Authorization: Bearer <token>` header.
+
+| Status | Meaning |
+|---|---|
+| `101` | The socket is open. |
+| `401` | There is no token, or GitHub refused it. The user must sign in again. |
+| `404` | No tenant with this ID is registered, or its invite code was withdrawn. |
+| `426` | The request is not a WebSocket upgrade. |
+
+Before it opens the socket, the relay:
+
+1. Uses the refresh token. GitHub answers with an access token and a new
+   refresh token, and the old one stops working.
+2. Lists the repositories the user can see through the tenant's App, with
+   `GET /user/installations` and
+   `GET /user/installations/{id}/repositories`. It reads at most 4,000.
+3. Stores those repositories' IDs under a new session ID and discards the
+   access token.
+
+The first message on the socket is the session:
+
+```json
+{
+  "type": "session",
+  "refreshToken": "<the new refresh token>",
+  "expiresAt": 1794000000,
+  "repositories": ["acme/site", "acme/api"]
+}
+```
+
+The client must store the new refresh token at once. If the connection drops
+before this message arrives, the client holds a spent token, and the user has
+to sign in again.
+
+A socket stays open for eight hours. Then the relay closes it with code `4001`,
+and the client reconnects, so the user's access is checked again. An alarm on
+the Durable Object fires when the oldest socket runs out.
+
+The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in
+memory. That is why the repository IDs are in storage and not in a field.
+
 ## Invite codes
 
 The `INVITE_CODES` secret holds the codes the relay accepts, separated by
@@ -144,6 +196,7 @@ relay/
 │   ├── tenant.ts         the Tenant Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
+│   ├── session.ts        how long a socket lasts and which have run out
 │   └── github.ts         the calls to GitHub
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings

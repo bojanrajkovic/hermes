@@ -101,4 +101,11 @@ app.post("/t/:tenant/session", async (c) => {
   }
 });
 
+app.get("/t/:tenant/connect", (c) => {
+  const stub = tenant(c);
+  if (!stub) return c.notFound();
+  if (c.req.header("upgrade") !== "websocket") return c.body(null, 426);
+  return stub.fetch(c.req.raw);
+});
+
 export default app;
