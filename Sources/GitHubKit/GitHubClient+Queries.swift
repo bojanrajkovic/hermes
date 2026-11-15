@@ -117,6 +117,28 @@ extension GitHubClient {
         return hits
     }
 
+    /// What each of several searches finds, in the order of `queries`, in one request.
+    /// A refresh runs its searches this way: GitHub charges a request at least one point,
+    /// however little it asks for. A search with more than 100 results runs again on its own.
+    public func pullRequestHits(matchingEach queries: [String]) async throws -> [[PullRequestHit]] {
+        let parameters = queries.indices.map { "$q\($0): String!" }.joined(separator: ", ")
+        let searches = queries.indices.map {
+            "s\($0): search(query: $q\($0), type: ISSUE, first: 100) { pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { id repository { viewerPermission } } } }"
+        }
+        let query = "query(\(parameters)) { \(searches.joined(separator: " ")) }"
+        let variables = Dictionary(uniqueKeysWithValues: queries.enumerated().map { ("q\($0)", JSONValue.string($1)) })
+        let found = try await retryingReads {
+            try await self.graphQL(query, variables: variables, as: [String: Connection<PullRequestHit>].self)
+        }
+
+        var hits: [[PullRequestHit]] = []
+        for (index, query) in queries.enumerated() {
+            guard let page = found["s\(index)"] else { throw GitHubError.decoding(description: "s\(index)") }
+            hits.append(page.nextCursor == nil ? page.nodes : try await pullRequestHits(matching: query))
+        }
+        return hits
+    }
+
     /// Loads pull requests by node ID, in the order of `ids`. An ID that no
     /// longer names a pull request is left out.
     public func pullRequests(ids: [String]) async throws -> [PullRequest] {

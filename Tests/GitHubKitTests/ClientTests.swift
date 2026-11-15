@@ -150,6 +150,27 @@ actor TokenCounter {
         #expect(StubProtocol.requests.withLock { $0.count } == 5)
     }
 
+    @Test func severalSearchesGoOutAsOneRequestAndALongOneRunsAgainAlone() async throws {
+        let client = client { request in
+            func page(_ ids: [String], more: Bool = false) -> String {
+                let nodes = ids.map { #"{"id": "\#($0)"}"# }.joined(separator: ",")
+                return #"{"pageInfo": {"hasNextPage": \#(more), "endCursor": \#(more ? #""c1""# : "null")}, "nodes": [\#(nodes)]}"#
+            }
+            if request.body.contains("s0: search") {
+                return .init(body: #"{"data": {"s0": \#(page(["PR_1"])), "s1": \#(page(["PR_2"], more: true))}}"#)
+            }
+            let ids = request.body.contains(#""after":"c1""#) ? ["PR_3"] : ["PR_2"]
+            return .init(body: #"{"data": {"search": \#(page(ids, more: ids == ["PR_2"]))}}"#)
+        }
+
+        let hits = try await client.pullRequestHits(matchingEach: ["first", "second"])
+
+        #expect(hits.map { $0.map(\.id) } == [["PR_1"], ["PR_2", "PR_3"]])
+        let bodies = StubProtocol.requests.withLock { $0.map(\.body) }
+        #expect(bodies.count == 3)
+        #expect(bodies[0].contains(#""q0":"first""#) && bodies[0].contains(#""q1":"second""#))
+    }
+
     @Test func pullRequestListRetriesAGatewayTimeout() async throws {
         let respond = try pullRequestList()
         let failed = OSAllocatedUnfairLock<Set<String>>(initialState: [])

@@ -91,10 +91,10 @@ final class AccountData {
     /// The rest is only what is in repositories the viewer can push to. A load that fails part
     /// way keeps what it fetched, and the next refresh fetches only what is still missing.
     private func loadEverything() async throws {
-        async let involved = client.pullRequestIDs(matching: PullRequestSearch.involvingViewer(owner: login)[0])
-        async let signaled = loadSignals()
-        let (involvedIDs, signaledIDs) = try await (involved, signaled)
-        try await loadMissing(Array(Set(involvedIDs).union(signaledIDs)))
+        let found = try await client.pullRequestHits(
+            matchingEach: [PullRequestSearch.involvingViewer(owner: login)[0]] + signalSearches
+        )
+        try await loadMissing(Array(Set(found[0].map(\.id)).union(noteSignals(found.dropFirst()))))
         hasLoaded = true
 
         let rest = try await client.pullRequestHits(matching: PullRequestSearch.open(owner: login)).filter(\.canPush)
@@ -114,10 +114,11 @@ final class AccountData {
     /// The pull requests updated since the last refresh, and the current review requests.
     // shortcut: a repository archived since the first load keeps its pull requests until relaunch; reload everything if that matters.
     private func loadChanges(since: Date) async throws {
-        async let open = client.pullRequestHits(matching: PullRequestSearch.updated(owner: login, since: since, open: true))
-        async let closed = client.pullRequestIDs(matching: PullRequestSearch.updated(owner: login, since: since, open: false))
-        async let signaled = loadSignals()
-        let (openHits, closedIDs, signaledIDs) = try await (open, closed, signaled)
+        let found = try await client.pullRequestHits(matchingEach: [
+            PullRequestSearch.updated(owner: login, since: since, open: true),
+            PullRequestSearch.updated(owner: login, since: since, open: false),
+        ] + signalSearches)
+        let (openHits, closedIDs, signaledIDs) = (found[0], found[1].map(\.id), noteSignals(found.dropFirst(2)))
 
         // A read-only repository's pull request loads only when the viewer already holds it or has a part in it.
         // A review request or a mention does not update the pull request, so one not held yet loads here.
@@ -131,17 +132,20 @@ final class AccountData {
         pullRequests = reloaded
     }
 
-    /// Searches for the viewer's review requests, reviews, and mentions. Returns every pull
-    /// request they name, to load from any repository: the pull request itself says who it asks
-    /// and what the viewer reviewed, so the searches only find the ones not held yet.
-    private func loadSignals() async throws -> Set<String> {
-        async let requested = client.pullRequestIDs(matching: PullRequestSearch.reviewRequested(owner: login))
-        async let reviewed = client.pullRequestIDs(matching: PullRequestSearch.reviewedByViewer(owner: login))
-        async let mentions = client.pullRequestIDs(matching: PullRequestSearch.mentioningViewer(owner: login))
-        let (requestedIDs, reviewedIDs, mentionIDs) = try await (requested, reviewed, mentions)
+    /// Searches for the viewer's review requests, reviews, and mentions, in that order. The pull
+    /// request itself says who it asks and what the viewer reviewed, so these only find the
+    /// ones not held yet, in any repository.
+    private var signalSearches: [String] {
+        [
+            PullRequestSearch.reviewRequested(owner: login), PullRequestSearch.reviewedByViewer(owner: login),
+            PullRequestSearch.mentioningViewer(owner: login),
+        ]
+    }
 
-        signals.mentions = Set(mentionIDs)
-        return Set(requestedIDs + reviewedIDs + mentionIDs)
+    /// Keeps the mentions from the results of `signalSearches`, and returns every pull request they name.
+    private func noteSignals(_ found: ArraySlice<[PullRequestHit]>) -> Set<String> {
+        signals.mentions = Set(found.last?.map(\.id) ?? [])
+        return Set(found.joined().map(\.id))
     }
 
     /// Reloads when the lists are older than a few seconds, for app activation.
