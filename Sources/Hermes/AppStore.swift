@@ -101,13 +101,26 @@ final class AppStore {
         (viewer?.organizations ?? []).filter(\.canAdminister).map(\.login)
     }
 
+    /// The owned organizations the user picked to forward. None until they pick: the webhook
+    /// is one every owner of the organization sees.
+    var forwardedOrganizations: Set<String> {
+        didSet {
+            defaults.set(forwardedOrganizations.sorted(), forKey: Keys.forwardedOrganizations)
+            Task {
+                await checkOrganizationHookScope()
+                await syncForwarders()
+            }
+        }
+    }
+
     func checkOrganizationHookScope() async {
-        guard usesWebhooks, !ownedOrganizations.isEmpty else { return }
+        guard usesWebhooks, !forwardedOrganizations.isEmpty else { return }
         hasOrganizationHookScope = await GitHubAuth.scopes().contains(WebhookForwarder.organizationScope)
     }
 
     private enum Keys {
         static let usesWebhooks = "usesWebhooks"
+        static let forwardedOrganizations = "forwardedOrganizations"
         static let account = "selectedAccount"
         static let showingAllBots = "showingAllBots"
         static let refreshInterval = "refreshInterval"
@@ -132,6 +145,7 @@ final class AppStore {
             return parts.count == 2 ? RepositoryRef(owner: parts[0], name: parts[1]) : nil
         })
         usesWebhooks = defaults.bool(forKey: Keys.usesWebhooks)
+        forwardedOrganizations = Set(defaults.stringArray(forKey: Keys.forwardedOrganizations) ?? [])
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
     }
@@ -169,14 +183,14 @@ final class AppStore {
         }
     }
 
-    /// Runs a forwarder for each organization the viewer owns and each of the viewer's own
+    /// Runs a forwarder for each organization the user picked and each of the viewer's own
     /// repositories that a window watches, or none when the setting is off.
     func syncForwarders() async {
         guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
         let logins = Set(windows.allObjects.compactMap { $0.account?.login })
         let wanted = Forwarders.targets(
             watched: logins.sorted().flatMap { watched(in: $0) }.map(\.repository), viewer: viewer,
-            organizations: hasOrganizationHookScope ? Set(ownedOrganizations) : [], waiting: forwarders.waiting
+            organizations: hasOrganizationHookScope ? forwardedOrganizations.intersection(ownedOrganizations) : [], waiting: forwarders.waiting
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }

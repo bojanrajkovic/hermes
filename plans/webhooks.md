@@ -35,8 +35,10 @@ that ends costs nothing but the delay.
 request is the open one, one with a session, one in the attention inbox, or one
 in the list on screen.
 
-- **Organizations the signed-in user owns**, when one has a watched pull
-  request and the `gh` token has the `admin:org_hook` scope. One forwarder
+- **Organizations the signed-in user owns and picked in Settings**, when one
+  has a watched pull request and the `gh` token has the `admin:org_hook` scope.
+  None is picked at first: the webhook is one every owner of the organization
+  sees. One forwarder
   covers every repository of the organization.
 - **Repositories the signed-in user owns** that have a watched pull request, at
   most 20. Each forwarder is a process and a webhook.
@@ -69,9 +71,10 @@ gh auth refresh -h github.com -s admin:org_hook
 
 Hermes reads the token's scopes from the `X-OAuth-Scopes` header of
 `HEAD /user` when the setting is turned on and each time Hermes comes to the
-front, with the token `gh` holds at that moment. When the user owns an
-organization and the scope is missing, Settings shows the command with a Copy
-button. `viewerCanAdminister` on the organization says whether the user owns it.
+front, with the token `gh` holds at that moment. `viewerCanAdminister` on the
+organization says whether the user owns it. Settings lists each owned
+organization with a switch, and shows the command with a Copy button when one
+is picked and the scope is missing.
 
 ## Logs
 

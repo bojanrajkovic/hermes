@@ -257,7 +257,7 @@ struct WebhooksSection: View {
         Section {
             Toggle(isOn: $model.usesWebhooks) {
                 Text("Get changes as they happen")
-                Text("Adds a webhook named \"cli\" to up to 20 of your own repositories, the ones with pull requests on screen, and to organizations you own. GitHub removes it when Hermes quits. Other repositories refresh on the timer.")
+                Text("Adds a webhook named \"cli\" to up to 20 of your own repositories, the ones with pull requests on screen, and to the organizations you pick. GitHub removes it when Hermes quits. Other repositories refresh on the timer.")
             }
             if store.usesWebhooks, !isInstalled {
                 LabeledContent {
@@ -270,7 +270,17 @@ struct WebhooksSection: View {
                 }
             } else if store.usesWebhooks {
                 LabeledContent("Forwarders running", value: store.forwarders.running.count, format: .number)
-                if !store.ownedOrganizations.isEmpty, !store.hasOrganizationHookScope {
+                ForEach(store.ownedOrganizations, id: \.self) { organization in
+                    Toggle(isOn: Binding {
+                        store.forwardedOrganizations.contains(organization)
+                    } set: { isOn in
+                        if isOn { store.forwardedOrganizations.insert(organization) } else { store.forwardedOrganizations.remove(organization) }
+                    }) {
+                        Text(verbatim: "Include \(organization)")
+                        Text("One webhook on the organization covers all its repositories. Its other owners see it.")
+                    }
+                }
+                if !store.forwardedOrganizations.isEmpty, !store.hasOrganizationHookScope {
                     let command = "gh auth refresh -h github.com -s \(WebhookForwarder.organizationScope)"
                     LabeledContent {
                         Button("Copy") {
@@ -279,7 +289,7 @@ struct WebhooksSection: View {
                         }
                     } label: {
                         Text("Organizations need one more permission")
-                        Text("To cover \(store.ownedOrganizations.formatted(.list(type: .and))), run this in a terminal, then come back to Hermes.")
+                        Text("Run this in a terminal, then come back to Hermes.")
                         Text(verbatim: command).font(.body.monospaced()).textSelection(.enabled)
                     }
                 }
