@@ -50,7 +50,7 @@ final class Forwarders {
     private var startedAt: [Target: Date] = [:]
     /// How often each target's forwarder has ended in a row, and when it may start again.
     private var failures: [Target: (count: Int, retryAt: Date)] = [:]
-    private static let log = Logger(subsystem: "com.coderinserepeat.hermes", category: "webhooks")
+    static let log = Logger(subsystem: "com.coderinserepeat.hermes", category: "webhooks")
 
     /// The targets whose forwarder ended and may not start again yet. They refresh on the timer.
     var waiting: Set<Target> {

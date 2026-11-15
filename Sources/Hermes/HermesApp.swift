@@ -94,6 +94,8 @@ struct HermesApp: App {
         Settings {
             SettingsView().environment(store)
         }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: Theme.settingsMinWidth, height: Theme.settingsDefaultHeight)
     }
 }
 
@@ -240,9 +242,25 @@ struct SettingsView: View {
                 SessionSettingsView()
             }
         }
-        .frame(width: 500)
-        .frame(minHeight: 260)
+        .frame(
+            minWidth: Theme.settingsMinWidth, idealWidth: Theme.settingsMinWidth,
+            minHeight: Theme.settingsMinHeight, idealHeight: Theme.settingsDefaultHeight
+        )
+        .background(ResizableWindow())
     }
+}
+
+/// Lets the user resize the window it is in. A `Settings` scene's window has a fixed size,
+/// and `windowResizability` does not change that.
+private struct ResizableWindow: NSViewRepresentable {
+    final class View: NSView {
+        override func viewDidMoveToWindow() {
+            window?.styleMask.insert(.resizable)
+        }
+    }
+
+    func makeNSView(context: Context) -> View { View() }
+    func updateNSView(_ view: View, context: Context) {}
 }
 
 /// The switch for webhook forwarders, with what they are doing and a way to install the extension they need.
@@ -277,10 +295,10 @@ struct WebhooksSection: View {
                         if isOn { store.forwardedOrganizations.insert(organization) } else { store.forwardedOrganizations.remove(organization) }
                     }) {
                         Text(verbatim: "Include \(organization)")
-                        Text("One webhook on the organization covers all its repositories. Its other owners see it.")
+                        Text("While a window shows this organization, one webhook on it covers all its repositories. Its other owners see it.")
                     }
                 }
-                if !store.forwardedOrganizations.isEmpty, !store.hasOrganizationHookScope {
+                if !store.forwardedOrganizations.isEmpty, store.hasOrganizationHookScope == false {
                     let command = "gh auth refresh -h github.com -s \(WebhookForwarder.organizationScope)"
                     LabeledContent {
                         Button("Copy") {

@@ -92,9 +92,10 @@ final class AppStore {
         }
     }
     let forwarders = Forwarders()
-    /// Whether the `gh` token may create an organization's webhook. Checked when Hermes
-    /// comes to the front, which is when a `gh auth refresh` in a terminal has just finished.
-    private(set) var hasOrganizationHookScope = false
+    /// Whether the `gh` token may create an organization's webhook, or nil until the first
+    /// check answers. Checked when Hermes comes to the front, which is when a `gh auth refresh`
+    /// in a terminal has just finished.
+    private(set) var hasOrganizationHookScope: Bool?
 
     /// The organizations the viewer owns. Each can have one forwarder for all its repositories.
     var ownedOrganizations: [String] {
@@ -114,7 +115,7 @@ final class AppStore {
     }
 
     func checkOrganizationHookScope() async {
-        guard usesWebhooks, !forwardedOrganizations.isEmpty else { return }
+        guard usesWebhooks else { return }
         hasOrganizationHookScope = await GitHubAuth.scopes().contains(WebhookForwarder.organizationScope)
     }
 
@@ -190,7 +191,7 @@ final class AppStore {
         let logins = Set(windows.allObjects.compactMap { $0.account?.login })
         let wanted = Forwarders.targets(
             watched: logins.sorted().flatMap { watched(in: $0) }.map(\.repository), viewer: viewer,
-            organizations: hasOrganizationHookScope ? forwardedOrganizations.intersection(ownedOrganizations) : [], waiting: forwarders.waiting
+            organizations: hasOrganizationHookScope == true ? forwardedOrganizations.intersection(ownedOrganizations) : [], waiting: forwarders.waiting
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
@@ -200,6 +201,8 @@ final class AppStore {
     private func reload(_ event: WebhookEvent) {
         let data = data(for: event.repository.owner)
         let key = event.pullRequest.map { ItemKey(repository: event.repository, number: $0) }
+        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(event.pullRequest ?? 0)")
+
         Task {
             if let key, data.pullRequest(key) != nil { await data.refetch(key) } else { await data.refresh() }
         }
