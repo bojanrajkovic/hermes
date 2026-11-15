@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GitHubKit
 import HermesUI
@@ -118,6 +119,24 @@ final class AppStore {
             }
         } catch {
             startup = .failed(StartupProblem(error))
+        }
+    }
+
+    /// How often the lists refresh while Hermes is the active app.
+    static let activeRefreshInterval: TimeInterval = 15
+
+    /// Refreshes every account a window shows, until its task is cancelled: every 15 seconds
+    /// while Hermes is the active app, and every `refreshInterval` otherwise. One loop for the
+    /// app, so two windows on an account cost one refresh.
+    func keepFresh() async {
+        var refreshedAt = Date.now
+        while (try? await Task.sleep(for: .seconds(Self.activeRefreshInterval))) != nil {
+            guard NSApp.isActive || Date.now.timeIntervalSince(refreshedAt) >= refreshInterval else { continue }
+            refreshedAt = .now
+            let logins = Set(windows.allObjects.compactMap { $0.account?.login })
+            await withTaskGroup(of: Void.self) { group in
+                for login in logins { group.addTask { await self.data(for: login).refresh() } }
+            }
         }
     }
 

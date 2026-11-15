@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Comes to the front: launched by `open` from a background process, macOS can leave the app behind.
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
+        Task { await store.keepFresh() }
     }
 
     /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.
@@ -208,11 +209,14 @@ struct SettingsView: View {
         TabView {
             Tab("General", systemImage: "gearshape") {
                 Form {
-                    Picker("Refresh lists every", selection: $model.refreshInterval) {
+                    Picker(selection: $model.refreshInterval) {
                         Text("30 seconds").tag(TimeInterval(30))
                         Text("1 minute").tag(TimeInterval(60))
                         Text("2 minutes").tag(TimeInterval(120))
                         Text("5 minutes").tag(TimeInterval(300))
+                    } label: {
+                        Text("Refresh in the background every")
+                        Text("While Hermes is in front, the lists refresh every 15 seconds.")
                     }
                     Toggle(isOn: $model.showingAllBots) {
                         Text("Show all bot pull requests")

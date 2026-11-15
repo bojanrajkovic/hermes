@@ -23,10 +23,12 @@ What is built and works, and what is known not to work or is unverified.
   has a stack switcher.
 - The bot filter: a bot's pull request shows only when its checks fail or it
   has merge conflicts.
-- The lists refresh on a timer (30 seconds to 5 minutes, 1 minute by default),
-  when the app becomes active, and on ⌘R. The first load shows the viewer's own
-  pull requests before the rest of the account; later refreshes fetch only what
-  changed. Only repositories the viewer can push to load in full.
+- The lists refresh every 15 seconds while Hermes is in front, on a timer in
+  the background (30 seconds to 5 minutes, 1 minute by default), when the app
+  becomes active, and on ⌘R. The first load shows the viewer's own pull
+  requests before the rest of the account; later refreshes fetch what changed
+  and load the pull requests on screen again by ID, so they do not wait for
+  GitHub's search. Only repositories the viewer can push to load in full.
 - First-run setup: a sheet confirms the signed-in account and asks where
   checkouts live.
 - The command palette: fuzzy search over repositories, pull requests, and

@@ -47,12 +47,6 @@ struct MainView: View {
         } message: {
             Text(model.resolveError ?? "")
         }
-        .task(id: model.refreshInterval) {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(model.refreshInterval))
-                if !Task.isCancelled { await model.data.refresh() }
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.refreshIfStale() }
         }

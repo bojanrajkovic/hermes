@@ -111,16 +111,19 @@ sequenceDiagram
 
 ## Refresh
 
-- The PR and issue lists refresh on a timer set in Settings, 60 seconds by
-  default. They also refresh when the app becomes active, if the last refresh
-  is more than 10 seconds old. One timer runs per window; windows on the same
-  account share the refresh.
+- The PR and issue lists refresh every 15 seconds while Hermes is the active
+  app, and on the interval set in Settings (60 seconds by default) while it is
+  in the background. They also refresh when the app becomes active, if the last
+  refresh is more than 10 seconds old. `AppStore.keepFresh()` is the one loop:
+  it refreshes each account a window shows, so two windows on an account cost
+  one refresh.
 - An account's first load fetches the viewer's own PRs and review requests,
-  shows them, then fetches the rest. Later refreshes fetch only the PRs updated
+  shows them, then fetches the rest. Later refreshes search for the PRs updated
   since the last one, because reloading every PR of an organization with
-  hundreds of repositories each minute uses up GitHub's rate limits. They also
-  fetch every PR whose checks were still pending: a check that finishes does
-  not change its PR's update time.
+  hundreds of repositories uses up GitHub's rate limits. They also load by ID
+  the PRs on screen and every PR whose checks have not passed, since the search
+  trails a change and a check that finishes does not change its PR's update
+  time. [github.md](github.md) has the details.
   Repositories reload on ⌘R or once they are 10 minutes old. A repository
   archived after the first load keeps its PRs until the app relaunches.
 - An open PR polls its head commit every 10 seconds while its diff is on

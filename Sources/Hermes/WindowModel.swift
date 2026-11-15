@@ -96,10 +96,6 @@ final class WindowModel {
         get { store.showingAllBots }
         set { store.showingAllBots = newValue }
     }
-    var refreshInterval: TimeInterval {
-        get { store.refreshInterval }
-        set { store.refreshInterval = newValue }
-    }
 
     // MARK: Navigation
 
