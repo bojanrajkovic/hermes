@@ -8,6 +8,7 @@
     "dev": "wrangler dev"
   },
   "dependencies": {
+    "@octokit/webhooks-methods": "^6.0.0",
     "hono": "^4.13.18",
     "zod": "^4.6.7"
   },

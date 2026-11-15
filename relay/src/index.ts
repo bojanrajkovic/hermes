@@ -32,4 +32,23 @@ app.put("/tenants/:tenant", async (c) => {
   return c.body(null, registrationStatus[outcome]);
 });
 
+const deliveryStatus = {
+  accepted: 202,
+  badSignature: 401,
+  inviteRevoked: 403,
+  unknownTenant: 404,
+} as const;
+
+app.post("/hook/:tenant", async (c) => {
+  const stub = tenant(c);
+  if (!stub) return c.notFound();
+
+  const outcome = await stub.deliver({
+    event: c.req.header("x-github-event") ?? "",
+    signature: c.req.header("x-hub-signature-256") ?? "",
+    body: await c.req.text(),
+  });
+  return c.body(null, deliveryStatus[outcome]);
+});
+
 export default app;

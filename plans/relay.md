@@ -19,6 +19,7 @@ code it used and the App's ID, client ID, client secret, and webhook secret.
 |---|---|
 | `GET /version` | `200 {"commit": "<sha>"}`: the commit the running Worker was built from. A local run reports `dev`. |
 | `PUT /tenants/<tenant>` | Registers a tenant. See below. |
+| `POST /hook/<tenant>` | Takes a webhook delivery from GitHub. See below. |
 
 A path with a malformed tenant ID answers `404`.
 
@@ -47,11 +48,38 @@ A tenant registers once, so someone who learns a tenant's ID can't replace its
 credentials. Sending the stored registration again answers `201`, so a client
 whose first request succeeded but whose connection dropped can retry.
 
+### Webhook deliveries
+
+A tenant's GitHub App sends its webhooks to `POST /hook/<tenant>`. The relay
+checks the `X-Hub-Signature-256` header against the tenant's webhook secret,
+using [`@octokit/webhooks-methods`](https://github.com/octokit/webhooks-methods.js).
+
+| Status | Meaning |
+|---|---|
+| `202` | The delivery is genuine. |
+| `401` | The signature is missing or wrong. |
+| `403` | The tenant's invite code is no longer one the relay accepts. |
+| `404` | No tenant with this ID is registered. |
+
+The relay reads three things from a genuine delivery: the `X-GitHub-Event`
+header, the payload's `action`, and `repository.id`. `classifyDelivery` in
+`delivery.ts` turns them into one of four actions:
+
+| Delivery | Action |
+|---|---|
+| `installation` with action `deleted` (the App was uninstalled) | Delete everything the tenant stored. Its ID is unknown afterwards. |
+| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Access may have changed. Nothing happens yet. |
+| Any other event that names a repository | To be sent on to clients. Nothing happens yet. |
+| Anything else | Ignored. |
+
+The relay stores nothing from a delivery.
+
 ## Invite codes
 
 The `INVITE_CODES` secret holds the codes the relay accepts, separated by
-commas. Any number of tenants can register with one code. To make a code and
-set the list:
+commas. Any number of tenants can register with one code. Taking a code off the list
+stops the relay accepting deliveries for the tenants that registered with it.
+To make a code and set the list:
 
 ```bash
 openssl rand -hex 8
@@ -68,7 +96,8 @@ relay/
 ├── src/
 │   ├── index.ts          the routes: parse the request, call the tenant, map the result
 │   ├── tenant.ts         the Tenant Durable Object
-│   └── registration.ts   decides whether a registration is accepted
+│   ├── registration.ts   decides whether a registration is accepted
+│   └── delivery.ts       decides what to do with a webhook delivery
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
