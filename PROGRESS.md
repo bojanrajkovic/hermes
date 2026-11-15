@@ -124,7 +124,8 @@ What is built and works, and what is known not to work or is unverified.
   can sign in through the tenant's App in the browser and open a socket, which
   the relay closes after eight hours. It sends each delivery, unchanged, to the
   sockets of the users who can see its repository, and closes every socket
-  when a delivery says someone's access changed. It is not deployed, and Hermes does not
+  when a delivery says someone's access changed. A workflow attests the
+  bundle and deploys it, once the repository names a Cloudflare account. It is not deployed, and Hermes does not
   call it. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**

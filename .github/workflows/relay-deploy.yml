@@ -1,0 +1,48 @@
+name: Relay deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "relay/**"
+      - ".github/workflows/relay-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: relay-deploy
+
+jobs:
+  deploy:
+    # Skipped until the repository names the Cloudflare account to deploy to.
+    if: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+      - run: npm ci --no-audit --no-fund
+
+      # Type-checks, runs the tests, and writes the bundle to dist/index.js.
+      - run: npm run check
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: relay/dist/index.js
+
+      # --no-bundle uploads dist/index.js as it is, so the deployed script is the attested file.
+      - run: npx wrangler deploy dist/index.js --no-bundle --var "COMMIT:${GITHUB_SHA}"
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

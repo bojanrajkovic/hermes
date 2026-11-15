@@ -207,6 +207,44 @@ openssl rand -hex 8
 cd relay && npx wrangler secret put INVITE_CODES
 ```
 
+## Deploying
+
+The `Relay deploy` workflow runs on a push to `main` that changes `relay/`, and
+by hand. It is skipped until the repository variable `CLOUDFLARE_ACCOUNT_ID` is
+set. It:
+
+1. Runs the same check as `make relay-check`, which writes the bundle to
+   `relay/dist/index.js`.
+2. Attests the bundle with
+   [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance).
+   The attestation records the bundle's SHA-256, this repository, the workflow,
+   and the commit, and goes into Sigstore's public log.
+3. Uploads that file with `wrangler deploy --no-bundle`, which does not rebuild
+   it, and sets `COMMIT` to the commit.
+
+Anyone can check that a bundle they built came from this repository's workflow:
+
+```bash
+gh attestation verify relay/dist/index.js --repo bojanrajkovic/hermes
+```
+
+The attestation covers the bundle, not what Cloudflare runs. Nothing compares
+the deployed script with the attested bundle yet, and `/version` is the
+Worker's own report.
+
+The workflow needs:
+
+| Setting | Kind | Value |
+|---|---|---|
+| `CLOUDFLARE_ACCOUNT_ID` | Repository variable | The Cloudflare account to deploy to. |
+| `CLOUDFLARE_API_TOKEN` | Repository secret | A token that can edit Workers scripts in that account. |
+
+After the first deploy, set `INVITE_CODES` as described above. The Worker is
+reached at its `workers.dev` address. No custom domain is configured.
+
+Both workflows pin each action to a commit, so a moved tag can't change what
+builds and deploys the relay.
+
 ## Layout
 
 ```
