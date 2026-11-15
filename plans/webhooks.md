@@ -58,12 +58,24 @@ carry.
 
 | Delivery | Applied from the payload | Loaded from GitHub |
 |---|---|---|
-| `pull_request`: edited, labeled, unlabeled, converted to draft, ready for review, closed, review requested or removed, auto-merge on or off | Title, labels, draft, state, branches, head commit, line and file counts, auto-merge method, requested reviewers | Nothing |
+| `pull_request`: edited, labeled, unlabeled, converted to draft, ready for review, closed, review requested or removed, auto-merge on or off | Title, description, labels, draft, state, branches, head commit, line and file counts, auto-merge method, requested reviewers | Nothing |
 | `pull_request`: new commits, reopened, a new base branch, any other action | The same fields | The pull request: its review decision, mergeability, checks, and stack |
+| `issue_comment` on a pull request: created, edited, deleted | The comment, in the conversation | Nothing |
+| `pull_request_review`: submitted, edited, dismissed | The review, in the conversation | The pull request, for its review decision |
 | Anything else | Nothing | The pull request |
 
-The pull request's update time is not applied. The description and the
-conversation load when it changes, which is at the next refresh.
+A row's fields go into the account's lists through `AccountData.store`.
+
+The description, the conversation, and the reviews belong to the pull request
+pane, which holds them in a `Loader`. `AppStore.eventCounts` keeps, for each
+pull request and each part of it, a `WebhookChanges`: how many deliveries came
+and the latest one's change. The pane watches the count. When it rises by one,
+the pane applies that change with `PullRequestDetail.applying`. When it rises
+by more, the earlier changes are gone, so the pane loads the detail again.
+
+The pull request's update time is not applied. The pane loads the detail
+again when it changes, which is at the next refresh, and that load settles
+anything a payload got wrong.
 
 A payload Hermes can't read has no change, and its delivery loads the pull
 request as before. A load that is running when a payload is applied runs once

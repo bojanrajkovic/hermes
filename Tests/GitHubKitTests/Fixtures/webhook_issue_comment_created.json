@@ -1,0 +1,20 @@
+{
+  "action": "created",
+  "issue": {
+    "number": 53,
+    "pull_request": { "url": "https://api.github.com/repos/bojanrajkovic/hermes-playground/pulls/53" }
+  },
+  "comment": {
+    "id": 6902219996,
+    "node_id": "IC_kwDOVqHLzs8AAAABm2eE3A",
+    "user": {
+      "login": "bojanrajkovic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/110747?v=4",
+      "type": "User"
+    },
+    "body": "Capture test: PR comment.",
+    "created_at": "2026-11-15T22:12:59Z",
+    "updated_at": "2026-11-15T22:12:59Z"
+  },
+  "repository": { "name": "hermes-playground", "owner": { "login": "bojanrajkovic" } }
+}

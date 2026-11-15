@@ -206,9 +206,14 @@ final class AppStore {
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
 
-    /// How often a relay has said each pull request's review threads or checks changed. The
-    /// screens that show those reload when their count rises.
+    /// What deliveries have said about each pull request's description and conversation,
+    /// review threads, and checks. The screens that show those apply the latest change, or
+    /// reload, when a count rises.
     private(set) var eventCounts: [ItemKey: EventCounts] = [:]
+
+    private func note(_ change: WebhookChange?, in part: EventCounts.Part, of key: ItemKey) {
+        eventCounts[key, default: EventCounts()][keyPath: part].note(change)
+    }
 
     /// Takes in what a webhook says changed. For a pull request Hermes holds, it applies the
     /// fields the payload carries, and loads the pull request when the event changed more
@@ -232,10 +237,20 @@ final class AppStore {
             }
         }
         let key = held.key
-        if case .pullRequest(let fields, let reloads) = event.change {
+        switch event.change {
+        case .pullRequest(let fields, let reloads):
             data.store(.pullRequest(held.applying(fields)), for: key)
+            note(event.change, in: \.detail, of: key)
             // A load that is running may have asked GitHub before this change, so it runs once more.
             guard reloads else { return bursts.applied(key) }
+        case .comment:
+            // A comment changes nothing a row shows.
+            return note(event.change, in: \.detail, of: key)
+        case .review:
+            // The row's review decision is GitHub's to work out.
+            note(event.change, in: \.detail, of: key)
+        case nil:
+            break
         }
         load(key, part: part) { await data.refetch(key) }
     }
@@ -244,14 +259,14 @@ final class AppStore {
     /// seconds later, for the events that came while it ran.
     private func load(_ key: ItemKey, part: EventCounts.Part?, _ operation: @escaping () async -> Void) {
         guard bursts.shouldLoad(key, part: part) else { return }
-        if let part { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }
+        if let part { note(nil, in: part, of: key) }
 
         Task {
             while true {
                 await operation()
                 try? await Task.sleep(for: Self.eventSpacing)
                 guard let parts = bursts.loaded(key) else { break }
-                for part in parts { eventCounts[key, default: EventCounts()][keyPath: part] += 1 }
+                for part in parts { note(nil, in: part, of: key) }
             }
         }
     }

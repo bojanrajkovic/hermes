@@ -250,9 +250,9 @@ fields the payload carries, and loads the pull request when the event changed
 more than that.
 
 A relay's event also has GitHub's name for it, which says what part of the
-pull request changed. `AppStore.eventCounts` counts those per pull request,
-and the screens showing that part reload it when the count rises, ahead of
-their own 10-second polling:
+pull request changed. When the event's payload can't be applied,
+`AppStore.eventCounts` counts it for that part, and the screens showing the
+part reload it when the count rises, ahead of their own 10-second polling:
 
 | Events | Reloads |
 |---|---|

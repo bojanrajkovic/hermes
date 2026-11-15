@@ -1,12 +1,14 @@
 import GitHubKit
 
-/// How often a relay has said a part of a pull request changed. A screen that shows the part
-/// reloads it when its count rises, ahead of its own polling.
+/// What deliveries have said about each part of a pull request. A screen that shows a part
+/// applies or reloads when the part's count rises, ahead of its own polling.
 struct EventCounts: Equatable {
-    typealias Part = WritableKeyPath<EventCounts, Int>
+    typealias Part = WritableKeyPath<EventCounts, WebhookChanges>
 
-    var threads = 0
-    var checks = 0
+    /// The description, the conversation, and the reviews.
+    var detail = WebhookChanges()
+    var threads = WebhookChanges()
+    var checks = WebhookChanges()
 
     /// The count an event raises, by GitHub's name for the event. Nil for an event that
     /// changes neither part.

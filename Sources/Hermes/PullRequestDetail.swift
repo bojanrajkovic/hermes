@@ -21,6 +21,15 @@ final class Loader<Value: Sendable> {
         attempt += 1
     }
 
+    /// Replaces the loaded value with what `change` makes of it.
+    ///
+    /// - Returns: False when nothing is loaded yet, or `change` returns nil.
+    func apply(_ change: (Value) -> Value?) -> Bool {
+        guard let value, let changed = change(value) else { return false }
+        self.value = changed
+        return true
+    }
+
     func load(_ operation: () async throws -> Value) async {
         do {
             value = try await operation()
@@ -38,6 +47,12 @@ final class Loader<Value: Sendable> {
 struct LoadID: Hashable {
     let updatedAt: Date
     let attempt: Int
+}
+
+/// How many deliveries have changed one pull request's description, conversation, or reviews.
+private struct DetailChanges: Equatable {
+    let key: ItemKey
+    let count: Int
 }
 
 /// One entry in a pull request's activity: a comment or a submitted review.
@@ -101,6 +116,15 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: current, initial: true) { opened.insert(current) }
+        .onChange(of: DetailChanges(key: pullRequest.key, count: model.store.eventCounts[pullRequest.key]?.detail.count ?? 0)) { seen, now in
+            // Another pull request's count is not a change to this one.
+            guard seen.key == now.key else { return }
+            // A delivery said the description, a comment, or a review changed. Its payload is
+            // applied when it can be, and the detail loads again when it can't.
+            let change = model.store.eventCounts[pullRequest.key]?.detail.only(since: seen.count)
+            if let change, detail.apply({ $0.applying(change) }) { return }
+            detail.retry()
+        }
         .task(id: LoadID(updatedAt: pullRequest.updatedAt, attempt: detail.attempt)) {
             await detail.load {
                 try await model.client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
@@ -117,14 +141,14 @@ struct PullRequestDetailView: View {
             DiffScreen(
                 source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
-                threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? 0,
+                threadChanges: model.store.eventCounts[pullRequest.key]?.threads.count ?? 0,
                 // The review changes the reason the pull request is in the inbox, and its review decision.
                 onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks ?? 0
+                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks.count ?? 0
             )
         case .sessions:
             ScrollView {
@@ -529,7 +553,7 @@ struct ConversationView: View {
                 PaneSection("Checks") {
                     ChecksSummary(
                         repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                        changes: model.store.eventCounts[pullRequest.key]?.checks ?? 0
+                        changes: model.store.eventCounts[pullRequest.key]?.checks.count ?? 0
                     ) { check in
                         model.checkToOpen = check
                         model.pullRequestTab = .checks
