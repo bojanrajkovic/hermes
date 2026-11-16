@@ -27,12 +27,23 @@ final class Loader<Value: Sendable> {
     func apply(_ change: (Value) -> Value?) -> Bool {
         guard let value, let changed = change(value) else { return false }
         self.value = changed
+        applied += 1
         return true
     }
 
+    /// How many changes `apply` has made.
+    @ObservationIgnored private var applied = 0
+
     func load(_ operation: () async throws -> Value) async {
         do {
-            value = try await operation()
+            while true {
+                let before = applied
+                let loaded = try await operation()
+                // A change applied while this ran is newer than its answer, so it runs once more.
+                guard applied == before else { continue }
+                value = loaded
+                break
+            }
             error = nil
         } catch is CancellationError {
         } catch let error as URLError where error.code == .cancelled {

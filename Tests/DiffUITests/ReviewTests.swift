@@ -218,11 +218,31 @@ struct DisplayRangeTests {
 
 /// Answers GitHub requests without the network: a pull request with no
 /// threads or pending review, and a review that is accepted. A client whose token is `threads`
-/// gets a pull request with one thread of one comment. Everything else, and every request
-/// of a client whose token is `offline`, gets status 500.
+/// gets a pull request with one thread of one comment. So does one whose token is in
+/// `held`, once the test calls `answer`, so the test decides what happens while GitHub is
+/// asked. Everything else, and every request of a client whose token is `offline`, gets
+/// status 500.
 private final class GitHubStub: URLProtocol {
     /// The body of every request so far.
     static let bodies = OSAllocatedUnfairLock<[String]>(initialState: [])
+    /// What each held token's requests for the threads wait on.
+    static let held = ["Bearer applied": DispatchSemaphore(value: 0), "Bearer overtaken": DispatchSemaphore(value: 0)]
+    /// How many times each held token has asked for the threads.
+    static let heldLoads = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
+
+    static func loads(of token: String) -> Int {
+        heldLoads.withLock { $0["Bearer \(token)", default: 0] }
+    }
+
+    /// Waits until a held token has asked for the threads `count` times.
+    static func loads(of token: String, reach count: Int) async {
+        while loads(of: token) < count { try? await Task.sleep(for: .milliseconds(5)) }
+    }
+
+    /// Answers `count` of a held token's requests for the threads, ones made later included.
+    static func answer(_ token: String, count: Int = 1) {
+        for _ in 0..<count { held["Bearer \(token)"]?.signal() }
+    }
 
     static func client(token: String = "token") -> GitHubClient {
         let configuration = URLSessionConfiguration.ephemeral
@@ -247,7 +267,8 @@ private final class GitHubStub: URLProtocol {
         Self.bodies.withLock { $0.append(body) }
 
         var answer: String?
-        if request.value(forHTTPHeaderField: "Authorization") != "Bearer offline" {
+        let token = request.value(forHTTPHeaderField: "Authorization") ?? ""
+        if token != "Bearer offline" {
             if body.contains("states: PENDING") {
                 answer = #"{"data":{"node":{"reviews":{"nodes":[]}}}}"#
             } else if body.contains("reviewThreads") {
@@ -257,7 +278,11 @@ private final class GitHubStub: URLProtocol {
                     "isResolved":false,"isOutdated":false,"comments":{"nodes":[{"id":"C10","databaseId":10,"author":null,\
                     "body":"First","createdAt":"2026-01-01T00:00:00Z"}]}}]}
                     """
-                let threads = request.value(forHTTPHeaderField: "Authorization") == "Bearer threads" ? thread : empty
+                if let gate = Self.held[token] {
+                    Self.heldLoads.withLock { $0[token, default: 0] += 1 }
+                    gate.wait()
+                }
+                let threads = token == "Bearer threads" || Self.held[token] != nil ? thread : empty
                 answer = """
                     {"data":{"repository":{"pullRequest":{"id":"PR_1","body":"","comments":\(empty),"reviews":\(empty),\
                     "reviewRequests":\(empty),"commits":\(empty),"reviewThreads":\(threads)}}}}
@@ -318,6 +343,33 @@ struct ReviewModelTests {
 
         // A new thread's ID is not in a payload, so the threads load.
         #expect(!model.apply(.threads))
+        #expect(model.threads.count == 1)
+    }
+
+    @Test func aChangeAppliedWhileTheThreadsLoadMakesThemLoadAgain() async {
+        let model = makeModel(client: GitHubStub.client(token: "applied"))
+        GitHubStub.answer("applied")
+        await model.reloadThreads()
+        let load = Task { await model.reloadThreads() }
+        await GitHubStub.loads(of: "applied", reach: 2)
+
+        // GitHub was asked before this change, so its answer is the older one, and the threads load a third time.
+        #expect(model.apply(.threadResolved(id: "T1", resolved: true)))
+        GitHubStub.answer("applied", count: 2)
+        #expect(await load.value)
+        #expect(GitHubStub.loads(of: "applied") == 3)
+    }
+
+    @Test func aThreadLoadThatALaterOneOvertakesDropsItsAnswer() async {
+        let model = makeModel(client: GitHubStub.client(token: "overtaken"))
+        let first = Task { await model.reloadThreads() }
+        await GitHubStub.loads(of: "overtaken", reach: 1)
+
+        // The second load starts before the first one's answer is read.
+        GitHubStub.answer("overtaken", count: 2)
+        let second = await model.reloadThreads()
+        #expect(second)
+        #expect(await first.value == false)
         #expect(model.threads.count == 1)
     }
 

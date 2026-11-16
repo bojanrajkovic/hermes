@@ -10,7 +10,7 @@ private func pullRequestDelivery(action: String, changes: [String: Any]? = nil, 
         "labels": [["name": "site", "color": "ededed", "node_id": "LA_1"]],
         "head": ["sha": "new-head", "ref": "sitemap"], "base": ["sha": "base", "ref": "main"],
         "additions": 17, "deletions": 4, "changed_files": 3, "auto_merge": NSNull(),
-        "requested_reviewers": [Any](), "requested_teams": [Any](),
+        "requested_reviewers": [Any](), "requested_teams": [Any](), "updated_at": "2026-11-15T22:12:54Z",
     ]
     let delivery: [String: Any] = [
         "action": action, "number": 7, "changes": changes ?? NSNull(),
@@ -49,7 +49,8 @@ struct WebhookChangeTests {
                 body: "Two Markdown files, for reproducing a layout bug in Hermes' rendered view.",
                 state: .open, isDraft: false, labels: [], headOID: "a1ced9bde73d65baa594b25a466a2acb508d7a68",
                 headRefName: "md-repro", baseRefName: "md-repro-base", additions: 3, deletions: 1,
-                changedFileCount: 2, autoMergeMethod: nil, requestedReviewers: []
+                changedFileCount: 2, autoMergeMethod: nil, requestedReviewers: [],
+                updatedAt: try #require(ISO8601DateFormatter().date(from: "2026-11-15T22:12:54Z"))
             ),
             reloads: false
         ))
@@ -75,15 +76,21 @@ struct WebhookChangeTests {
         #expect(fields(of: pullRequestDelivery(action: "edited"))?.state == .open)
     }
 
-    @Test func autoMergeAndRequestedReviewersAreRead() {
-        let fields = fields(of: pullRequestDelivery(action: "review_requested", [
+    @Test func autoMergeAndRequestedReviewersAreRead() throws {
+        let avatar = "https://example.com/hubot.png"
+        let fields = try #require(fields(of: pullRequestDelivery(action: "review_requested", [
             "auto_merge": ["merge_method": "squash"],
-            "requested_reviewers": [["login": "hubot"]], "requested_teams": [["slug": "web"]],
-        ]))
+            "requested_reviewers": [["login": "hubot", "avatar_url": avatar, "type": "User"]],
+            "requested_teams": [["name": "Web", "slug": "web"]],
+        ])))
 
-        #expect(fields?.autoMergeMethod == .squash)
-        // A team belongs to the organization that owns the repository.
-        #expect(fields?.requestedReviewers == [.user(login: "hubot"), .team(organization: "acme", slug: "web")])
+        #expect(fields.autoMergeMethod == .squash)
+        #expect(fields.requestedReviewers == [
+            .user(User(login: "hubot", avatarURL: try #require(URL(string: avatar)), isBot: false)),
+            .team(name: "Web", slug: "web"),
+        ])
+        // The row names a team by the organization that owns the repository.
+        #expect(held().applying(fields).requestedReviewers == [.user(login: "hubot"), .team(organization: "acme", slug: "web")])
     }
 
     @Test(arguments: [

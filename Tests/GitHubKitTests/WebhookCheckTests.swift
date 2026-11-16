@@ -132,6 +132,14 @@ struct WebhookCheckTests {
         #expect(Check.applying(.checkRun(again, runID: 5), to: checks) == [.run(run(21, "build", .queued, workflow: ci)), checks[1]])
     }
 
+    @Test func aLateDeliveryForAnEarlierAttemptLeavesTheNewerAttempt() {
+        // The job ran again as check run 21. The first attempt's `completed` arrives after it.
+        let checks: [Check] = [.run(run(21, "build", .queued, workflow: ci)), .run(run(12, "test", workflow: ci))]
+        let earlier = run(11, "build", workflow: nil)
+
+        #expect(Check.applying(.checkRun(earlier, runID: 5), to: checks) == checks)
+    }
+
     @Test func aNewJobOfAKnownWorkflowRunTakesThatWorkflow() {
         let checks: [Check] = [.run(run(11, "build", workflow: ci))]
         let new = run(13, "deploy", .queued, workflow: nil)

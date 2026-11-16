@@ -72,21 +72,49 @@ struct RelaysTests {
         #expect(next)
     }
 
-    @Test func aChangeAppliedDuringALoadMakesTheLoadRunAgain() {
-        var bursts = EventBursts()
+    /// The fields of a `pull_request` payload that GitHub last changed `updated` seconds in.
+    private func fields(title: String = "A pull request", updated: TimeInterval) -> PullRequestFields {
+        PullRequestFields(
+            title: title, body: "", state: .open, isDraft: false, labels: [], headOID: "abc", headRefName: "branch-7",
+            baseRefName: "main", additions: 1, deletions: 1, changedFileCount: 1, autoMergeMethod: nil,
+            requestedReviewers: [], updatedAt: Date(timeIntervalSinceReferenceDate: updated)
+        )
+    }
+
+    @Test func aPayloadOlderThanTheLastOneARowTookIsNotApplied() {
+        let data = AccountData(login: "bojan", client: GitHubClient(token: { "" }))
         let key = ItemKey(repository: airway, number: 7)
+        data.store(.pullRequest(pullRequest(7)), for: key)
 
-        // Nothing is loading, so an applied change starts nothing.
-        bursts.applied(key)
-        let loads = bursts.shouldLoad(key, part: nil)
-        #expect(loads)
+        // Two edits arrive reversed: the later one first.
+        #expect(data.apply(fields(title: "Second edit", updated: 20), to: key))
+        #expect(!data.apply(fields(title: "First edit", updated: 10), to: key))
+        #expect(data.pullRequest(key)?.title == "Second edit")
 
-        // The load may have asked GitHub before the change, so it runs once more.
-        bursts.applied(key)
-        let again = bursts.loaded(key)
-        #expect(again == [])
-        let over = bursts.loaded(key)
-        #expect(over == nil)
+        // One from the same second is not older.
+        #expect(data.apply(fields(title: "Third edit", updated: 20), to: key))
+        #expect(data.pullRequest(key)?.title == "Third edit")
+    }
+
+    @Test func aLoadSeesWhichRowsTookAPayloadWhileItRan() {
+        var applied = AppliedPayloads()
+        let key = ItemKey(repository: airway, number: 7)
+        let other = ItemKey(repository: airway, number: 8)
+        _ = applied.take(fields(updated: 10), for: key)
+
+        // What a load reads before it asks GitHub. Nothing came yet, so its answer is kept.
+        let before = applied
+        #expect(applied.rows(since: before).isEmpty)
+
+        // Payloads that come while GitHub answers. The answer would undo them, so their rows load once more.
+        _ = applied.take(fields(updated: 20), for: key)
+        _ = applied.take(fields(updated: 20), for: other)
+        #expect(applied.rows(since: before) == [key, other])
+
+        // A payload that was not applied changed no row.
+        let after = applied
+        _ = applied.take(fields(updated: 5), for: key)
+        #expect(applied.rows(since: after).isEmpty)
     }
 
     @Test func eventsNameThePartOfAPullRequestTheyChange() {

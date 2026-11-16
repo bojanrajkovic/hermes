@@ -37,6 +37,19 @@ struct EventTargetTests {
         #expect(status(on: "aaa").pullRequest(among: data.heldPullRequests) == opened)
     }
 
+    @Test func aStatusOnAnOldCommitDoesNotFindACopyTheOpenListReplaced() {
+        // Opened by its number at commit `aaa`, the pull request then joined the open list,
+        // which shows the push to `bbb`. The copy loaded by number still has `aaa`.
+        let stale = pullRequest(7, head: "aaa")
+        let listed = pullRequest(7, head: "bbb")
+        let closed = pullRequest(8, head: "ccc")
+        let held = PullRequestChanges.held(listed: [listed], fetched: [stale.key: stale, closed.key: closed])
+
+        #expect(held == [listed, closed])
+        #expect(status(on: "aaa").pullRequest(among: held) == nil)
+        #expect(status(on: "bbb").pullRequest(among: held) == listed)
+    }
+
     @Test func aStatusOnACommitNoHeldPullRequestHeadsFindsNone() {
         // Right after a push, the held head is still the old commit, so the account loads.
         let held = [pullRequest(7, head: "old-head")]
@@ -60,5 +73,22 @@ struct LoaderTests {
         // A change that can't be applied leaves the value alone.
         #expect(!loader.apply { _ in nil })
         #expect(loader.value == [1, 2, 3])
+    }
+
+    @Test func aChangeAppliedDuringALoadMakesTheLoadRunAgain() async {
+        let loader = Loader<[Int]>()
+        await loader.load { [1] }
+
+        var runs = 0
+        await loader.load {
+            runs += 1
+            // The first answer was asked for before the change, so it lacks it.
+            guard runs == 1 else { return [1, 2] }
+            _ = loader.apply { $0 + [2] }
+            return [1]
+        }
+
+        #expect(runs == 2)
+        #expect(loader.value == [1, 2])
     }
 }

@@ -31,6 +31,9 @@ final class AccountData {
     /// When the last pull request load started. Nil until the first finishes.
     private var pullRequestsLoadedAt: Date?
     private var repositoriesTriedAt: Date?
+    /// The webhook payloads put into the rows. A load reads it before and after asking
+    /// GitHub, to tell whether a row took a payload meanwhile.
+    @ObservationIgnored private var applied = AppliedPayloads()
 
     /// The pull requests the account's windows show, most important first. Each refresh loads
     /// these again by ID, because GitHub's search can trail a change by a minute.
@@ -68,6 +71,7 @@ final class AccountData {
         defer { isRefreshing = false }
 
         let started = Date.now
+        let appliedBefore = applied
         // Tried, not loaded: a failed load waits as long as a good one, so it does not retry every refresh.
         let reposAreStale = repositoriesTriedAt.map { started.timeIntervalSince($0) > 600 } ?? true
         if everything || reposAreStale { repositoriesTriedAt = started }
@@ -87,6 +91,8 @@ final class AccountData {
         } catch {
             listError = describe(error)
         }
+        // A row that took a payload while the lists loaded may now show their older answer, so it loads once more.
+        for key in applied.rows(since: appliedBefore) { await refetch(key) }
 
         await withTaskGroup(of: Void.self) { group in
             for repository in issueLists.keys { group.addTask { await self.reloadIssues(of: repository) } }
@@ -190,8 +196,23 @@ final class AccountData {
     /// one in its list, or the one loaded by number. A pull request that is no
     /// longer open is also stored by number, with its state.
     func refetch(_ key: ItemKey) async {
-        guard let item = try? await client.item(key) else { return }
-        store(item, for: key)
+        while true {
+            let before = applied
+            guard let item = try? await client.item(key) else { return }
+            // A payload the row took while GitHub answered is newer than the answer, so the row loads once more.
+            guard !applied.rows(since: before).contains(key) else { continue }
+            return store(item, for: key)
+        }
+    }
+
+    /// Puts the fields of a webhook's `pull_request` payload into the row held for `key`.
+    ///
+    /// - Returns: False when the payload is older than the last one the row took, and
+    ///   changed nothing.
+    func apply(_ fields: PullRequestFields, to key: ItemKey) -> Bool {
+        guard let held = pullRequest(key), applied.take(fields, for: key) else { return false }
+        store(.pullRequest(held.applying(fields)), for: key)
+        return true
     }
 
     /// Keeps an item loaded by number.
@@ -284,8 +305,8 @@ final class AccountData {
         pullRequests.first { $0.number == key.number && $0.repository == key.repository } ?? fetchedPullRequests[key]
     }
 
-    /// Every pull request held: the open list, then the ones loaded by number.
-    var heldPullRequests: [PullRequest] { pullRequests + fetchedPullRequests.values }
+    /// Every pull request held, as its row shows it.
+    var heldPullRequests: [PullRequest] { PullRequestChanges.held(listed: pullRequests, fetched: fetchedPullRequests) }
 
     /// Merged or closed, for a pull request that is not in the open list. Nil when unknown.
     func closedState(of key: ItemKey) -> LinkedPullRequest.State? {

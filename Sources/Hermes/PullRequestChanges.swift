@@ -16,6 +16,14 @@ enum PullRequestChanges {
         return byID.values.sorted { ($0.createdAt, $0.number) > ($1.createdAt, $1.number) }
     }
 
+    /// Every pull request held, one copy each, as its row shows it: the open list, then the
+    /// ones loaded by number that are not in it. A pull request opened by number can join the
+    /// open list later, and its copy loaded by number then keeps an old head commit.
+    static func held(listed: [PullRequest], fetched: [ItemKey: PullRequest]) -> [PullRequest] {
+        let keys = Set(listed.map(\.key))
+        return listed + fetched.values.filter { !keys.contains($0.key) }
+    }
+
     /// The most a refresh loads again by ID: 4 requests, so about 4 points and 5 seconds.
     static let watchLimit = 100
 

@@ -1,3 +1,4 @@
+import Foundation
 import GitHubKit
 
 /// What deliveries have said about each part of a pull request. A screen that shows a part
@@ -27,13 +28,39 @@ extension WebhookEvent {
     /// push makes true until the pull request is loaded again.
     ///
     /// A status names only a commit, and a check often does, so those find the pull request
-    /// by its head.
+    /// by its head. `held` has one copy of each pull request, the one its row shows, so a
+    /// status on an older commit finds none.
     func pullRequest(among held: [PullRequest]) -> PullRequest? {
         held.first { candidate in
             guard candidate.repository == repository else { return false }
             if let number = pullRequest { return candidate.number == number }
             return commit != nil && candidate.headOID == commit
         }
+    }
+}
+
+/// The `pull_request` payloads that have been put into an account's rows.
+struct AppliedPayloads {
+    /// How many payloads each row took.
+    private var counts: [ItemKey: Int] = [:]
+    /// The update time of the payload each row took last.
+    private var updatedAt: [ItemKey: Date] = [:]
+
+    /// Records a payload for a row.
+    ///
+    /// - Returns: Whether to apply it. False when it is older than the last one the row
+    ///   took: deliveries can arrive out of order, and the older one would undo the newer.
+    mutating func take(_ fields: PullRequestFields, for key: ItemKey) -> Bool {
+        if let last = updatedAt[key], fields.updatedAt < last { return false }
+        updatedAt[key] = fields.updatedAt
+        counts[key, default: 0] += 1
+        return true
+    }
+
+    /// The rows that took a payload since `earlier`. A load that ran meanwhile may have
+    /// asked GitHub before the payload's change, so its answer would undo the change.
+    func rows(since earlier: AppliedPayloads) -> Set<ItemKey> {
+        Set(counts.filter { $0.value != earlier.counts[$0.key] }.keys)
     }
 }
 
@@ -59,12 +86,6 @@ struct EventBursts {
         running[key]?.again = true
         if let part { running[key]?.parts.insert(part) }
         return false
-    }
-
-    /// Records an event whose payload was applied with no load. A load that is running may
-    /// have asked GitHub before the event, and its answer would undo the change, so it runs again.
-    mutating func applied(_ key: ItemKey) {
-        running[key]?.again = true
     }
 
     /// Records that a load finished.

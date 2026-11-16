@@ -78,7 +78,7 @@ public struct DiffScreen: View {
             // Another pull request's count is not a change to this one.
             guard seen.source == now.source, let review = model?.review else { return }
             if let change = threadChanges.only(since: seen.count), review.apply(change) { return }
-            Task { await review.reloadThreads() }
+            review.loadThreadsForChange()
         }
         // The task ends when the screen goes off screen, which stops the
         // polling. Coming back reuses the model, so the diff reloads in place.

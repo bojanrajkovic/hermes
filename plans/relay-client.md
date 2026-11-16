@@ -268,6 +268,8 @@ Three rules keep a relay's volume from becoming requests:
 - **A burst loads a pull request twice, not once per event.** A CI run sends
   two events per job. `EventBursts` loads on the first event, and turns the
   events that arrive during that load and the 5 seconds after into one more.
+  `BurstLoader` does the same for the review threads and the checks on
+  screen, when their events can't be applied.
 - **Events about nothing Hermes holds share the account's loads the same
   way.** A status or a check on a commit that is no held pull request's head
   loads the account, and a busy branch sends many.

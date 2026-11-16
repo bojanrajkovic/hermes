@@ -158,14 +158,18 @@ extension View {
     /// Applies the latest of `changes` to `model` when their count rises, and calls `reload`
     /// when the checks have to load: the change can't be applied, or a check is now queued
     /// or running and nothing is reloading the list.
+    ///
+    /// A new workflow run sends one check run per job, and none can be applied until a load
+    /// knows the run. Such a burst calls `reload` at once and once more after, not once per
+    /// delivery, so the load it started is not started over by each.
     fileprivate func applying(
-        _ changes: WebhookChanges, commitOID: String, to model: ChecksModel, reload: @escaping () -> Void
+        _ changes: WebhookChanges, commitOID: String, to model: ChecksModel, reload: @escaping @MainActor () -> Void
     ) -> some View {
         onChange(of: CheckChanges(commitOID: commitOID, count: changes.count)) { seen, now in
             // Another commit's count is not a change to this one.
             guard seen.commitOID == now.commitOID else { return }
             if let change = changes.only(since: seen.count), model.apply(change), !model.needsPolling { return }
-            reload()
+            model.changeLoads.load(reload)
         }
     }
 }

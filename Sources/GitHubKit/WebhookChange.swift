@@ -73,7 +73,7 @@ public enum WebhookChange: Sendable, Hashable {
         case (true, false, false, false, false):
             guard let event = try? decoder.decode(PullRequestEvent.self, from: payload) else { return nil }
             self = .pullRequest(
-                PullRequestFields(event.pull_request, owner: event.repository.owner.login),
+                PullRequestFields(event.pull_request),
                 reloads: Self.reloads(action: event.action, changesBase: event.changes?.base != nil)
             )
         case (false, true, true, false, false):
@@ -145,12 +145,15 @@ public struct PullRequestFields: Sendable, Hashable {
     public let deletions: Int
     public let changedFileCount: Int
     public let autoMergeMethod: MergeMethod?
-    public let requestedReviewers: [Reviewer]
+    public let requestedReviewers: [RequestedReviewer]
+    /// When GitHub last changed the pull request. It orders payloads that arrive out of
+    /// order, and is not applied to the row.
+    public let updatedAt: Date
 
     public init(
         title: String, body: String, state: LinkedPullRequest.State, isDraft: Bool, labels: [GitHubLabel],
         headOID: String, headRefName: String, baseRefName: String, additions: Int, deletions: Int,
-        changedFileCount: Int, autoMergeMethod: MergeMethod?, requestedReviewers: [Reviewer]
+        changedFileCount: Int, autoMergeMethod: MergeMethod?, requestedReviewers: [RequestedReviewer], updatedAt: Date
     ) {
         self.title = title
         self.body = body
@@ -165,10 +168,10 @@ public struct PullRequestFields: Sendable, Hashable {
         self.changedFileCount = changedFileCount
         self.autoMergeMethod = autoMergeMethod
         self.requestedReviewers = requestedReviewers
+        self.updatedAt = updatedAt
     }
 
-    /// - Parameter owner: The repository's owner. A requested team belongs to it.
-    init(_ pullRequest: RESTPullRequest, owner: String) {
+    init(_ pullRequest: RESTPullRequest) {
         self.init(
             title: pullRequest.title, body: pullRequest.body ?? "",
             state: pullRequest.merged ? .merged : pullRequest.state == "closed" ? .closed : .open,
@@ -177,8 +180,9 @@ public struct PullRequestFields: Sendable, Hashable {
             additions: pullRequest.additions, deletions: pullRequest.deletions,
             changedFileCount: pullRequest.changed_files,
             autoMergeMethod: pullRequest.auto_merge.flatMap { MergeMethod(rawValue: $0.merge_method.uppercased()) },
-            requestedReviewers: pullRequest.requested_reviewers.map { .user(login: $0.login) }
-                + pullRequest.requested_teams.map { .team(organization: owner, slug: $0.slug) }
+            requestedReviewers: pullRequest.requested_reviewers.map { .user($0.user) }
+                + pullRequest.requested_teams.map { .team(name: $0.name, slug: $0.slug) },
+            updatedAt: pullRequest.updated_at
         )
     }
 }
@@ -187,14 +191,21 @@ extension PullRequest {
     /// This pull request with the fields a webhook payload carries replaced. What the
     /// payload does not carry stays: the review decision, mergeability, checks, and stack.
     public func applying(_ fields: PullRequestFields) -> PullRequest {
-        PullRequest(
+        let requestedReviewers = fields.requestedReviewers.map { reviewer -> Reviewer in
+            switch reviewer {
+            case .user(let user): .user(login: user.login)
+            // A requested team belongs to the organization that owns the repository.
+            case .team(_, let slug): .team(organization: repository.owner, slug: slug)
+            }
+        }
+        return PullRequest(
             id: id, number: number, title: fields.title, url: url, repository: repository, author: author,
             isDraft: fields.isDraft, createdAt: createdAt, updatedAt: updatedAt,
             headRefName: fields.headRefName, baseRefName: fields.baseRefName, headOID: fields.headOID,
             reviewDecision: reviewDecision, additions: fields.additions, deletions: fields.deletions,
             changedFileCount: fields.changedFileCount, mergeable: mergeable, labels: fields.labels,
             checkState: checkState, stack: stack, closingIssueNumbers: closingIssueNumbers,
-            autoMergeMethod: fields.autoMergeMethod, requestedReviewers: fields.requestedReviewers,
+            autoMergeMethod: fields.autoMergeMethod, requestedReviewers: requestedReviewers,
             viewerReviewedCommit: viewerReviewedCommit, state: fields.state
         )
     }
@@ -202,12 +213,13 @@ extension PullRequest {
 
 extension PullRequestDetail {
     /// This detail with a change applied. Nil for a change that is not about the
-    /// description, the conversation, or the reviews.
+    /// description, the requested reviewers, the conversation, or the reviews.
     public func applying(_ change: WebhookChange) -> PullRequestDetail? {
-        var (body, comments, reviews) = (body, comments, reviews)
+        var (body, comments, reviews, requestedReviewers) = (body, comments, reviews, requestedReviewers)
         switch change {
         case .pullRequest(let fields, _):
             body = fields.body
+            requestedReviewers = fields.requestedReviewers
         case .comment(let comment, let deleted):
             let index = comments.firstIndex { $0.id == comment.id }
             switch (index, deleted) {
@@ -264,6 +276,8 @@ extension Check {
     /// A commit's checks with a change applied. Nil when they have to load instead: the
     /// change is not about one check, or it is a job of a workflow run none of `checks`
     /// belongs to, so its workflow's name is not known.
+    ///
+    /// A check run for an earlier attempt of a job than the one in `checks` changes nothing.
     public static func applying(_ change: WebhookChange, to checks: [Check]) -> [Check]? {
         var checks = checks
         switch change {
@@ -278,6 +292,9 @@ extension Check {
             // The run itself, or the attempt of the same job that a re-run replaces.
             let replaced = runs.first { $0.databaseID == run.databaseID }
                 ?? runs.first { runID != nil && $0.workflow?.runID == runID && $0.name == run.name }
+            // Each attempt of a job is a new check run with a higher ID. A delivery about an
+            // earlier attempt can arrive after the newer attempt's.
+            if let replaced, replaced.databaseID > run.databaseID { return checks }
             let workflow = replaced?.workflow ?? runs.first { runID != nil && $0.workflow?.runID == runID }?.workflow
             guard workflow != nil || runID == nil else { return nil }
             let applied = Check.run(CheckRun(
@@ -316,6 +333,62 @@ public struct WebhookChanges: Sendable, Equatable {
     /// the ones before the latest are gone.
     public func only(since seen: Int) -> WebhookChange? {
         count == seen + 1 ? latest : nil
+    }
+}
+
+/// Whether to load for a delivery that can't be applied. A review with ten line comments
+/// sends ten such deliveries, and a new workflow run sends one per job.
+///
+/// The first delivery loads at once. The ones that come while that load runs, and for
+/// `BurstLoader.spacing` after it, become one more load.
+struct LoadBurst {
+    /// Nil when no load is running. Otherwise, whether a delivery came since it started.
+    private var again: Bool?
+
+    /// Records a delivery.
+    ///
+    /// - Returns: Whether to load now. False when a load is running, which then runs once more.
+    mutating func shouldLoad() -> Bool {
+        guard again == nil else {
+            again = true
+            return false
+        }
+        again = false
+        return true
+    }
+
+    /// Records that a load finished and the wait after it passed.
+    ///
+    /// - Returns: Whether to load again. False ends the burst.
+    mutating func loaded() -> Bool {
+        guard again == true else {
+            again = nil
+            return false
+        }
+        again = false
+        return true
+    }
+}
+
+/// Runs the loads of a `LoadBurst` for one screen.
+@MainActor
+public final class BurstLoader {
+    /// How long after a load a delivery still counts as part of that load's burst.
+    public static let spacing: Duration = .seconds(5)
+    private var burst = LoadBurst()
+
+    public init() {}
+
+    /// Runs `operation` now when no load is running. Otherwise the running load runs its
+    /// own operation once more, `spacing` after it finishes.
+    public func load(_ operation: @escaping @MainActor () async -> Void) {
+        guard burst.shouldLoad() else { return }
+        Task { [weak self] in
+            repeat {
+                await operation()
+                try? await Task.sleep(for: Self.spacing)
+            } while self?.burst.loaded() == true
+        }
     }
 }
 
@@ -441,11 +514,6 @@ private struct ReviewEvent: Decodable {
     let review: Review
 }
 
-struct RESTRepository: Decodable {
-    struct Owner: Decodable { let login: String }
-    let owner: Owner
-}
-
 struct RESTPullRequest: Decodable {
     struct Ref: Decodable {
         let ref: String
@@ -453,8 +521,10 @@ struct RESTPullRequest: Decodable {
         let sha: String
     }
     struct AutoMerge: Decodable { let merge_method: String }
-    struct Login: Decodable { let login: String }
-    struct Slug: Decodable { let slug: String }
+    struct Team: Decodable {
+        let name: String
+        let slug: String
+    }
 
     let title: String
     let body: String?
@@ -468,8 +538,9 @@ struct RESTPullRequest: Decodable {
     let deletions: Int
     let changed_files: Int
     let auto_merge: AutoMerge?
-    let requested_reviewers: [Login]
-    let requested_teams: [Slug]
+    let requested_reviewers: [RESTAuthor]
+    let requested_teams: [Team]
+    let updated_at: Date
 }
 
 private struct PullRequestEvent: Decodable {
@@ -481,5 +552,4 @@ private struct PullRequestEvent: Decodable {
     let action: String
     let changes: Changes?
     let pull_request: RESTPullRequest
-    let repository: RESTRepository
 }

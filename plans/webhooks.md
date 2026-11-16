@@ -32,7 +32,8 @@ sequenceDiagram
 Hermes reads the repository and the pull request number from a delivery. A
 commit status names no pull request, and a check often names none, so Hermes
 finds theirs by the commit: the held pull request whose head it is. Held means
-in the open list, or loaded by number.
+in the open list, or loaded by number. A pull request that is both is matched
+as the open list has it, because that is the copy its row shows.
 
 A delivery about a held pull request is applied or loads that pull request.
 [Applying a payload](#applying-a-payload) says which.
@@ -70,10 +71,15 @@ carry.
 | `check_suite` | Nothing | The checks and the pull request |
 | Anything else | Nothing | The pull request |
 
-A row's fields go into the account's lists through `AccountData.store`.
+A row's fields go into the account's lists through `AccountData.apply`.
 
-The description, the conversation, and the reviews belong to the pull request
-pane, which holds them in a `Loader`. `AppStore.eventCounts` keeps, for each
+Deliveries can arrive out of order. A `pull_request` payload carries the time
+GitHub last changed the pull request, and `AccountData.apply` drops a payload
+that is older than the last one its row took. A dropped payload whose event
+needs a load still loads the pull request.
+
+The description, the requested reviewers, the conversation, and the reviews
+belong to the pull request pane, which holds them in a `Loader`. `AppStore.eventCounts` keeps, for each
 pull request and each part of it, a `WebhookChanges`: how many deliveries came
 and the latest one's change. The pane watches the count. When it rises by one,
 the pane applies that change with `PullRequestDetail.applying`. When it rises
@@ -88,8 +94,16 @@ The checks screen and the checks summary do the same with
 names its workflow run in its link, `…/actions/runs/<run>/job/<job>`. A check
 Hermes already holds keeps its workflow. A new job takes the workflow of a
 loaded check of the same run, and replaces an earlier attempt of the same job.
+Each attempt is a new check run with a higher ID, so a delivery about an
+earlier attempt than the one held changes nothing.
 A status or a check on an older commit of the pull request is not applied,
 because the screens show the head commit's checks.
+
+Changes that can't be applied come in bursts. A review with ten line comments
+sends ten, and a new workflow run sends one check run per job, none of which
+can be applied until a load knows the run. `BurstLoader` in
+`WebhookChange.swift` loads the threads or the checks on the first, and once
+more five seconds after that load for the ones that came meanwhile.
 
 The checks list stops reloading once no check is queued or running. A
 delivery that puts a check back in one of those states starts the reloading
@@ -100,8 +114,21 @@ again when it changes, which is at the next refresh, and that load settles
 anything a payload got wrong.
 
 A payload Hermes can't read has no change, and its delivery loads the pull
-request as before. A load that is running when a payload is applied runs once
-more, because it may have asked GitHub before the change.
+request as before.
+
+A load that is running when a payload is applied runs once more, because it
+may have asked GitHub before the change, and its answer would undo it:
+
+| Load | When a payload is applied while it runs |
+|---|---|
+| One pull request, `AccountData.refetch` | It drops the answer and asks again. |
+| The account's lists, `AccountData.refresh` | It loads the rows that took a payload again when it ends. |
+| The pane's detail, `Loader.load` | It drops the answer and asks again. |
+| The review threads, `ReviewModel.reloadThreads` | It drops the answer and asks again. |
+| The checks, `ChecksModel.run` | It drops the answer and asks again, without waiting ten seconds. |
+
+Two loads of the review threads can run at once: the diff's polling and a
+delivery. The one that started first drops its answer.
 
 The payload types are small `Decodable` structs that hold only the fields
 Hermes reads. Types generated from GitHub's REST schema refuse real deliveries:

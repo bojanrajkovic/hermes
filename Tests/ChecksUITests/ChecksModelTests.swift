@@ -1,5 +1,6 @@
 import Foundation
 import GitHubKit
+import os
 import Testing
 @testable import ChecksUI
 
@@ -19,7 +20,16 @@ private final class ChecksProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
 
+    /// How many requests a client whose token is `held` has made. Each waits for a signal
+    /// of `gate`, so a test decides what happens while GitHub is asked.
+    static let heldRequests = OSAllocatedUnfairLock(initialState: 0)
+    static let gate = DispatchSemaphore(value: 0)
+
     override func startLoading() {
+        if request.value(forHTTPHeaderField: "Authorization") == "Bearer held" {
+            Self.heldRequests.withLock { $0 += 1 }
+            Self.gate.wait()
+        }
         client?.urlProtocol(
             self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
             cacheStoragePolicy: .notAllowed
@@ -30,13 +40,18 @@ private final class ChecksProtocol: URLProtocol {
 }
 
 @MainActor struct ChecksModelTests {
-    private func loadedModel() async -> ChecksModel {
+    private let repository = RepositoryRef(owner: "o", name: "r")
+
+    private func client(token: String = "token") -> GitHubClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ChecksProtocol.self]
-        let client = GitHubClient(session: URLSession(configuration: configuration), token: { "token" })
+        return GitHubClient(session: URLSession(configuration: configuration), token: { token })
+    }
+
+    private func loadedModel() async -> ChecksModel {
         let model = ChecksModel()
         // Nothing is queued or running, so this loads once and returns.
-        await model.run(repository: RepositoryRef(owner: "o", name: "r"), commitOID: "abc", client: client)
+        await model.run(repository: repository, commitOID: "abc", client: client())
         return model
     }
 
@@ -66,6 +81,22 @@ private final class ChecksProtocol: URLProtocol {
         // A check suite that finished says nothing a payload can place, so the checks load.
         #expect(!model.apply(.checks))
         #expect(model.checks.count == 2)
+    }
+
+    @Test func aChangeAppliedWhileTheChecksLoadMakesThemLoadAgain() async {
+        let model = await loadedModel()
+        let held = client(token: "held")
+        let load = Task { await model.run(repository: repository, commitOID: "abc", client: held) }
+        while ChecksProtocol.heldRequests.withLock({ $0 }) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+
+        // GitHub was asked before this change, so its answer is the older one, and the checks load again.
+        let failed = StatusContext(context: "ci/legacy", state: .failure, targetURL: nil, description: nil)
+        #expect(model.apply(.status(failed)))
+        ChecksProtocol.gate.signal()
+        ChecksProtocol.gate.signal()
+        await load.value
+
+        #expect(ChecksProtocol.heldRequests.withLock { $0 } == 2)
     }
 
     @Test func aCheckThatStartsAfterPollingEndedAsksForPollingAgain() async {

@@ -152,20 +152,47 @@ struct WebhookDetailTests {
         #expect(submitted?.applying(.review(dismissed))?.reviews == [dismissed])
     }
 
+    private func fields(body: String = "The description", requestedReviewers: [RequestedReviewer] = []) -> PullRequestFields {
+        PullRequestFields(
+            title: "T", body: body, state: .open, isDraft: false, labels: [], headOID: "abc",
+            headRefName: "head", baseRefName: "main", additions: 1, deletions: 1, changedFileCount: 1,
+            autoMergeMethod: nil, requestedReviewers: requestedReviewers, updatedAt: .distantPast
+        )
+    }
+
     @Test func anEditedDescriptionReplacesTheBodyAndKeepsTheRest() throws {
         let old = detail(comments: [comment("IC_1")])
-        let fields = PullRequestFields(
-            title: "T", body: "A new description", state: .open, isDraft: false, labels: [], headOID: "abc",
-            headRefName: "head", baseRefName: "main", additions: 1, deletions: 1, changedFileCount: 1,
-            autoMergeMethod: nil, requestedReviewers: []
-        )
-        let new = try #require(old.applying(.pullRequest(fields, reloads: false)))
+        let new = try #require(old.applying(.pullRequest(fields(body: "A new description"), reloads: false)))
 
         #expect(new.body == "A new description")
         #expect((new.id, new.comments, new.commits) == (old.id, old.comments, old.commits))
     }
 
+    @Test func aReviewRequestReplacesTheRequestedReviewers() throws {
+        let asked: [RequestedReviewer] = [.user(User(login: "hubot", avatarURL: URL(string: "https://example.com/h.png")!, isBot: false))]
+        let requested = try #require(detail().applying(.pullRequest(fields(requestedReviewers: asked), reloads: false)))
+        #expect(requested.requestedReviewers == asked)
+
+        // `review_request_removed` carries the reviewers that are left.
+        let removed = try #require(requested.applying(.pullRequest(fields(), reloads: false)))
+        #expect(removed.requestedReviewers.isEmpty)
+    }
+
     // MARK: Counting
+
+    @Test func aBurstOfDeliveriesThatCannotBeAppliedLoadsOnceAndThenOnceMore() {
+        var burst = LoadBurst()
+
+        // The first delivery loads. The next two wait for that load.
+        let loads = [burst.shouldLoad(), burst.shouldLoad(), burst.shouldLoad()]
+        #expect(loads == [true, false, false])
+
+        // One more load covers both. None came during it, so the burst ends and the next delivery loads at once.
+        let again = [burst.loaded(), burst.loaded()]
+        #expect(again == [true, false])
+        let next = burst.shouldLoad()
+        #expect(next)
+    }
 
     @Test func oneChangeSinceTheLastLookIsAppliedAndMoreThanOneIsNot() {
         var changes = WebhookChanges()

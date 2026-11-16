@@ -31,6 +31,10 @@ final class ChecksModel {
     /// How many calls of `run` are loading or waiting to load again. A new call starts before
     /// the cancelled one before it returns, so this can be two for a moment.
     @ObservationIgnored private var running = 0
+    /// How many changes `apply` has made.
+    @ObservationIgnored private var applied = 0
+    /// Loads the checks for the deliveries that can't be applied, twice for a burst of them.
+    let changeLoads = BurstLoader()
 
     /// Whether a check is queued or running while nothing is reloading the list. An applied
     /// delivery can leave it so, and the caller then starts `run` again, so a check whose
@@ -43,6 +47,7 @@ final class ChecksModel {
     func apply(_ change: WebhookChange) -> Bool {
         guard isLoaded, let changed = Check.applying(change, to: checks) else { return false }
         checks = changed
+        applied += 1
         if selectedCheck == nil { selection = CheckList.defaultSelection(checks) }
         return true
     }
@@ -87,9 +92,12 @@ final class ChecksModel {
         while !Task.isCancelled {
             var delay = Self.refreshInterval
             do {
+                let before = applied
                 let loaded = try await client.checks(repository: repository, commitOID: commitOID)
                 // A response that arrives after cancellation belongs to a commit no longer shown.
                 guard !Task.isCancelled else { return }
+                // A change applied while GitHub answered is newer than the answer, so the checks load once more.
+                guard applied == before else { continue }
                 checks = loaded
                 isLoaded = true
                 (errorMessage, refreshError) = (nil, nil)

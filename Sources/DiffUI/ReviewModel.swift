@@ -98,6 +98,11 @@ final class ReviewModel {
     /// The signed-in user's login, once known.
     @ObservationIgnored private var viewer: String?
     @ObservationIgnored private var saving: Task<Void, Never>?
+    /// How many changes `apply` has made.
+    @ObservationIgnored private var applied = 0
+    /// How many loads of the threads have started.
+    @ObservationIgnored private var threadLoads = 0
+    @ObservationIgnored private let changeLoads = BurstLoader()
 
     init(pullRequest: PullRequest, client: GitHubClient, draftsRoot: URL = PendingReview.defaultRoot) {
         self.pullRequest = pullRequest
@@ -199,16 +204,36 @@ final class ReviewModel {
     func apply(_ change: WebhookChange) -> Bool {
         guard let changed = ReviewThread.applying(change, to: threads) else { return false }
         threads = changed
+        applied += 1
         rebuild()
         return true
     }
 
+    /// Loads the threads for a delivery that can't be applied. A review with ten line
+    /// comments sends ten, and such a burst loads at once and once more after, not once
+    /// per delivery.
+    func loadThreadsForChange() {
+        changeLoads.load { [weak self] in _ = await self?.reloadThreads() }
+    }
+
+    /// Loads the threads from GitHub. A change applied while GitHub answers is newer than
+    /// the answer, so the threads then load once more. A load that a later one overtakes
+    /// drops its answer.
+    ///
     /// - Returns: Whether the threads were loaded. The caller asks again when they were not.
     @discardableResult
     func reloadThreads() async -> Bool {
+        threadLoads += 1
+        let load = threadLoads
         var loaded = false
         do {
-            let detail = try await client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
+            var before: Int
+            var detail: PullRequestDetail
+            repeat {
+                before = applied
+                detail = try await client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
+                guard load == threadLoads else { return false }
+            } while applied != before
             pullRequestID = detail.id
             threads = detail.reviewThreads
             threadsError = nil

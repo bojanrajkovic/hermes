@@ -239,10 +239,9 @@ final class AppStore {
         let key = held.key
         switch event.change {
         case .pullRequest(let fields, let reloads):
-            data.store(.pullRequest(held.applying(fields)), for: key)
-            note(event.change, in: \.detail, of: key)
-            // A load that is running may have asked GitHub before this change, so it runs once more.
-            guard reloads else { return bursts.applied(key) }
+            // Deliveries can arrive out of order. A payload older than the row's last changes nothing.
+            if data.apply(fields, to: key) { note(event.change, in: \.detail, of: key) }
+            guard reloads else { return }
         case .comment:
             // A comment changes nothing a row shows.
             return note(event.change, in: \.detail, of: key)
@@ -255,7 +254,7 @@ final class AppStore {
         case .status, .checkRun, .checks:
             // The checks screens show the head commit's checks. A check on an older commit of
             // the pull request is not among them. The row's rollup is GitHub's to work out.
-            if event.commit == nil || event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
+            if event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
             return load(key, part: nil) { await data.refetch(key) }
         case nil:
             break
