@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import GitHubKit
 import Network
@@ -11,6 +12,8 @@ final class StubRelayHTTP: URLProtocol, @unchecked Sendable {
     typealias Answer = @Sendable (URLRequest) -> (status: Int, body: String)
 
     static let answers = OSAllocatedUnfairLock<[String: Answer]>(initialState: [:])
+    /// The body of each request a host got, in order.
+    static let bodies = OSAllocatedUnfairLock<[String: [Data]]>(initialState: [:])
 
     static func session() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -27,6 +30,18 @@ final class StubRelayHTTP: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
+        // URLSession hands a protocol the body as a stream.
+        var sent = Data()
+        if let stream = request.httpBodyStream {
+            stream.open()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while case let count = stream.read(&buffer, maxLength: buffer.count), count > 0 {
+                sent.append(buffer, count: count)
+            }
+            stream.close()
+        }
+        Self.bodies.withLock { [sent] in $0[url.host() ?? "", default: []].append(sent) }
+
         let (status, body) = answer(request)
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
@@ -34,30 +49,57 @@ final class StubRelayHTTP: URLProtocol, @unchecked Sendable {
     }
 }
 
-/// A WebSocket server on this Mac that stands in for a tenant's connection: it sends each
-/// client one text frame and closes with `closeCode` in the same instant.
-private func standInRelay(sending frame: String, closeCode: UInt16) async throws -> NWListener {
-    let parameters = NWParameters.tcp
-    parameters.defaultProtocolStack.applicationProtocols.insert(NWProtocolWebSocket.Options(), at: 0)
-    let listener = try NWListener(using: parameters, on: .any)
-    listener.newConnectionHandler = { connection in
-        connection.start(queue: .global())
-        let text = NWConnection.ContentContext(identifier: "frame", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
-        connection.send(content: Data(frame.utf8), contentContext: text, completion: .contentProcessed { _ in
-            let close = NWProtocolWebSocket.Metadata(opcode: .close)
-            close.closeCode = .privateCode(closeCode)
-            connection.send(content: nil, contentContext: .init(identifier: "close", metadata: [close]), completion: .idempotent)
-        })
+/// A WebSocket server on this Mac that stands in for a tenant's connection. It reads each
+/// client's first frame, then sends `frame`, when there is one, and closes with `closeCode`
+/// in the same instant.
+private final class StandInRelay: Sendable {
+    /// What the clients sent: the names of the headers on their connection requests, and
+    /// each one's first frame.
+    struct Seen: Sendable {
+        var headers: [String] = []
+        var frames: [String] = []
     }
-    let ready = OSAllocatedUnfairLock<CheckedContinuation<Void, Never>?>(initialState: nil)
-    await withCheckedContinuation { continuation in
-        ready.withLock { $0 = continuation }
-        listener.stateUpdateHandler = { state in
-            if case .ready = state { ready.withLock { $0.take() }?.resume() }
+
+    let seen = OSAllocatedUnfairLock(initialState: Seen())
+    let listener: NWListener
+
+    init(sending frame: String?, closeCode: NWProtocolWebSocket.CloseCode) async throws {
+        let options = NWProtocolWebSocket.Options()
+        options.setClientRequestHandler(.global()) { [seen] _, headers in
+            seen.withLock { $0.headers += headers.map(\.name) }
+            return NWProtocolWebSocket.Response(status: .accept, subprotocol: nil)
         }
-        listener.start(queue: .global())
+        let parameters = NWParameters.tcp
+        parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
+        let listener = try NWListener(using: parameters, on: .any)
+        self.listener = listener
+
+        listener.newConnectionHandler = { [seen] connection in
+            connection.start(queue: .global())
+            connection.receiveMessage { content, _, _, _ in
+                seen.withLock { $0.frames.append(String(decoding: content ?? Data(), as: UTF8.self)) }
+                let close = NWProtocolWebSocket.Metadata(opcode: .close)
+                close.closeCode = closeCode
+                let closing = NWConnection.ContentContext(identifier: "close", metadata: [close])
+                guard let frame else {
+                    connection.send(content: nil, contentContext: closing, completion: .idempotent)
+                    return
+                }
+                let text = NWConnection.ContentContext(identifier: "frame", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
+                connection.send(content: Data(frame.utf8), contentContext: text, completion: .contentProcessed { _ in
+                    connection.send(content: nil, contentContext: closing, completion: .idempotent)
+                })
+            }
+        }
+        let ready = OSAllocatedUnfairLock<CheckedContinuation<Void, Never>?>(initialState: nil)
+        await withCheckedContinuation { continuation in
+            ready.withLock { $0 = continuation }
+            listener.stateUpdateHandler = { state in
+                if case .ready = state { ready.withLock { $0.take() }?.resume() }
+            }
+            listener.start(queue: .global())
+        }
     }
-    return listener
 }
 
 /// The setup, sign-in, and connection of a relay tenant, against stand-ins for the relay and GitHub.
@@ -176,6 +218,53 @@ struct RelayFlowTests {
         #expect(opened.urls.count == 2)
     }
 
+    /// A value in the query of a page Hermes opened.
+    private func query(_ name: String, of url: URL) throws -> String {
+        try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value)
+    }
+
+    @Test func aSignInSendsTheChallengeToTheBrowserAndItsVerifierToTheRelay() async throws {
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let opened = Opened()
+        let relays = makeRelays(opened: opened)
+        let tenant = try #require(RelayTenant(server: server))
+        // The relay refuses the grant, so no token is kept and nothing connects.
+        answer(host) { _ in (403, "") }
+        relays.join(tenant)
+        // A second sign-in to the same tenant has its own state and its own verifier.
+        relays.signIn(try #require(relays.memberships.first))
+        #expect(try query("code_challenge", of: opened.urls[0]) != query("code_challenge", of: opened.urls[1]))
+
+        _ = await relays.finishSignIn(tenantID: tenant.id, grant: "g1", state: try query("state", of: opened.urls[1]))
+
+        let sent = try #require(StubRelayHTTP.bodies.withLock { $0[host] }?.first)
+        let body = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: String])
+        #expect(body["grant"] == "g1")
+        let verifier = try #require(body["verifier"])
+        #expect(verifier.count == 43)
+        let digest = Data(SHA256.hash(data: Data(verifier.utf8))).base64EncodedString()
+        let challenge = digest.replacing("+", with: "-").replacing("/", with: "_").replacing("=", with: "")
+        #expect(try query("code_challenge", of: opened.urls[1]) == challenge)
+    }
+
+    @Test func aSessionLinkWithAStateHermesDidNotSendIsRefused() async throws {
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let opened = Opened()
+        let relays = makeRelays(opened: opened)
+        let tenant = try #require(RelayTenant(server: server))
+        let other = try #require(RelayTenant(server: server))
+        answer(host) { _ in (403, "") }
+        relays.join(tenant)
+        relays.join(other)
+
+        #expect(await relays.finishSignIn(tenantID: tenant.id, grant: "g1", state: "not-a-state") != nil)
+        // Another tenant's sign-in does not vouch for this one.
+        #expect(await relays.finishSignIn(tenantID: tenant.id, grant: "g1", state: try query("state", of: opened.urls[1])) != nil)
+
+        // Neither link reached the relay.
+        #expect(StubRelayHTTP.bodies.withLock { $0[host] } == nil)
+    }
+
     @Test func removingATenantWhileItSignsInKeepsNoTokenAndConnectsNothing() async throws {
         defer { defaults.removePersistentDomain(forName: suite) }
         let opened = Opened()
@@ -184,7 +273,7 @@ struct RelayFlowTests {
         defer { RelayKeychain.set(refreshToken: nil, for: tenant) }
         relays.join(tenant)
         let membership = try #require(relays.memberships.first)
-        let state = try #require(URLComponents(url: opened.urls[0], resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+        let state = try query("state", of: opened.urls[0])
         // The user removes the tenant while the relay is answering.
         answer(host) { _ in
             DispatchQueue.main.sync { MainActor.assumeIsolated { relays.forget(membership) } }
@@ -205,7 +294,7 @@ struct RelayFlowTests {
         let relays = makeRelays(opened: opened)
         let tenant = try #require(RelayTenant(server: server))
         relays.join(tenant)
-        let state = try #require(URLComponents(url: opened.urls[0], resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+        let state = try query("state", of: opened.urls[0])
         relays.forget(try #require(relays.memberships.first))
         // The tenant comes back by another link. The sign-in from before it was removed is still not wanted.
         relays.join(tenant)
@@ -215,22 +304,45 @@ struct RelayFlowTests {
 
     // MARK: Connections
 
-    /// A tenant on a stand-in relay on this Mac, with a refresh token in the Keychain.
-    private func connectedTenant(closingWith closeCode: UInt16) async throws -> (RelayTenant, NWListener) {
-        let frame = #"{"type":"session","refreshToken":"new-token","expiresAt":1700000000,"repositories":["acme/site"]}"#
-        let listener = try await standInRelay(sending: frame, closeCode: closeCode)
-        let port = try #require(listener.port)
+    private static let session = #"{"type":"session","refreshToken":"new-token","expiresAt":1700000000,"repositories":["acme/site"]}"#
+
+    /// A tenant on a stand-in relay on this Mac, with a refresh token in the Keychain. The
+    /// relay answers the client's first frame with `frame`, when there is one, and closes.
+    private func connectedTenant(
+        sending frame: String? = session, closingWith closeCode: NWProtocolWebSocket.CloseCode
+    ) async throws -> (RelayTenant, StandInRelay) {
+        let relay = try await StandInRelay(sending: frame, closeCode: closeCode)
+        let port = try #require(relay.listener.port)
         let tenant = try #require(RelayTenant(server: URL(string: "http://127.0.0.1:\(port.rawValue)")!))
         try #require(RelayKeychain.set(refreshToken: "old-token", for: tenant))
         defaults.set(try JSONEncoder().encode([RelayMembership(tenant: tenant, app: nil)]), forKey: Relays.key)
-        return (tenant, listener)
+        return (tenant, relay)
+    }
+
+    @Test func theRefreshTokenGoesInTheFirstFrameAndNotInAHeader() async throws {
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (tenant, relay) = try await connectedTenant(closingWith: .privateCode(4001))
+        defer {
+            relay.listener.cancel()
+            RelayKeychain.set(refreshToken: nil, for: tenant)
+        }
+        let relays = makeRelays()
+
+        relays.sync()
+        try await waitFor { if case .waiting = relays.states[tenant.id] { true } else { false } }
+        relays.stopAll()
+
+        let seen = relay.seen.withLock { $0 }
+        #expect(!seen.headers.contains { $0.lowercased() == "authorization" })
+        let hello = try #require(seen.frames.first)
+        #expect(try JSONSerialization.jsonObject(with: Data(hello.utf8)) as? [String: String] == ["type": "hello", "refreshToken": "old-token"])
     }
 
     @Test func aSessionFollowedAtOnceByACloseStillStoresTheNewToken() async throws {
         defer { defaults.removePersistentDomain(forName: suite) }
-        let (tenant, listener) = try await connectedTenant(closingWith: 4001)
+        let (tenant, relay) = try await connectedTenant(closingWith: .privateCode(4001))
         defer {
-            listener.cancel()
+            relay.listener.cancel()
             RelayKeychain.set(refreshToken: nil, for: tenant)
         }
         let relays = makeRelays()
@@ -243,11 +355,43 @@ struct RelayFlowTests {
         relays.stopAll()
     }
 
+    @Test func aTokenTheRelayRefusesIsDeletedAndTheTenantIsSignedOut() async throws {
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (tenant, relay) = try await connectedTenant(sending: nil, closingWith: .privateCode(4003))
+        defer {
+            relay.listener.cancel()
+            RelayKeychain.set(refreshToken: nil, for: tenant)
+        }
+        let relays = makeRelays()
+
+        relays.sync()
+        try await waitFor { relays.states[tenant.id] == .signedOut }
+
+        #expect(RelayKeychain.refreshToken(for: tenant) == nil)
+    }
+
+    @Test func aRelayThatCannotReachGitHubKeepsTheTokenAndWaits() async throws {
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (tenant, relay) = try await connectedTenant(sending: nil, closingWith: .protocolCode(.internalServerError))
+        defer {
+            relay.listener.cancel()
+            RelayKeychain.set(refreshToken: nil, for: tenant)
+        }
+        let relays = makeRelays()
+
+        relays.sync()
+        try await waitFor { if case .waiting = relays.states[tenant.id] { true } else { false } }
+        relays.stopAll()
+
+        // The relay did not use the token, so the next connection sends it again.
+        #expect(RelayKeychain.refreshToken(for: tenant) == "old-token")
+    }
+
     @Test func aTenantTheRelayNoLongerHasStillSaysSoAfterARelaunch() async throws {
         defer { defaults.removePersistentDomain(forName: suite) }
-        let (tenant, listener) = try await connectedTenant(closingWith: 4004)
+        let (tenant, relay) = try await connectedTenant(closingWith: .privateCode(4004))
         defer {
-            listener.cancel()
+            relay.listener.cancel()
             RelayKeychain.set(refreshToken: nil, for: tenant)
         }
         let relays = makeRelays()

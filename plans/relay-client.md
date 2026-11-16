@@ -133,15 +133,16 @@ sequenceDiagram
     participant B as Browser
     participant R as Relay
     participant G as GitHub
-    H->>B: open #lt;server#gt;/t/#lt;tenant#gt;/login?state=…
+    Note over H: make a state and a verifier
+    H->>B: open #lt;server#gt;/t/#lt;tenant#gt;/login?state=…&code_challenge=…
     B->>R: GET login
     R-->>B: redirect to GitHub's authorize page for the tenant's App
     B->>G: the member authorizes
     G-->>R: callback with a code
     R-->>H: hermes://relay.session?tenant=…&grant=…&state=…
-    H->>R: POST /t/#lt;tenant#gt;/session with the grant
+    H->>R: POST /t/#lt;tenant#gt;/session with the grant and the verifier
     R-->>H: refresh token
-    H->>R: connect
+    H->>R: connect, then send the refresh token
 ```
 
 The relay holds the App's client secret, so it makes the exchange with GitHub.
@@ -149,9 +150,23 @@ Hermes checks that the session link's `state` is one it sent for that tenant,
 stores the refresh token in the Keychain, and connects. The grant is good for
 ten minutes and for one use.
 
-Removing a tenant ends its sign-in. A session link from before the removal is
-refused, and a removal while the relay is answering keeps no token and
-connects nothing.
+Each sign-in has its own `state` and its own verifier (`RelayVerifier`), which
+is PKCE's code verifier: 32 random bytes in base64url, 43 characters.
+
+- **The login address carries the challenge**, not the verifier. The challenge
+  is the verifier's SHA-256 in base64url without padding.
+  `RelayAPI.loginURL(for:state:verifier:)` builds the address.
+- **The verifier goes in the body of the session request**, with the grant.
+  The relay exchanges the grant only for the verifier that matches the
+  challenge. The relay's operator can see a request's address but not its
+  body, so what passes through addresses during a sign-in is not enough to
+  get a token.
+- **Hermes keeps the state and the verifier in memory only**, in `Relays`,
+  until the session link comes back.
+
+Removing a tenant ends its sign-in and drops its state and verifier. A session
+link from before the removal is refused, and a removal while the relay is
+answering keeps no token and connects nothing.
 
 A tenant's ID names one tenant: its connection, its sign-in, and its Keychain
 item all go by the ID. `RelayTenant` keeps a server's address in one form,
@@ -260,31 +275,40 @@ Hermes offers the relay at that server.
 |---|---|---|
 | `version(of:)` | `GET /version` | The commit the relay was built from |
 | `register(_:as:)` | `PUT /tenants/<tenant>` with an invite code and the App's ID, client ID, client secret, and webhook secret | `403` is `RelayError.inviteRefused`, `409` is `.alreadyRegistered` |
-| `refreshToken(grant:for:)` | `POST /t/<tenant>/session` with the grant from a `hermes://relay.session` link | The member's refresh token. `403` is `.grantRefused` |
+| `refreshToken(grant:verifier:for:)` | `POST /t/<tenant>/session` with the grant from a `hermes://relay.session` link and the sign-in's verifier | The member's refresh token. `403` is `.grantRefused` |
 | `redeemManifest(code:)` | `POST https://api.github.com/app-manifests/<code>/conversions`, with no sign-in | The App's ID, slug, and secrets |
 
 Any other status is `RelayError.unexpected`.
 
 ## The connection
 
-`RelayConnection` is one WebSocket to `wss://<server>/t/<tenant>/connect`. It
-sends the member's refresh token in the `Authorization` header.
+`RelayConnection` is one WebSocket to `wss://<server>/t/<tenant>/connect`. The
+connection request carries no token. As soon as the socket is open, Hermes
+sends the hello, one text frame with the member's refresh token:
+
+```json
+{"type": "hello", "refreshToken": "<refresh token>"}
+```
+
+The relay's operator can see a request's address and headers but not a
+WebSocket's messages, so the token goes in a message.
 
 ```mermaid
 sequenceDiagram
     participant H as Hermes
     participant R as Relay
-    H->>R: connect, Authorization: Bearer #lt;refresh token#gt;
+    H->>R: connect
+    H->>R: hello: refresh token
     R-->>H: session: new refresh token, expiry, repositories
     loop each delivery in a repository the member can see
         R-->>H: event: name, delivery ID, payload
     end
     R-->>H: close 4001
-    H->>R: connect again with the new token
+    H->>R: connect again, hello with the new token
 ```
 
-The relay's first message is a `RelaySession`. Its refresh token replaces the
-one the connection used, which no longer works. Its repositories are the ones
+The relay answers the hello with a `RelaySession`. Its refresh token replaces
+the one in the hello, which no longer works. Its repositories are the ones
 the member can see through the tenant's App. Each later message is a
 `RelayEvent`: GitHub's name for the event, the delivery's ID, and the payload
 as GitHub sent it. A frame of any other shape is skipped.
@@ -305,9 +329,12 @@ why:
 | The relay sent | Ending | What it means |
 |---|---|---|
 | Close code `4001` | `recheck` | The relay checks access again after 8 hours and after a membership change. Connect again at once. |
-| Close code `4003`, or `401` to the connection request | `unauthorized` | The refresh token was refused. The member signs in again. |
+| Close code `4003` | `unauthorized` | GitHub refused the refresh token, or the relay got no hello within 60 seconds. The member signs in again. |
 | Close code `4004`, or `404` to the connection request | `gone` | The tenant's App was uninstalled or its invite code withdrawn. |
+| Close code `1011` | `failed` | The relay could not reach GitHub. It did not use the refresh token, so Hermes keeps it. Connect again after a wait. |
 | Anything else | `failed` | The network dropped or the relay failed. Connect again after a wait. |
+
+A hello that can't be sent closes the connection, which ends as `failed`.
 
 `Relays.next(after:failures:ran:)` turns an ending into what the tenant does:
 
@@ -325,10 +352,10 @@ why:
 `Relays.sync()` connects each tenant that has a refresh token and no
 connection. It runs at launch and every 15 seconds with the forwarders.
 
-The relay spends the refresh token as soon as a connection is accepted, and
-sends the new one in its first message. A connection that drops between those
-two leaves Hermes with a spent token. The next connection is refused, and the
-member signs in again.
+The relay spends the refresh token when it hands it to GitHub, and sends the
+new one in the session message. A connection that drops between those two leaves
+Hermes with a spent token. The relay closes the next connection with `4003`,
+and the member signs in again.
 
 ## Events
 

@@ -131,8 +131,15 @@ final class Relays {
     /// When each tenant's connection started, which also tells it from an earlier one.
     @ObservationIgnored private var startedAt: [String: Date] = [:]
     @ObservationIgnored private var failures: [String: Int] = [:]
-    /// The `state` of each sign-in the browser has not come back from, and its tenant's ID.
-    @ObservationIgnored private var signIns: [String: String] = [:]
+    /// A sign-in the browser has not come back from.
+    private struct SignIn {
+        let tenantID: String
+        /// Sent with the grant. The login address carried its challenge.
+        let verifier: RelayVerifier
+    }
+
+    /// Each sign-in the browser has not come back from, by its `state`. Held in memory only.
+    @ObservationIgnored private var signIns: [String: SignIn] = [:]
 
     /// The repositories a connected tenant sends events for. They need no forwarder.
     var covered: Set<RepositoryRef> {
@@ -265,7 +272,7 @@ final class Relays {
         failures[membership.id] = nil
         gone.remove(membership.id)
         // A sign-in the browser has not come back from is no longer wanted.
-        signIns = signIns.filter { $0.value != membership.id }
+        signIns = signIns.filter { $0.value.tenantID != membership.id }
         memberships.removeAll { $0.id == membership.id }
         RelayKeychain.set(refreshToken: nil, for: membership.tenant)
     }
@@ -322,30 +329,31 @@ final class Relays {
         signIn(membership)
     }
 
-    /// Opens the tenant's sign-in in the browser. The relay sends the user on to GitHub and
-    /// back to Hermes with a `hermes://relay.session` link.
+    /// Opens the tenant's sign-in in the browser, with a new `state` and the challenge of a
+    /// new verifier. The relay sends the user on to GitHub and back to Hermes with a
+    /// `hermes://relay.session` link.
     func signIn(_ membership: RelayMembership) {
         let state = UUID().uuidString
-        signIns[state] = membership.id
-        let login = membership.tenant.server.appending(path: "t/\(membership.id)/login")
-            .appending(queryItems: [URLQueryItem(name: "state", value: state)])
-        open(login)
+        let verifier = RelayVerifier()
+        signIns[state] = SignIn(tenantID: membership.id, verifier: verifier)
+        open(RelayAPI.loginURL(for: membership.tenant, state: state, verifier: verifier))
     }
 
-    /// Exchanges the grant of a `hermes://relay.session` link for the refresh token, stores
-    /// it, and connects.
+    /// Exchanges the grant of a `hermes://relay.session` link, with the sign-in's verifier,
+    /// for the refresh token, stores it, and connects.
     ///
     /// - Returns: What went wrong, or nil.
     func finishSignIn(tenantID: String, grant: String, state: String) async -> String? {
         // The relay sends back the state Hermes gave it. Any other link was not asked for.
-        guard signIns[state] == tenantID, let membership = memberships.first(where: { $0.id == tenantID }) else {
+        guard let signIn = signIns[state], signIn.tenantID == tenantID,
+              let membership = memberships.first(where: { $0.id == tenantID }) else {
             return "This relay sign-in link does not belong to a sign-in Hermes started."
         }
         signIns[state] = nil
 
         let token: String
         do {
-            token = try await api.refreshToken(grant: grant, for: membership.tenant)
+            token = try await api.refreshToken(grant: grant, verifier: signIn.verifier, for: membership.tenant)
         } catch {
             return "Could not sign in to the relay: \(describe(error))"
         }

@@ -51,8 +51,11 @@ import Testing
         #expect(ending(4003) == .unauthorized)
         #expect(ending(4004) == .gone)
         // The relay refused the connection request itself.
-        #expect(ending(0, status: 401) == .unauthorized)
         #expect(ending(0, status: 404) == .gone)
+        // The relay could not reach GitHub, and did not use the token.
+        #expect(ending(1011) == .failed("dropped"))
+        // The connection request carries no token, so a 401 to it says nothing about one.
+        #expect(ending(0, status: 401) == .failed("dropped"))
         // Everything else waits and tries again.
         #expect(ending(1001) == .failed("dropped"))
         #expect(ending(0, status: 502) == .failed("dropped"))
@@ -81,13 +84,35 @@ import Testing
         #expect(body["invite"] as? String == "inv")
     }
 
-    @Test func theGrantIsPostedToTheTenantsSession() throws {
-        let request = try RelayAPI.sessionRequest(grant: "g1", for: tenant)
+    /// The verifier and its challenge from RFC 7636, appendix B.
+    private let verifier = RelayVerifier(value: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+    private let challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+    @Test func theChallengeIsTheVerifiersSHA256InBase64URL() {
+        #expect(verifier.challenge == challenge)
+    }
+
+    @Test func aNewVerifierIs32RandomBytesInBase64URL() {
+        let new = RelayVerifier()
+
+        #expect(new.value.count == 43)
+        #expect(new.value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_".contains($0)) })
+        #expect(new != RelayVerifier())
+    }
+
+    @Test func theLoginAddressCarriesTheStateAndTheChallenge() {
+        let login = RelayAPI.loginURL(for: tenant, state: "s1", verifier: verifier)
+
+        #expect(login.absoluteString == "https://relay.example.com/t/\(tenant.id)/login?state=s1&code_challenge=\(challenge)")
+    }
+
+    @Test func theGrantAndTheVerifierArePostedToTheTenantsSession() throws {
+        let request = try RelayAPI.sessionRequest(grant: "g1", verifier: verifier, for: tenant)
 
         #expect(request.httpMethod == "POST")
         #expect(request.url?.absoluteString == "https://relay.example.com/t/\(tenant.id)/session")
         let data = try #require(request.httpBody)
-        #expect(try JSONSerialization.jsonObject(with: data) as? [String: String] == ["grant": "g1"])
+        #expect(try JSONSerialization.jsonObject(with: data) as? [String: String] == ["grant": "g1", "verifier": verifier.value])
     }
 
     @Test func theRelaysRefusalsHaveTheirOwnErrors() {

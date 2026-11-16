@@ -53,8 +53,9 @@ public enum RelayMessage: Sendable, Equatable {
 
 /// One WebSocket to a tenant of the relay, open from `init` until it ends or `stop()` is called.
 ///
-/// The relay sends a `RelaySession` first, then a `RelayEvent` for each webhook delivery in a
-/// repository the member can see.
+/// Hermes sends a hello with the member's refresh token. The relay answers with a
+/// `RelaySession`, then sends a `RelayEvent` for each webhook delivery in a repository the
+/// member can see.
 public final class RelayConnection: Sendable {
     /// One thing a connection reports.
     public enum Event: Sendable, Equatable {
@@ -67,11 +68,12 @@ public final class RelayConnection: Sendable {
     public enum Ending: Sendable, Equatable {
         /// The relay wants the member's access checked again: connect again at once.
         case recheck
-        /// The relay refused the refresh token: the member has to sign in again.
+        /// GitHub refused the refresh token, or the relay got no hello: the member has to sign in again.
         case unauthorized
         /// The tenant is gone: its App was uninstalled, or its invite code withdrawn.
         case gone
-        /// The network dropped or the relay failed: connect again after a wait.
+        /// The network dropped, the relay failed, or the relay could not reach GitHub and
+        /// left the refresh token unused: connect again after a wait.
         case failed(String)
     }
 
@@ -98,8 +100,9 @@ public final class RelayConnection: Sendable {
     static func ending(closeCode: Int, status: Int?, error: String) -> Ending {
         switch (closeCode, status) {
         case (4001, _): .recheck
-        case (4003, _), (_, 401): .unauthorized
+        case (4003, _): .unauthorized
         case (4004, _), (_, 404): .gone
+        // This includes 1011, which the relay sends when it could not reach GitHub.
         default: .failed(error)
         }
     }
@@ -111,17 +114,27 @@ public final class RelayConnection: Sendable {
         return components.url!
     }
 
-    /// Opens the connection.
+    /// The connection's first frame: `{"type":"hello","refreshToken":"…"}`. The token goes
+    /// here and not in a header of the connection request, because the relay's operator can
+    /// see a request's address and headers but not a WebSocket's messages.
+    static func hello(refreshToken: String) -> String {
+        let frame = try? JSONEncoder().encode(["type": "hello", "refreshToken": refreshToken])
+        return String(decoding: frame ?? Data(), as: UTF8.self)
+    }
+
+    /// Opens the connection and sends the hello.
     ///
     /// - Parameters:
     ///   - refreshToken: The member's token for this tenant. The relay replaces it in the
-    ///     `RelaySession` it sends first.
+    ///     `RelaySession` it answers the hello with.
     public init(tenant: RelayTenant, refreshToken: String, session: URLSession = .shared) {
-        var request = URLRequest(url: Self.url(for: tenant))
-        request.setValue("Bearer \(refreshToken)", forHTTPHeaderField: "Authorization")
-        let task = session.webSocketTask(with: request)
+        let task = session.webSocketTask(with: Self.url(for: tenant))
         self.task = task
         task.resume()
+        // URLSession holds the frame until the socket is open. A hello that can't be sent
+        // ends the connection as a failure, which keeps the token: left open, the relay
+        // would close it as unauthorized after its 60 seconds.
+        task.send(.string(Self.hello(refreshToken: refreshToken))) { error in if error != nil { task.cancel() } }
 
         let (events, continuation) = AsyncStream.makeStream(of: Event.self)
         self.events = events
