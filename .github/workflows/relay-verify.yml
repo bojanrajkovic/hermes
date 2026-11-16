@@ -1,6 +1,7 @@
 name: Relay verify
 
-# Checks that the script Cloudflare is running is one the Relay deploy workflow built.
+# Checks that the script Cloudflare is running is one the Relay deploy workflow built, and that
+# the Worker has no setting that lets anything else observe its requests.
 
 on:
   schedule:
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Compare the deployed script with the attested bundles
+    name: Compare the deployed Worker with what this repository built
     runs-on: ubuntu-latest
     # The Cloudflare account and a token that can read the Worker's script belong to this
     # environment, which only runs from main.
@@ -48,3 +49,11 @@ jobs:
           --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/relay-deploy.yml"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # Fails when the Worker has a Tail Worker, log push, observability, or a binding the
+      # relay doesn't use. Those are outside the script, so the hash does not cover them.
+      - name: Check the Worker's settings
+        run: node relay/scripts/check-settings.mjs
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

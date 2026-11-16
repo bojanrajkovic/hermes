@@ -8,7 +8,16 @@ import {
   type Registration,
   type RegistrationDecision,
 } from "./registration";
-import { bearerToken, closeCode, expiry, sessionSeconds, type Session } from "./session";
+import {
+  authorizingSeconds,
+  closeCode,
+  expiredCloseCode,
+  expiry,
+  helloSeconds,
+  helloToken,
+  sessionSeconds,
+  type Session,
+} from "./session";
 
 /** A webhook request as GitHub sent it. */
 export type Delivery = {
@@ -47,6 +56,10 @@ function send(socket: WebSocket, message: string): void {
   } catch {
     // The client went away between the lookup and the send. Its close handler cleans up.
   }
+}
+
+function now(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 /** One tenant: an account whose owner registered its own GitHub App with the relay. */
@@ -121,11 +134,29 @@ export class Tenant extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Closes the sockets a delivery affects. A socket waiting on GitHub is left alone: its
+   * refresh token is spent, so it must get its session message, and `closures` tells it
+   * what happened meanwhile. A socket that has not said hello has no repository list to go
+   * out of date, so only the end of the tenant closes it.
+   */
   private closeEverySocket(code: number, reason: string): void {
     this.closures += 1;
     for (const socket of this.ctx.getWebSockets()) {
-      this.forget(socket);
+      const { state } = socket.deserializeAttachment() as Session;
+      if (state === "authorizing") continue;
+      if (state === "awaitingHello" && code === closeCode.recheck) continue;
+      this.end(socket, code, reason);
+    }
+  }
+
+  /** Forgets a socket's session and closes it. */
+  private end(socket: WebSocket, code: number, reason: string): void {
+    this.forget(socket);
+    try {
       socket.close(code, reason);
+    } catch {
+      // The client closed first.
     }
   }
 
@@ -135,68 +166,99 @@ export class Tenant extends DurableObject<Env> {
   }
 
   /** Finishes a browser sign-in: trades GitHub's code for the user's refresh token. */
-  async signIn(code: string, redirectURL: string): Promise<SignIn> {
+  async signIn(code: string, verifier: string, redirectURL: string): Promise<SignIn> {
     const registration = await this.registration();
     if (!registration) return { outcome: "unknownTenant" };
     if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) return { outcome: "refused" };
 
-    const refreshToken = await refreshTokenForCode(registration, code, redirectURL);
+    const refreshToken = await refreshTokenForCode(registration, code, verifier, redirectURL);
     return refreshToken ? { outcome: "signedIn", refreshToken } : { outcome: "refused" };
   }
 
   /**
-   * Opens a socket for a signed-in user. The request carries the user's refresh token.
-   *
-   * The relay keeps the IDs of the repositories the user can see, for as long as the socket
-   * is open, and sends the replacement refresh token as the socket's first message.
+   * Opens a socket. The client says who it is in its first message, not in this request,
+   * so its refresh token is never in a header.
    */
-  async fetch(request: Request): Promise<Response> {
+  async fetch(_request: Request): Promise<Response> {
     const registration = await this.registration();
     if (!registration || !inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
       return new Response(null, { status: 404 });
     }
-    const token = bearerToken(request.headers.get("authorization"));
-    if (!token) return new Response(null, { status: 401 });
-    const closures = this.closures;
-    const access = await accessForRefreshToken(registration, token);
-    if (!access) return new Response(null, { status: 401 });
-
-    // Deliveries ran while GitHub answered. One may have deleted the tenant, or closed every
-    // socket because someone's access changed, which makes the list just read out of date.
-    if (!(await this.registration())) return new Response(null, { status: 404 });
-    const outOfDate = closures !== this.closures;
 
     const session: Session = {
       id: crypto.randomUUID(),
-      expiresAt: Math.floor(Date.now() / 1000) + sessionSeconds,
+      expiresAt: now() + helloSeconds,
+      state: "awaitingHello",
     };
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(session);
+    await this.closeExpiredSessions();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   * Takes a socket's first message, which carries the user's refresh token.
+   *
+   * The relay uses the token, keeps the IDs of the repositories the user can see for as long
+   * as the socket is open, and sends the replacement token back as the session message.
+   */
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const session = socket.deserializeAttachment() as Session;
+    // A client sends one message. Anything after it is ignored.
+    if (session.state !== "awaitingHello") return;
+
+    const token = helloToken(message);
+    if (!token) return this.end(socket, closeCode.notAuthorized, "no hello");
+    const registration = await this.registration();
+    if (!registration) return this.end(socket, closeCode.tenantGone, "uninstalled");
+
+    socket.serializeAttachment({
+      ...session,
+      state: "authorizing",
+      expiresAt: now() + authorizingSeconds,
+    } satisfies Session);
+    const closures = this.closures;
+
+    let access;
+    try {
+      access = await accessForRefreshToken(registration, token);
+    } catch {
+      return this.end(socket, closeCode.unreachable, "GitHub unreachable");
+    }
+    if (!access) return this.end(socket, closeCode.notAuthorized, "token refused");
+
+    // Deliveries ran while GitHub answered. One may have deleted the tenant, or closed every
+    // open socket because someone's access changed, which makes the list just read out of date.
+    if (!(await this.registration())) return this.end(socket, closeCode.tenantGone, "uninstalled");
+    const outOfDate = closures !== this.closures;
+
+    const open: Session = { id: session.id, expiresAt: now() + sessionSeconds, state: "open" };
+    socket.serializeAttachment(open);
     if (!outOfDate) {
       this.createSessionTable();
       for (const repository of access.repositories) {
         this.ctx.storage.sql.exec(
           "INSERT OR IGNORE INTO session_repository (repository, session) VALUES (?, ?)",
           repository.id,
-          session.id,
+          open.id,
         );
       }
     }
     await this.closeExpiredSessions();
 
-    server.send(
+    send(
+      socket,
       JSON.stringify({
         type: "session",
         refreshToken: access.refreshToken,
-        expiresAt: session.expiresAt,
+        expiresAt: open.expiresAt,
         repositories: access.repositories.map((repository) => repository.fullName),
       }),
     );
     // The old refresh token is spent, so the client needs the session message either way.
     // With an out-of-date list it then reconnects for a fresh one.
-    if (outOfDate) server.close(closeCode.recheck, "recheck");
-    return new Response(null, { status: 101, webSocket: client });
+    if (outOfDate) this.end(socket, closeCode.recheck, "recheck");
   }
 
   async alarm(): Promise<void> {
@@ -215,13 +277,12 @@ export class Tenant extends DurableObject<Env> {
   private async closeExpiredSessions(): Promise<void> {
     const sockets = this.ctx.getWebSockets();
     const sessions = sockets.map((socket) => socket.deserializeAttachment() as Session);
-    const { expired, next } = expiry(sessions, Math.floor(Date.now() / 1000));
+    const { expired, next } = expiry(sessions, now());
 
     for (const socket of sockets) {
       const session = socket.deserializeAttachment() as Session;
       if (expired.some((other) => other.id === session.id)) {
-        this.forget(socket);
-        socket.close(closeCode.recheck, "recheck");
+        this.end(socket, expiredCloseCode(session), "expired");
       }
     }
     this.forgetSessionsWithoutSocket(sessions.filter((session) => !expired.includes(session)));

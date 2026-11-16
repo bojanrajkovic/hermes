@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
+import { CodeChallenge, CodeVerifier } from "./session";
 
 export { Tenant } from "./tenant";
 
@@ -64,11 +65,16 @@ function callbackURL(c: Context<App>): string {
 app.get("/t/:tenant/login", async (c) => {
   const clientID = await tenant(c)?.clientID();
   if (!clientID) return c.notFound();
+  // The client keeps the verifier for this challenge and sends it with the grant.
+  const challenge = CodeChallenge.safeParse(c.req.query("code_challenge"));
+  if (!challenge.success) return c.body(null, 400);
 
   const authorize = new URL("https://github.com/login/oauth/authorize");
   authorize.searchParams.set("client_id", clientID);
   authorize.searchParams.set("redirect_uri", callbackURL(c));
   authorize.searchParams.set("state", c.req.query("state") ?? "");
+  authorize.searchParams.set("code_challenge", challenge.data);
+  authorize.searchParams.set("code_challenge_method", "S256");
   return c.redirect(authorize.toString());
 });
 
@@ -86,7 +92,7 @@ app.get("/t/:tenant/callback", (c) => {
   return c.redirect(link.toString());
 });
 
-const SessionRequest = z.object({ grant: z.string().min(1) });
+const SessionRequest = z.object({ grant: z.string().min(1), verifier: CodeVerifier });
 
 app.post("/t/:tenant/session", async (c) => {
   const stub = tenant(c);
@@ -94,7 +100,7 @@ app.post("/t/:tenant/session", async (c) => {
   const request = SessionRequest.safeParse(await c.req.json().catch(() => undefined));
   if (!request.success) return c.body(null, 400);
 
-  const signIn = await stub.signIn(request.data.grant, callbackURL(c));
+  const signIn = await stub.signIn(request.data.grant, request.data.verifier, callbackURL(c));
   switch (signIn.outcome) {
     case "signedIn":
       return c.json({ refreshToken: signIn.refreshToken });

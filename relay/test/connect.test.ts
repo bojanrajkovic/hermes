@@ -53,30 +53,31 @@ function gitHub(token: unknown, pages: GitHubRepository[][] = []) {
   });
 }
 
-function connect(tenant: string, headers: Record<string, string>): Promise<Response> {
+function connect(tenant: string, headers: Record<string, string> = { upgrade: "websocket" }) {
   return exports.default.fetch(`https://relay.test/t/${tenant}/connect`, { headers });
 }
 
-const upgrade = { upgrade: "websocket", authorization: "Bearer ghr_old" };
-
-/** Opens a socket and returns it with its first message. */
-async function open(tenant: string): Promise<{ socket: WebSocket; first: unknown }> {
-  const response = await connect(tenant, upgrade);
+/** Opens a socket and records what arrives on it. Says nothing yet. */
+async function socketTo(tenant: string) {
+  const response = await connect(tenant);
   expect(response.status).toBe(101);
   const socket = response.webSocket!;
-  const first = new Promise<unknown>((resolve) => {
-    socket.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), {
-      once: true,
-    });
-  });
+  const messages: unknown[] = [];
+  let closeCode: number | undefined;
+  socket.addEventListener("message", (event) => messages.push(JSON.parse(String(event.data))));
+  socket.addEventListener("close", (event) => (closeCode = event.code));
   socket.accept();
-  return { socket, first: await first };
+  return { socket, messages, closeCode: () => closeCode };
 }
 
-function closed(socket: WebSocket): Promise<number> {
-  return new Promise((resolve) => {
-    socket.addEventListener("close", (event) => resolve(event.code), { once: true });
-  });
+const hello = JSON.stringify({ type: "hello", refreshToken: "ghr_old" });
+
+/** Opens a socket, says hello, and waits for the session message. */
+async function open(tenant: string) {
+  const opened = await socketTo(tenant);
+  opened.socket.send(hello);
+  await vi.waitFor(() => expect(opened.messages).toHaveLength(1));
+  return { ...opened, first: opened.messages[0] };
 }
 
 function storedRepositories(tenant: string): Promise<number[]> {
@@ -94,7 +95,26 @@ afterEach(() => {
 });
 
 describe("GET /t/:tenant/connect", () => {
-  it("opens a socket and sends the session first", async () => {
+  it("opens a socket with no token in the request, and asks GitHub nothing yet", async () => {
+    const tenant = await registeredTenant();
+    const calls = gitHub(refreshed);
+
+    const { messages } = await socketTo(tenant);
+
+    expect(messages).toEqual([]);
+    expect(calls).not.toHaveBeenCalled();
+  });
+
+  it("answers 426 to a plain request and 404 for an unregistered tenant", async () => {
+    const tenant = await registeredTenant();
+
+    expect((await connect(tenant, {})).status).toBe(426);
+    expect((await connect("f".repeat(32))).status).toBe(404);
+  });
+});
+
+describe("a socket's first message", () => {
+  it("is answered with the session, built from the refresh token it carries", async () => {
     const tenant = await registeredTenant();
     const calls = gitHub(refreshed, [
       [
@@ -134,30 +154,64 @@ describe("GET /t/:tenant/connect", () => {
     expect(await storedRepositories(tenant)).toHaveLength(101);
   });
 
-  it("refuses a refresh token GitHub refuses", async () => {
+  it("closes with 4003 when GitHub refuses the refresh token", async () => {
     const tenant = await registeredTenant();
     gitHub({ error: "bad_refresh_token", error_description: "The refresh token is invalid." });
+    const opened = await socketTo(tenant);
 
-    expect((await connect(tenant, upgrade)).status).toBe(401);
+    opened.socket.send(hello);
+
+    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
+    expect(opened.messages).toEqual([]);
   });
 
-  it("reports an error, not a refusal, when GitHub is down, so the client keeps its token", async () => {
+  it("closes with 1011 when GitHub is down, so the client keeps its token", async () => {
     const tenant = await registeredTenant();
     vi.spyOn(globalThis, "fetch").mockImplementation(
       async () => new Response("unavailable", { status: 503 }),
     );
+    const opened = await socketTo(tenant);
 
-    expect((await connect(tenant, upgrade)).status).toBe(500);
+    opened.socket.send(hello);
+
+    await vi.waitFor(() => expect(opened.closeCode()).toBe(1011));
   });
 
-  it("asks GitHub nothing without a token, an upgrade, or a registered tenant", async () => {
+  it("closes with 4003, and asks GitHub nothing, when it is not a hello", async () => {
     const tenant = await registeredTenant();
     const calls = gitHub(refreshed);
+    const opened = await socketTo(tenant);
 
-    expect((await connect(tenant, { upgrade: "websocket" })).status).toBe(401);
-    expect((await connect(tenant, { authorization: "Bearer ghr_old" })).status).toBe(426);
-    expect((await connect("f".repeat(32), upgrade)).status).toBe(404);
+    opened.socket.send(JSON.stringify({ type: "subscribe" }));
+
+    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
     expect(calls).not.toHaveBeenCalled();
+  });
+
+  it("is the only one read: a second hello starts nothing", async () => {
+    const tenant = await registeredTenant();
+    const calls = gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]]);
+    const { socket, messages } = await open(tenant);
+    const asked = calls.mock.calls.length;
+
+    socket.send(hello);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(calls.mock.calls).toHaveLength(asked);
+    expect(messages).toHaveLength(1);
+  });
+});
+
+describe("a socket's lifetime", () => {
+  it("ends after a minute when the client never says hello", async () => {
+    const tenant = await registeredTenant();
+    const opened = await socketTo(tenant);
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 61 * 1000);
+    expect(await runDurableObjectAlarm(env.TENANT.getByName(tenant))).toBe(true);
+
+    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
   });
 
   it("forgets a session's repositories when its socket closes", async () => {
@@ -186,13 +240,12 @@ describe("GET /t/:tenant/connect", () => {
     expect(await storedRepositories(tenant)).toEqual([7]);
   });
 
-  it("closes a socket after eight hours so the client reconnects", async () => {
+  it("ends after eight hours so the client reconnects", async () => {
     const tenant = await registeredTenant();
     gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]]);
-    const { socket, first } = await open(tenant);
-    const code = closed(socket);
+    const opened = await open(tenant);
     const stub = env.TENANT.getByName(tenant);
-    const { expiresAt } = first as { expiresAt: number };
+    const { expiresAt } = opened.first as { expiresAt: number };
 
     // The alarm is set for the moment the session runs out, and running it early closes nothing.
     const alarm = () => runInDurableObject(stub, (_instance, state) => state.storage.getAlarm());
@@ -203,9 +256,9 @@ describe("GET /t/:tenant/connect", () => {
 
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000 + 1000);
-    expect(await runDurableObjectAlarm(env.TENANT.getByName(tenant))).toBe(true);
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
 
-    expect(await code).toBe(4001);
+    await vi.waitFor(() => expect(opened.closeCode()).toBe(4001));
     expect(await storedRepositories(tenant)).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { exchangeWebFlowCode, refreshToken as refresh } from "@octokit/oauth-methods";
+import { refreshToken as refresh } from "@octokit/oauth-methods";
 import { request } from "@octokit/request";
 import type { Registration } from "./registration";
 
@@ -7,24 +7,34 @@ type AppCredentials = Pick<Registration, "clientID" | "clientSecret">;
 /**
  * Trades the code GitHub gave the browser at sign-in for the user's refresh token.
  *
- * Returns undefined when GitHub refuses the code, or when the App's user tokens
- * don't expire, because then GitHub issues no refresh token. Throws when GitHub
+ * `verifier` is the PKCE code verifier whose challenge went to GitHub with the sign-in.
+ * GitHub issues nothing without it, so a code alone, which passes through the relay's
+ * address, is worth nothing to someone who saw it.
+ *
+ * Returns undefined when GitHub refuses the code or the verifier, or when the App's user
+ * tokens don't expire, because then GitHub issues no refresh token. Throws when GitHub
  * can't be reached.
  */
 export async function refreshTokenForCode(
   app: AppCredentials,
   code: string,
+  verifier: string,
   redirectURL: string,
 ): Promise<string | undefined> {
   try {
-    const { authentication } = await exchangeWebFlowCode({
-      clientType: "github-app",
-      clientId: app.clientID,
-      clientSecret: app.clientSecret,
+    // Octokit's `exchangeWebFlowCode` has no parameter for the verifier.
+    const response = await request("POST https://github.com/login/oauth/access_token", {
+      headers: { accept: "application/json" },
+      client_id: app.clientID,
+      client_secret: app.clientSecret,
       code,
-      redirectUrl: redirectURL,
+      redirect_uri: redirectURL,
+      code_verifier: verifier,
     });
-    return "refreshToken" in authentication ? authentication.refreshToken : undefined;
+    // GitHub answers 200 with an `error` field when it refuses.
+    const answer = response.data as { refresh_token?: unknown; error?: unknown };
+    if (answer.error !== undefined) return undefined;
+    return typeof answer.refresh_token === "string" ? answer.refresh_token : undefined;
   } catch (error) {
     if (refusedByGitHub(error)) return undefined;
     throw error;

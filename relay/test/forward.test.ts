@@ -72,31 +72,33 @@ function userSeesAfterAWait(...repositories: number[]) {
   return { release, asked: () => asked };
 }
 
-function connect(tenant: string): Promise<Response> {
-  return exports.default.fetch(`https://relay.test/t/${tenant}/connect`, {
-    headers: { upgrade: "websocket", authorization: "Bearer ghr_old" },
+/** A socket that has said hello. Its messages and close code can be awaited in order. */
+async function hello(tenant: string) {
+  const response = await exports.default.fetch(`https://relay.test/t/${tenant}/connect`, {
+    headers: { upgrade: "websocket" },
   });
-}
-
-/** An open socket whose messages and close code can be awaited in order. */
-async function open(tenant: string) {
-  return watch(await connect(tenant));
-}
-
-async function watch(response: Response) {
   const socket = response.webSocket!;
   const messages: string[] = [];
   let closeCode: number | undefined;
   socket.addEventListener("message", (event) => messages.push(String(event.data)));
   socket.addEventListener("close", (event) => (closeCode = event.code));
   socket.accept();
-  await vi.waitFor(() => expect(messages).toHaveLength(1)); // the session message
+  socket.send(JSON.stringify({ type: "hello", refreshToken: "ghr_old" }));
 
   return {
+    /** Whether the session message has arrived. */
+    hasSession: () => messages.length > 0,
     /** The messages after the session message. */
     events: () => messages.slice(1),
     closeCode: () => closeCode,
   };
+}
+
+/** A socket that has its session. */
+async function open(tenant: string) {
+  const socket = await hello(tenant);
+  await vi.waitFor(() => expect(socket.hasSession()).toBe(true));
+  return socket;
 }
 
 async function deliver(tenant: string, event: string, body: string): Promise<number> {
@@ -170,31 +172,33 @@ describe("a change in who can see what", () => {
   });
 });
 
-describe("a delivery that arrives while a client is connecting", () => {
+describe("a delivery that arrives while GitHub is answering for a socket", () => {
   it("gives the client its new token, then has it reconnect, when access changed", async () => {
     const tenant = await registeredTenant();
     const gitHub = userSeesAfterAWait(7);
-    const connecting = connect(tenant);
+    const socket = await hello(tenant);
     await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
 
     await deliver(tenant, "member", '{"action":"removed","repository":{"id":7}}');
+    expect(socket.closeCode()).toBeUndefined();
     gitHub.release();
-    const socket = await watch(await connecting);
 
     await vi.waitFor(() => expect(socket.closeCode()).toBe(4001));
+    expect(socket.hasSession()).toBe(true);
     expect(await storedSessions(tenant)).toBe(0);
   });
 
-  it("opens no socket when the App was uninstalled", async () => {
+  it("tells the client to stop, with no session, when the App was uninstalled", async () => {
     const tenant = await registeredTenant();
     const gitHub = userSeesAfterAWait(7);
-    const connecting = connect(tenant);
+    const socket = await hello(tenant);
     await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
 
     await deliver(tenant, "installation", '{"action":"deleted"}');
     gitHub.release();
 
-    expect((await connecting).status).toBe(404);
+    await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
+    expect(socket.hasSession()).toBe(false);
   });
 });
 

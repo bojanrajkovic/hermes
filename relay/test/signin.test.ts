@@ -26,6 +26,10 @@ function get(path: string): Promise<Response> {
   return exports.default.fetch(`https://relay.test${path}`, { redirect: "manual" });
 }
 
+// The example in RFC 7636, appendix B.
+const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+const challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
 function requestSession(tenant: string, body: unknown): Promise<Response> {
   return exports.default.fetch(`https://relay.test/t/${tenant}/session`, {
     method: "POST",
@@ -48,7 +52,7 @@ describe("GET /t/:tenant/login", () => {
   it("sends the browser to GitHub's sign-in page for the tenant's App", async () => {
     const tenant = await registeredTenant();
 
-    const response = await get(`/t/${tenant}/login?state=abc`);
+    const response = await get(`/t/${tenant}/login?state=abc&code_challenge=${challenge}`);
 
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("location") ?? "");
@@ -56,10 +60,19 @@ describe("GET /t/:tenant/login", () => {
     expect(location.searchParams.get("client_id")).toBe("Iv1.client");
     expect(location.searchParams.get("redirect_uri")).toBe(`https://relay.test/t/${tenant}/callback`);
     expect(location.searchParams.get("state")).toBe("abc");
+    expect(location.searchParams.get("code_challenge")).toBe(challenge);
+    expect(location.searchParams.get("code_challenge_method")).toBe("S256");
+  });
+
+  it("refuses a sign-in with no code challenge, or a malformed one", async () => {
+    const tenant = await registeredTenant();
+
+    expect((await get(`/t/${tenant}/login?state=abc`)).status).toBe(400);
+    expect((await get(`/t/${tenant}/login?state=abc&code_challenge=short`)).status).toBe(400);
   });
 
   it("does not know an unregistered tenant", async () => {
-    expect((await get(`/t/${unregistered}/login?state=abc`)).status).toBe(404);
+    expect((await get(`/t/${unregistered}/login?state=abc&code_challenge=${challenge}`)).status).toBe(404);
   });
 });
 
@@ -92,7 +105,7 @@ describe("POST /t/:tenant/session", () => {
       scope: "",
     });
 
-    const response = await requestSession(tenant, { grant: "gh-code" });
+    const response = await requestSession(tenant, { grant: "gh-code", verifier });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ refreshToken: "ghr_refresh" });
@@ -103,6 +116,7 @@ describe("POST /t/:tenant/session", () => {
       client_secret: "client-secret",
       code: "gh-code",
       redirect_uri: `https://relay.test/t/${tenant}/callback`,
+      code_verifier: verifier,
     });
   });
 
@@ -113,14 +127,14 @@ describe("POST /t/:tenant/session", () => {
       error_description: "The code passed is incorrect or expired.",
     });
 
-    expect((await requestSession(tenant, { grant: "stale" })).status).toBe(403);
+    expect((await requestSession(tenant, { grant: "stale", verifier })).status).toBe(403);
   });
 
   it("refuses when the App's user tokens don't expire, so there is no refresh token", async () => {
     const tenant = await registeredTenant();
     gitHubAnswers({ access_token: "ghu_access", token_type: "bearer", scope: "" });
 
-    expect((await requestSession(tenant, { grant: "gh-code" })).status).toBe(403);
+    expect((await requestSession(tenant, { grant: "gh-code", verifier })).status).toBe(403);
   });
 
   it("reports an error, not a refusal, when GitHub is down", async () => {
@@ -129,14 +143,15 @@ describe("POST /t/:tenant/session", () => {
       async () => new Response("unavailable", { status: 503 }),
     );
 
-    expect((await requestSession(tenant, { grant: "gh-code" })).status).toBe(500);
+    expect((await requestSession(tenant, { grant: "gh-code", verifier })).status).toBe(500);
   });
 
-  it("does not ask GitHub about an unregistered tenant or a missing grant", async () => {
+  it("does not ask GitHub about an unregistered tenant, a missing grant, or a missing verifier", async () => {
     const gitHub = gitHubAnswers({});
 
-    expect((await requestSession(unregistered, { grant: "gh-code" })).status).toBe(404);
-    expect((await requestSession(await registeredTenant(), {})).status).toBe(400);
+    expect((await requestSession(unregistered, { grant: "gh-code", verifier })).status).toBe(404);
+    expect((await requestSession(await registeredTenant(), { verifier })).status).toBe(400);
+    expect((await requestSession(await registeredTenant(), { grant: "gh-code" })).status).toBe(400);
     expect(gitHub).not.toHaveBeenCalled();
   });
 });

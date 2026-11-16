@@ -47,7 +47,7 @@ its own sign-in and its own socket.
 | `GET /version` | `200 {"commit": "<sha>"}`: the commit the running Worker was built from. A local run reports `dev`. |
 | `PUT /tenants/<tenant>` | Registers a tenant. See below. |
 | `POST /hook/<tenant>` | Takes a webhook delivery from GitHub. See below. |
-| `GET /t/<tenant>/login?state=<s>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
+| `GET /t/<tenant>/login?state=<s>&code_challenge=<c>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
 | `GET /t/<tenant>/callback` | Where GitHub sends the browser after sign-in. Redirects to a `hermes://relay.session` link. |
 | `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
 | `GET /t/<tenant>/connect` | Opens a WebSocket for a signed-in user. See below. |
@@ -133,16 +133,17 @@ sequenceDiagram
     participant B as Browser
     participant R as Relay
     participant GH as GitHub
-    H->>B: open /t/#lt;tenant#gt;/login?state=s
-    B->>R: GET /t/#lt;tenant#gt;/login?state=s
-    R-->>B: 302 to GitHub's authorize page
+    Note over H: Make a verifier. Its SHA-256 is the challenge.
+    H->>B: open /t/#lt;tenant#gt;/login?state=s&code_challenge=c
+    B->>R: GET /t/#lt;tenant#gt;/login?state=s&code_challenge=c
+    R-->>B: 302 to GitHub's authorize page, with the challenge
     B->>GH: sign in and authorize the App
-    GH-->>B: 302 /t/#lt;tenant#gt;/callback?code=c&state=s
-    B->>R: GET /t/#lt;tenant#gt;/callback?code=c&state=s
-    R-->>B: 302 hermes://relay.session?tenant=…&grant=c&state=s
+    GH-->>B: 302 /t/#lt;tenant#gt;/callback?code=g&state=s
+    B->>R: GET /t/#lt;tenant#gt;/callback?code=g&state=s
+    R-->>B: 302 hermes://relay.session?tenant=…&grant=g&state=s
     B->>H: open the link
-    H->>R: POST /t/#lt;tenant#gt;/session {"grant": "c"}
-    R->>GH: exchange the code, with the App's client secret
+    H->>R: POST /t/#lt;tenant#gt;/session with the grant and the verifier
+    R->>GH: exchange the code, with the client secret and the verifier
     GH-->>R: access token, refresh token
     R-->>H: {"refreshToken": "…"}
 ```
@@ -152,44 +153,74 @@ nothing between the browser's sign-in and the client's request. GitHub accepts
 a code once, for ten minutes. The relay returns the refresh token and discards
 the access token.
 
-`POST /t/<tenant>/session` takes `{"grant": "<code>"}`:
+The sign-in uses PKCE. Hermes makes a random verifier and sends only its
+SHA-256, the challenge, with the sign-in. GitHub issues a token for the code
+only to a request that also carries the verifier. The code passes through the
+relay's address, where Cloudflare can show it to the relay's operator. The
+verifier travels only in the body of the session request, which Cloudflare
+does not show, so the code alone is worth nothing.
+
+`GET /t/<tenant>/login` answers `400` without a `code_challenge` of 43
+base64url characters.
+
+`POST /t/<tenant>/session` takes `{"grant": "<code>", "verifier": "<verifier>"}`:
 
 | Status | Meaning |
 |---|---|
 | `200` | `{"refreshToken": "<token>"}` |
-| `400` | The body has no grant. |
-| `403` | GitHub refused the code, the tenant's invite code was withdrawn, or the App's user tokens don't expire. |
+| `400` | The body has no grant, or no verifier of 43 to 128 characters. |
+| `403` | GitHub refused the code or the verifier, the tenant's invite code was withdrawn, or the App's user tokens don't expire. |
 | `404` | No tenant with this ID is registered. |
 | `500` | GitHub could not be reached. The code may still be good. |
 
 The App must have "Expire user authorization tokens" on, which is GitHub's
-default. With it off GitHub issues no refresh token. The calls to GitHub use
-[`@octokit/oauth-methods`](https://github.com/octokit/oauth-methods.js).
+default. With it off GitHub issues no refresh token. Octokit's
+`exchangeWebFlowCode` takes no verifier, so the exchange is one call with
+[`@octokit/request`](https://github.com/octokit/request.js).
 
 ### Connecting
 
-The client opens a WebSocket at `GET /t/<tenant>/connect` with its refresh
-token in an `Authorization: Bearer <token>` header.
+The client opens a WebSocket at `GET /t/<tenant>/connect`. The request carries
+no token.
 
 | Status | Meaning |
 |---|---|
 | `101` | The socket is open. |
-| `401` | There is no token, or GitHub refused it. The user must sign in again. |
 | `404` | No tenant with this ID is registered, or its invite code was withdrawn. |
 | `426` | The request is not a WebSocket upgrade. |
-| `500` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
 
-Before it opens the socket, the relay:
+The client's first message says who it is:
+
+```json
+{ "type": "hello", "refreshToken": "<the refresh token>" }
+```
+
+The token is in a message and not a header because Cloudflare can show a
+Worker's operator each request's headers, and never what a socket carries.
+
+```mermaid
+stateDiagram-v2
+    [*] --> awaitingHello: socket opens
+    awaitingHello --> authorizing: hello
+    awaitingHello --> [*]: 60 seconds pass, or the message is not a hello (4003)
+    authorizing --> open: GitHub answers, session sent
+    authorizing --> [*]: GitHub refuses the token (4003)
+    authorizing --> [*]: GitHub can't be reached (1011)
+    open --> [*]: 8 hours pass, or access changed (4001)
+    open --> [*]: tenant gone (4004)
+```
+
+When the hello arrives, the relay:
 
 1. Uses the refresh token. GitHub answers with an access token and a new
    refresh token, and the old one stops working.
 2. Lists the repositories the user can see through the tenant's App, with
    `GET /user/installations` and
    `GET /user/installations/{id}/repositories`. It reads at most 4,000.
-3. Stores those repositories' IDs under a new session ID and discards the
-   access token.
+3. Stores those repositories' IDs under the socket's session ID and discards
+   the access token.
 
-The first message on the socket is the session:
+Then it sends the session:
 
 ```json
 {
@@ -200,16 +231,22 @@ The first message on the socket is the session:
 }
 ```
 
-A delivery can arrive while the relay is waiting on GitHub in steps 1 and 2:
+The relay reads one message from a socket. Anything the client sends after
+its hello is ignored.
 
-- If it deleted the tenant, the request answers `404`.
-- If it closed every socket because someone's access changed, the list just
-  read may be out of date. The relay opens the socket, sends the session so the
-  client gets its new refresh token, stores no repository IDs, and closes the
-  socket with code `4001`.
+A delivery can arrive while the relay is waiting on GitHub in steps 1 and 2.
+The relay leaves that socket open, because its refresh token is already spent
+and the client needs the new one:
+
+- If the delivery deleted the tenant, the socket closes with code `4004` and
+  gets no session.
+- If it closed every open socket because someone's access changed, the list
+  just read may be out of date. The relay sends the session so the client gets
+  its new refresh token, stores no repository IDs, and closes the socket with
+  code `4001`.
 
 The client must store the new refresh token at once. If the connection drops
-before this message arrives, the client holds a spent token, and the user has
+before the session arrives, the client holds a spent token, and the user has
 to sign in again.
 
 A socket stays open for eight hours. Then the relay closes it with code `4001`,
@@ -218,11 +255,14 @@ the Durable Object fires when the oldest socket runs out.
 
 | Close code | Meaning |
 |---|---|
+| `1011` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
 | `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
+| `4003` | Sign in again. GitHub refused the refresh token, the first message was not a hello, or none came within 60 seconds. |
 | `4004` | Stop. The App was uninstalled, or the tenant's invite code was withdrawn. |
 
 The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in
-memory. That is why the repository IDs are in storage and not in a field.
+memory. That is why each socket's state and the repository IDs are in storage
+and not in fields.
 
 ## Invite codes
 
@@ -269,9 +309,14 @@ every hour, and `Relay deploy` calls it after each deploy. It:
    modules byte for byte.
 2. Runs `gh attestation verify` on it, which fails unless the `Relay deploy`
    workflow of this repository attested a file with the same hash.
+3. Reads the Worker's settings with `relay/scripts/check-settings.mjs`, and
+   fails when it has a Tail Worker, log push, observability, or a binding the
+   relay does not use. Those sit outside the script, so its hash does not
+   cover them, and a Tail Worker receives each request's address and headers.
 
 A red `Relay verify` run means the relay is running something this
-repository's workflow did not build. Its runs and logs are public.
+repository's workflow did not build, or has a setting that lets something
+else observe its requests. Its runs and logs are public.
 
 The workflows' settings live in two GitHub environments, not in the
 repository, so only the job that names an environment can read its values. Both
@@ -359,10 +404,12 @@ relay/
 │   ├── tenant.ts         the Tenant Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
-│   ├── session.ts        how long a socket lasts and which have run out
+│   ├── session.ts        a socket's states, how long each lasts, and the hello message
+│   ├── worker-settings.ts   what the deployed Worker's settings must be; used by the verify workflow, not by the Worker
 │   └── github.ts         the calls to GitHub
 ├── scripts/
-│   └── deployed-script.mjs   downloads the script Cloudflare is running
+│   ├── deployed-script.mjs   downloads the script Cloudflare is running
+│   └── check-settings.mjs    checks the deployed Worker's settings
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts

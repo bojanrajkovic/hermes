@@ -14,9 +14,9 @@ whoever controls the Cloudflare account the relay runs in.
   delivery is stored or logged, so there is nothing to look at.
 - **Someone who steals the operator's credentials is in the same position.**
 - **An operator who sets out to intercept deliveries can.** They control the
-  Worker, its settings, and the hostname. What the design does is make that
-  take a deliberate change, and make most such changes show up in public.
-  [Limits](#limits) lists what is and is not caught.
+  hostname the relay is reached at. What the design does is make interception
+  take a deliberate change, and make a change to the Worker's code or
+  settings show up in public. [Limits](#limits) lists what is not caught.
 
 ## What the relay handles
 
@@ -111,7 +111,8 @@ sequenceDiagram
     participant M as A member's Mac
     participant R as Relay
     participant G as GitHub
-    M->>R: connect, with the refresh token
+    M->>R: open a socket (no token in the request)
+    M->>R: first message: the refresh token
     R->>G: use the refresh token (with the App's client secret)
     G-->>R: access token, new refresh token
     R->>G: which repositories can this user see?
@@ -125,6 +126,13 @@ The token GitHub issues can read only what both the tenant's App and the user
 can read. The relay holds it for one request. GitHub replaces the refresh token
 on every use, so the one in the Keychain is the only one that works.
 
+**Tokens never travel where the operator can look.** Cloudflare can show a
+Worker's operator each request's address and headers. It never shows a request
+body or what a socket carries. So the refresh token goes in a socket's first
+message, and the sign-in uses PKCE: GitHub's one-time code does pass through
+the relay's address, but GitHub issues nothing for it without a verifier that
+Hermes sends only in a request body.
+
 ## What the operator can see
 
 | By | The operator learns | Left in public view |
@@ -132,7 +140,7 @@ on every use, so the one in the Keychain is the only one that works.
 | Doing nothing | Request counts and timing for the Worker. | — |
 | Reading the Durable Objects' storage in Cloudflare's dashboard | Which accounts are tenants (from the App's client ID), each tenant's two secrets, and the repository IDs of open sockets. No payloads and no tokens: they are not there. | No. Each query is written to Cloudflare's audit log, which only the operator reads. |
 | Deploying different code | Anything, including payloads. | Yes. The hourly check fails, because the running script is no longer one this repository's workflow attested. |
-| Changing the Worker's settings, such as attaching a Tail Worker | Request addresses and headers, which include the refresh token a client sends when it connects. Not request bodies. | No. See [Limits](#limits). |
+| Changing the Worker's settings, such as attaching a Tail Worker | Request addresses and headers: which tenants are active and when. No payloads and no tokens, because neither is ever in an address or a header. | Yes. The hourly check reads the Worker's settings and fails. |
 | Pointing the hostname at another Worker | Anything, including payloads. | No. See [Limits](#limits). |
 
 The operator can always learn who the tenants are. The promise is about
@@ -159,6 +167,8 @@ graph LR
   commit.
 - Every hour, the verify workflow downloads the script Cloudflare is running
   and checks that the deploy workflow attested a file with the same hash.
+- The same run reads the Worker's settings, and fails when it has a Tail
+  Worker, log push, observability, or a binding the relay does not use.
 - Both workflows' runs and logs are public. A failed verify run means the
   Worker is running something this repository did not build.
 - `GET /version` reports the commit the Worker was built from, and Hermes
@@ -174,19 +184,13 @@ decide with them in view.
 
 - **Cloudflare sees everything.** It ends the TLS connection and runs the
   code. A tenant trusts Cloudflare as it would any host.
-- **The hourly check covers the script, not the Worker's settings.** An
-  operator could attach a Tail Worker, which receives each request's address
-  and headers. A client sends its refresh token in a header when it connects,
-  and the operator already holds the App's client secret, so the two together
-  would let them read what that user and the App can read. Nothing public
-  would change.
 - **The hourly check covers the Worker, not the hostname.** The operator
   controls DNS and routing. A second Worker placed in front of the relay
   could read every delivery and pass it on, and the check would still pass.
-- **A sign-in code passes through the relay's address.** GitHub sends the
-  browser back to the relay with a one-time code in the URL. An operator
-  watching request addresses could try to use a code before the member's Mac
-  does.
+  Cloudflare records such a change in the account's audit log, which only the
+  operator reads.
+- **The check runs hourly.** A setting changed and changed back between two
+  runs is not caught.
 - **Reading stored secrets leaves no public trace.** The webhook secret lets
   its holder forge deliveries to that tenant's members. It reads nothing.
 - **A dropped connection can cost a sign-in.** If the connection drops after
