@@ -3,7 +3,8 @@
 The [relay](relay.md) is a server that passes a GitHub App's webhook
 deliveries on to the people who can see the repository. This page covers the
 Hermes side: setting up a tenant, joining one, the connection, and what
-Hermes does with an event.
+Hermes does with an event. [relay-privacy.md](relay-privacy.md) says what the
+relay's operator can and cannot see.
 
 A **tenant** is one GitHub account's place on a relay: the server's URL and a
 tenant ID of 32 lowercase hex characters (`RelayTenant`). The hosted relay is
@@ -79,9 +80,9 @@ sequenceDiagram
     B->>G: POST /organizations/acme/settings/apps/new?state=…
     Note over B,G: The owner clicks Create.
     G-->>H: hermes://relay.setup?code=…&state=…
-    H->>G: POST /app-manifests/<code>/conversions
+    H->>G: POST /app-manifests/#lt;code#gt;/conversions
     G-->>H: App ID, slug, client ID, client secret, webhook secret, private key
-    H->>R: PUT /tenants/<tenant>: invite code and the secrets
+    H->>R: PUT /tenants/#lt;tenant#gt;: invite code and the secrets
     Note over H: The owner installs the App and sends members the join link.
 ```
 
@@ -132,13 +133,13 @@ sequenceDiagram
     participant B as Browser
     participant R as Relay
     participant G as GitHub
-    H->>B: open <server>/t/<tenant>/login?state=…
+    H->>B: open #lt;server#gt;/t/#lt;tenant#gt;/login?state=…
     B->>R: GET login
     R-->>B: redirect to GitHub's authorize page for the tenant's App
     B->>G: the member authorizes
     G-->>R: callback with a code
     R-->>H: hermes://relay.session?tenant=…&grant=…&state=…
-    H->>R: POST /t/<tenant>/session with the grant
+    H->>R: POST /t/#lt;tenant#gt;/session with the grant
     R-->>H: refresh token
     H->>R: connect
 ```
@@ -183,6 +184,20 @@ organization, `<login>/.github` for a personal account.
   refuses the commit, such as on a branch that takes only pull requests,
   Hermes shows GitHub's reason.
 
+```mermaid
+sequenceDiagram
+    participant O as Owner's Hermes
+    participant G as GitHub
+    participant M as Member's Hermes
+    participant R as Relay
+    O->>G: commit hermes-relay.json to #lt;account#gt;/.github
+    Note over M: At launch, for each of the user's accounts
+    M->>G: GET /repos/#lt;account#gt;/.github/contents/hermes-relay.json
+    G-->>M: the server and the tenant ID
+    Note over M: "#lt;Account#gt; has a relay. Connect?"
+    M->>R: sign in through the tenant's App, then connect
+```
+
 On a member's Mac, once a launch, after the first window loads,
 `AppStore.discoverRelays()` reads
 `GET /repos/<account>/.github/contents/hermes-relay.json` for each of the
@@ -204,6 +219,17 @@ was refused and no button.
 
 Every tenant names its server, and Hermes has no setting for one relay to use
 everywhere. Tenants on different servers work side by side.
+
+```mermaid
+graph LR
+    S["Setup sheet: the server field"] --> A["The App's webhook and<br/>sign-in addresses, on GitHub"]
+    S --> J["The join link"]
+    S --> F["hermes-relay.json in<br/>#lt;account#gt;/.github"]
+    J --> M["A member's Hermes"]
+    F --> M
+    M -->|signs in and connects| R["That server"]
+    A -->|deliveries| R
+```
 
 - **The owner picks the server at setup.** The sheet's server field starts as
   the hosted relay, `RelayTenant.defaultServer`. An owner who runs their own
@@ -248,7 +274,7 @@ sends the member's refresh token in the `Authorization` header.
 sequenceDiagram
     participant H as Hermes
     participant R as Relay
-    H->>R: connect, Authorization: Bearer <refresh token>
+    H->>R: connect, Authorization: Bearer #lt;refresh token#gt;
     R-->>H: session: new refresh token, expiry, repositories
     loop each delivery in a repository the member can see
         R-->>H: event: name, delivery ID, payload

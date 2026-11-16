@@ -5,6 +5,22 @@ The relay is a Cloudflare Worker in [`relay/`](../relay). It runs at
 code that nobody has, so no tenant can register.
 [relay-client.md](relay-client.md) describes Hermes's side.
 
+```mermaid
+graph LR
+    G[GitHub] -->|"POST /hook/#lt;tenant#gt;"| W[Relay Worker]
+    W --> T1["Durable Object<br/>tenant A"]
+    W --> T2["Durable Object<br/>tenant B"]
+    T1 -->|WebSocket| M1["A member's Hermes"]
+    T1 -->|WebSocket| M2["Another member's Hermes"]
+    T2 -->|WebSocket| M3["A member's Hermes"]
+```
+
+The Worker takes each request and hands it to the Durable Object of the tenant
+the address names. That object checks the delivery and sends it down the open
+sockets of the members who can see its repository.
+[relay-privacy.md](relay-privacy.md) says what the relay's operator can and
+cannot see.
+
 ## Tenants
 
 A tenant is a GitHub account whose owner registered a GitHub App of their own
@@ -117,15 +133,15 @@ sequenceDiagram
     participant B as Browser
     participant R as Relay
     participant GH as GitHub
-    H->>B: open /t/<tenant>/login?state=s
-    B->>R: GET /t/<tenant>/login?state=s
+    H->>B: open /t/#lt;tenant#gt;/login?state=s
+    B->>R: GET /t/#lt;tenant#gt;/login?state=s
     R-->>B: 302 to GitHub's authorize page
     B->>GH: sign in and authorize the App
-    GH-->>B: 302 /t/<tenant>/callback?code=c&state=s
-    B->>R: GET /t/<tenant>/callback?code=c&state=s
+    GH-->>B: 302 /t/#lt;tenant#gt;/callback?code=c&state=s
+    B->>R: GET /t/#lt;tenant#gt;/callback?code=c&state=s
     R-->>B: 302 hermes://relay.session?tenant=…&grant=c&state=s
     B->>H: open the link
-    H->>R: POST /t/<tenant>/session {"grant": "c"}
+    H->>R: POST /t/#lt;tenant#gt;/session {"grant": "c"}
     R->>GH: exchange the code, with the App's client secret
     GH-->>R: access token, refresh token
     R-->>H: {"refreshToken": "…"}
