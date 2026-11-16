@@ -130,7 +130,7 @@ What is built and works, and what is known not to work or is unverified.
   sockets of the users who can see its repository, and closes every socket
   when a delivery says someone's access changed. A workflow attests the
   bundle and deploys it, and another checks hourly that the script Cloudflare
-  runs is one the first attested. It runs at `hermes-relay.brajkovic.workers.dev` with no usable
+  runs is one the first attested. It runs at `hermes-relay.services.coderinserepeat.com` with no usable
   invite code. See [plans/relay.md](plans/relay.md).
 
 **Build and tests**
