@@ -302,6 +302,38 @@ builds, deploys, or verifies the relay. The workflows pass
 GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
 ```
 
+## Running your own relay
+
+Anyone can run this Worker in their own Cloudflare account, and point their
+tenants at it from Hermes's setup sheet. Then the relay's operator is the
+account's owner, not the hosted relay's.
+
+1. In `relay/wrangler.jsonc`, give the Worker an address. Either set
+   `workers_dev` to `true`, which serves it at
+   `<name>.<your-subdomain>.workers.dev`, or add a route for a hostname in a
+   zone your Cloudflare account holds.
+2. Write the invite codes to a file outside the repository, as one line:
+   `INVITE_CODES=<code>,<code>`. Wrangler refuses the first deploy of this
+   Worker without it.
+3. Deploy:
+
+   ```bash
+   cd relay && npm ci && npx wrangler deploy --secrets-file <path to the file>
+   ```
+
+4. Check it answers:
+
+   ```bash
+   curl https://<the relay's address>/version
+   ```
+
+5. In Hermes, open "Set Up a Relay…", enter the relay's `https` address as the
+   server, and use one of the invite codes.
+
+The deploy and verify workflows in this repository deploy the hosted relay.
+A fork that wants them sets the two environments' values described under
+[Deploying](#deploying).
+
 ## Layout
 
 ```

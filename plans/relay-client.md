@@ -23,6 +23,43 @@ stays on GitHub.
 A tenant's row in Settings shows whose it is, what its connection is doing,
 and its server with the commit that server's relay reports at `/version`.
 
+## Which accounts get a tenant
+
+A tenant belongs to one GitHub account: a person's own account or an
+organization. GitHub lets a private App be installed only on the account that
+owns it, so every account needs its own App and its own tenant. Nothing is
+shared between two tenants.
+
+```mermaid
+graph LR
+    P["you (personal account)"] --> PA["App hermes-you"] --> PT["tenant A"] --> PC["one connection"]
+    O["acme (you own it)"] --> OA["App hermes-acme"] --> OT["tenant B"] --> OC["one connection"]
+    M["bigco (you belong to it)"] --> MA["App hermes-bigco"] --> MT["tenant C"] --> MC["one connection"]
+```
+
+A tenant covers the repositories its App is installed on. The owner picks all
+of the account's repositories or some of them on GitHub's install page. Each
+person then gets events only for the covered repositories they can see.
+
+What a user does depends on the account:
+
+| The account | Who sets the tenant up | How this user gets it |
+|---|---|---|
+| The user's own | The user. "Set Up a Relay…" offers the account. | Setup adds it to this Mac. A second Mac finds it in `<login>/.github`, when the user published it. |
+| An organization the user owns | Any owner, once. "Set Up a Relay…" offers it to each owner. | The owner who ran setup has it. Other owners and members find it in `<org>/.github`, or open the join link. |
+| An organization the user belongs to | One of its owners. "Set Up a Relay…" does not offer it. | Found in `<org>/.github`, or the join link. |
+| Another person's account, where the user collaborates on a repository | That person | The join link only. Hermes looks for a published tenant in the viewer's own accounts, and another person's account is not one of them. |
+
+A personal account's repositories can already have webhook forwarders
+([webhooks.md](webhooks.md)), because the user administers them. A tenant
+replaces up to 20 forwarder processes and their webhooks with one connection,
+and adds the repositories past the forwarders' limit.
+
+Organizations have members and teams, so their Apps also send the events that
+say someone's access changed, and the relay checks access again when one
+arrives. A personal account has collaborators but no members or teams. Which
+of those events GitHub sends for a personal account's App has not been tried.
+
 ## Setting up a tenant
 
 An owner sets a tenant up once, from "Set Up a Relay…" in Settings or on the
@@ -162,6 +199,32 @@ every published tenant this Mac does not use, from the same lookup, with the
 account, the server, and a Connect button that runs the sign-in. A published
 tenant whose ID this Mac has on another server is listed with the reason it
 was refused and no button.
+
+## Relay servers
+
+Every tenant names its server, and Hermes has no setting for one relay to use
+everywhere. Tenants on different servers work side by side.
+
+- **The owner picks the server at setup.** The sheet's server field starts as
+  the hosted relay, `RelayTenant.defaultServer`. An owner who runs their own
+  relay ([relay.md](relay.md#running-your-own-relay)) enters its address
+  there, with an invite code that relay accepts.
+- **The address must be `https`.** `RelayTenant` also reads `http` for
+  `localhost` and `127.0.0.1`, for a relay run on this Mac.
+- **GitHub fixes the server in the App.** The App's webhook address and
+  sign-in callback are the server's, set when GitHub creates the App. Hermes
+  has no way to move a tenant to another server. A new server means setting up
+  a new tenant, which creates a new App.
+- **Members never choose a server.** The join link and the published file
+  carry it. The alert that asks whether to join names the server's host, and
+  the tenant's row in Settings shows the server and the commit its relay
+  reports.
+- **A tenant's ID belongs to one server.** A link or a published file that
+  names an ID this Mac has on another server is refused.
+
+The published file is how a custom server reaches an organization's members
+without anyone typing an address: the owner publishes once, and each member's
+Hermes offers the relay at that server.
 
 ## Calls
 
