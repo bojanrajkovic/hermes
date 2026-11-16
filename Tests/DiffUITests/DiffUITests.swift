@@ -2,6 +2,7 @@ import DiffKit
 import Foundation
 import GitHubKit
 @testable import RepoKit
+import SwiftUI
 import SyntaxKit
 import Testing
 @testable import DiffUI
@@ -153,6 +154,39 @@ struct StylerTests {
         #expect(emphasized == ["!"])
         // Swift keywords are colored.
         #expect(addition.runs.contains { $0.foregroundColor != nil && String(addition[$0.range].characters) == "func" })
+    }
+}
+
+struct FullFileStylingTests {
+    // The hunk starts inside a template literal, so on its own its closing backtick reads as an opening one.
+    private let file = Diff(parsing: """
+        diff --git a/a.ts b/a.ts
+        index 1111111..2222222 100644
+        --- a/a.ts
+        +++ b/a.ts
+        @@ -2,4 +2,4 @@
+        -old
+        +new
+         `;
+         const b = 1;
+         const c = `x`;
+
+        """).files[0]
+    private let newText = "const a = `\nnew\n`;\nconst b = 1;\nconst c = `x`;\n"
+
+    private func color(of word: String, in line: AttributedString?) -> Color? {
+        line?.runs.first { String(line![$0.range].characters).contains(word) }?.foregroundColor
+    }
+
+    @Test func linesAfterAStringThatOpensBeforeTheHunkAreNotStrings() {
+        #expect(color(of: "const", in: LineStyler.style(file)[.context(old: 4, new: 4)]) == DiffColors.token(.string))
+
+        let styled = LineStyler.style(file, newText: newText)
+        #expect(color(of: "const", in: styled[.context(old: 4, new: 4)]) == DiffColors.token(.keyword))
+        #expect(color(of: "old", in: styled[.deletion(old: 2)]) == DiffColors.token(.string))
+        #expect(color(of: "new", in: styled[.addition(new: 2)]) == DiffColors.token(.string))
+        // Hidden lines are styled too, so expanding them keeps whole-file colors.
+        #expect(color(of: "const", in: styled[.context(old: 1, new: 1)]) == DiffColors.token(.keyword))
     }
 }
 

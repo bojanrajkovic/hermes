@@ -127,6 +127,8 @@ final class FileModel: Identifiable {
         let revealed = expansion.expand(region: region, amount)
         guard !revealed.isEmpty else { return }
         rebuildRows()
+        // Lines styled from the whole file already have their colors.
+        guard revealed.contains(where: { styled[$0.numbers] == nil }) else { return }
         let diff = diff
         Task {
             let styled = await Task.detached { LineStyler.style(context: revealed, path: diff.path) }.value
@@ -469,9 +471,11 @@ final class DiffModel {
         let pending = files.filter(\.wantsRegions)
         let models = Dictionary(pending.map { ($0.id, $0) }) { first, _ in first }
         await forEachConcurrently(pending.map(\.diff), limit: 8) { diff in
-            await DiffLoader.hiddenRegions(of: diff, in: tree)
-        } receive: { diff, regions in
-            if let regions { models[diff.id]?.apply(regions: regions, for: diff) }
+            await DiffLoader.fullFile(of: diff, in: tree)
+        } receive: { diff, full in
+            guard let full, let model = models[diff.id] else { return }
+            model.apply(regions: full.regions, for: diff)
+            model.apply(styled: full.styled, for: diff, isHunkText: false)
         }
     }
 

@@ -73,10 +73,13 @@ enum DiffLoader {
         }
     }
 
-    /// The unchanged lines a file's diff leaves out, or `nil` when the file cannot be read.
-    static func hiddenRegions(of file: FileDiff, in tree: any SourceTree) async -> [HiddenRegion]? {
+    /// The unchanged lines a file's diff leaves out, and every line styled from
+    /// the whole file. `nil` when the file cannot be read.
+    static func fullFile(
+        of file: FileDiff, in tree: any SourceTree
+    ) async -> (regions: [HiddenRegion], styled: [DiffLine.Numbers: AttributedString])? {
         guard let path = file.newPath, let text = try? await tree.readFile(path) else { return nil }
-        return file.hiddenRegions(newText: text)
+        return (file.hiddenRegions(newText: text), LineStyler.style(file, newText: text))
     }
 
     /// Where GitHub shows a file of a pull request's diff.

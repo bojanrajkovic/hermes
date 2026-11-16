@@ -20,6 +20,15 @@ import Testing
         }
     }
 
+    @Test func bothSidesAreRebuiltFromTheNewText() throws {
+        let file = twoHunkDiff.files[0]
+        let sides = try #require(file.fullLines(newText: twoHunkNewText))
+        #expect(sides.new == twoHunkNewText.split(separator: "\n").map(String.init))
+        #expect(sides.old == (1...20).map { "L\($0)" })
+        // Text the hunks do not match, such as a file from another commit, gives nothing.
+        #expect(file.fullLines(newText: twoHunkNewText.replacingOccurrences(of: "NEW", with: "OTHER")) == nil)
+    }
+
     @Test func expandsInChunksFromEitherEnd() {
         var region = twoHunkDiff.files[0].hiddenRegions(newText: twoHunkNewText)[0]
 

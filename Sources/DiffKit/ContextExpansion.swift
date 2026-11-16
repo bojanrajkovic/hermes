@@ -81,6 +81,30 @@ extension FileDiff {
     }
 }
 
+extension FileDiff {
+    /// Every line of the file on both sides: the new side is `newText`, and the
+    /// old side is `newText` with each hunk's new lines swapped back for its old ones.
+    ///
+    /// - Parameter newText: The file's full content at the diff's new side.
+    /// - Returns: `nil` when a hunk's new lines do not match `newText`, such as
+    ///   text from another commit, and for binary files.
+    public func fullLines(newText: String) -> (old: [String], new: [String])? {
+        guard case .text(let hunks) = content else { return nil }
+        let new = lines(of: newText).map(\.text)
+        var old: [String] = []
+        var next = 0
+        for hunk in hunks {
+            let start = hunk.newCount == 0 ? hunk.newStart : hunk.newStart - 1
+            let newSide = hunk.lines.filter { $0.kind != .deletion }.map(\.text)
+            guard start >= next, start + newSide.count <= new.count, Array(new[start..<start + newSide.count]) == newSide
+            else { return nil }
+            old += new[next..<start] + hunk.lines.filter { $0.kind != .addition }.map(\.text)
+            next = start + newSide.count
+        }
+        return (old + new[next...], new)
+    }
+}
+
 /// Splits file text into lines the way git does: a trailing newline ends the
 /// last line and does not start an empty one.
 private func lines(of text: String) -> [(text: String, ending: LineEnding)] {

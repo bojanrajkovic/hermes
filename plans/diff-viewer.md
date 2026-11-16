@@ -206,9 +206,21 @@ Ruby, JSON, Bash, HCL, YAML, TOML, HTML, and CSS. `Language(path:)` picks the
 language from the file name, the extension, or the shebang. Anything else is
 plain text.
 
-A hunk is highlighted as a fragment, old side and new side separately.
-Tree-sitter recovers from the missing context, so most tokens are right, and a
-keyword near a hunk's edge can be missed.
+Highlighting happens in two passes:
+
+1. **Per hunk.** Each hunk's old side and new side are highlighted as
+   fragments, so the diff gets colors right away. A fragment can start
+   inside a string or comment. Tree-sitter can't know that, so it can color
+   the rest of the hunk wrong.
+2. **Whole file.** When the file's new text arrives for context expansion,
+   `FileDiff.fullLines` rebuilds the old text from it by swapping each hunk's
+   new lines for its old lines. Both sides are then highlighted in full, and
+   those colors replace the per-hunk ones, hidden lines included.
+
+The second pass is skipped when the hunks don't match the text, and when a
+side is over `Syntax`'s size or line-length limit. In those cases the per-hunk
+colors stay. The old side doesn't need a fetch of the base commit: the hunks
+hold every line that changed.
 
 ## Context expansion
 

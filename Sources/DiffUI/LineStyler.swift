@@ -138,12 +138,7 @@ enum LineStyler {
         let language = Language(path: file.path)
         var styled: [DiffLine.Numbers: AttributedString] = [:]
         for hunk in file.hunks {
-            var emphasis: [DiffLine.Numbers: [Range<Int>]] = [:]
-            for case .paired(let deletion, let addition) in hunk.splitRows {
-                guard let change = intralineChange(old: deletion.text, new: addition.text) else { continue }
-                emphasis[deletion.numbers] = change.old.map { utf16Range($0, in: deletion.text) }
-                emphasis[addition.numbers] = change.new.map { utf16Range($0, in: addition.text) }
-            }
+            let emphasis = emphasis(in: hunk)
             let old = hunk.lines.filter { $0.kind != .addition }
             let new = hunk.lines.filter { $0.kind != .deletion }
             // Context lines take their colors from the new side.
@@ -151,6 +146,51 @@ enum LineStyler {
             style(new, tokens: tokens(new, language), emphasis: emphasis, into: &styled)
         }
         return styled
+    }
+
+    /// Styles every line of a file, the hidden ones included, from highlighting
+    /// both sides in full. A hunk alone can start inside a string or comment,
+    /// which ``style(_:)`` cannot tell.
+    ///
+    /// - Parameter newText: The file's full content at the diff's new side.
+    /// - Returns: Nothing when `newText` does not match the diff, or when
+    ///   either side is too large to parse, so the hunk colors stay.
+    static func style(_ file: FileDiff, newText: String) -> [DiffLine.Numbers: AttributedString] {
+        let language = Language(path: file.path)
+        guard language != .plainText, let sides = file.fullLines(newText: newText) else { return [:] }
+        func highlight(_ lines: [String]) -> [[Token]]? {
+            let text = lines.joined(separator: "\n")
+            guard text.utf8.count <= Syntax.maximumSourceBytes, lines.allSatisfy({ $0.utf16.count <= Syntax.maximumLineLength })
+            else { return nil }
+            let tokens = Syntax.highlight(text, language: language)
+            return tokens.count == lines.count ? tokens : nil
+        }
+        guard let old = highlight(sides.old), let new = highlight(sides.new) else { return [:] }
+
+        let lines = file.hunks.flatMap(\.lines) + file.hiddenRegions(newText: newText).flatMap(\.lines)
+        var tokens: [DiffLine.Numbers: [Token]] = [:]
+        for line in lines {
+            let (side, number) = switch line.numbers {
+            case .deletion(let number): (old, number)
+            case .addition(let number), .context(_, let number): (new, number)
+            }
+            if side.indices.contains(number - 1) { tokens[line.numbers] = side[number - 1] }
+        }
+        let emphasis = file.hunks.reduce(into: [:]) { $0.merge(emphasis(in: $1)) { first, _ in first } }
+        var styled: [DiffLine.Numbers: AttributedString] = [:]
+        style(lines, tokens: tokens, emphasis: emphasis, into: &styled)
+        return styled
+    }
+
+    /// Intraline change ranges for the lines the split layout pairs.
+    private static func emphasis(in hunk: Hunk) -> [DiffLine.Numbers: [Range<Int>]] {
+        var emphasis: [DiffLine.Numbers: [Range<Int>]] = [:]
+        for case .paired(let deletion, let addition) in hunk.splitRows {
+            guard let change = intralineChange(old: deletion.text, new: addition.text) else { continue }
+            emphasis[deletion.numbers] = change.old.map { utf16Range($0, in: deletion.text) }
+            emphasis[addition.numbers] = change.new.map { utf16Range($0, in: addition.text) }
+        }
+        return emphasis
     }
 
     /// Styles unchanged lines revealed by context expansion. `lines` must be consecutive.
