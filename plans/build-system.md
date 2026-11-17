@@ -36,6 +36,20 @@ flowchart LR
 A change must pass `make check` and `make test`. Look at a UI change in the
 running app too, because a view can compile and still lay out wrong.
 
+## Tool versions
+
+`mise.toml` at the repository root pins the tools that [mise](https://mise.jdx.dev)
+installs. `mise install` installs them, and a shell with mise activated puts
+them on `PATH` anywhere in the repository.
+
+| Tool | Used by |
+|------|---------|
+| Node | The relay in `relay/`: its checks, its deploy, and the scripts that verify the deployed Worker. |
+
+`make relay-check` runs its commands through `mise x`, and the relay's
+workflows install the same versions with `jdx/mise-action`, so a version
+changes in one place.
+
 ## The package
 
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every

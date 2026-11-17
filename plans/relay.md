@@ -414,9 +414,11 @@ relay/
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
 ├── tsconfig.json
-├── mise.toml             the Node version
 └── package.json
 ```
+
+The repository's `mise.toml` pins the Node version.
+[build-system.md](build-system.md#tool-versions) describes it.
 
 Routing uses [Hono](https://hono.dev). Request bodies are checked with
 [Zod](https://zod.dev).
@@ -434,8 +436,10 @@ make relay-check
 
 This installs the packages, generates the Worker's types with `wrangler types`,
 type-checks with `tsc`, runs the tests, and bundles with
-`wrangler deploy --dry-run`. Nothing is deployed. The `Relay check` workflow
-runs the same steps on a pull request that changes `relay/`.
+`wrangler deploy --dry-run`. Nothing is deployed. It needs
+[mise](https://mise.jdx.dev), which runs each step with the pinned Node. The
+`Relay check` workflow runs the same steps on a pull request that changes
+`relay/` or `mise.toml`.
 
 To run only the tests, or the Worker locally:
 

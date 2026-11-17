@@ -16,6 +16,8 @@ a pull request or an issue.
   reads its token from `gh auth token` and stores no credentials.
 - `git`.
 - The `claude` CLI, only for starting Claude Code sessions.
+- [mise](https://mise.jdx.dev), only for working on the relay in `relay/`.
+  `mise.toml` pins its Node version.
 
 Hermes works with github.com. It is not sandboxed, because it runs `gh`,
 `git`, and `claude` and reads your local checkouts.
