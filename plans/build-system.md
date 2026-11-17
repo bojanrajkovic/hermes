@@ -45,6 +45,7 @@ them on `PATH` anywhere in the repository.
 | Tool | Used by |
 |------|---------|
 | Node | The relay in `relay/`: its checks, its deploy, and the scripts that verify the deployed Worker. |
+| pnpm | The relay's package manager. [relay.md](relay.md#packages) describes its settings. |
 
 `make relay-check` runs its commands through `mise x`, and the relay's
 workflows install the same versions with `jdx/mise-action`, so a version

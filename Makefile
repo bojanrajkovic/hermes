@@ -144,9 +144,9 @@ test: deps
 	@echo "✓ tests pass"
 
 # Type-check and test the relay Worker, and bundle it without deploying. `mise x` runs each
-# command with the Node that mise.toml pins, and installs it first when it is missing.
+# command with the Node and pnpm that mise.toml pins, and installs them first when missing.
 relay-check:
-	cd relay && mise x -- npm ci --no-audit --no-fund && mise x -- npm run check
+	cd relay && mise x -- pnpm install --frozen-lockfile && mise x -- pnpm check
 	@echo "✓ relay checks"
 
 print-version:

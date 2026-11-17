@@ -379,7 +379,7 @@ account's owner, not the hosted relay's.
 3. Deploy:
 
    ```bash
-   cd relay && npm ci && npx wrangler deploy --secrets-file <path to the file>
+   cd relay && pnpm install --frozen-lockfile && pnpm exec wrangler deploy --secrets-file <path to the file>
    ```
 
 4. Check it answers:
@@ -414,11 +414,31 @@ relay/
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
 ├── tsconfig.json
-└── package.json
+├── package.json
+├── pnpm-lock.yaml
+└── pnpm-workspace.yaml   pnpm's settings: which package versions it refuses, and which build scripts run
 ```
 
-The repository's `mise.toml` pins the Node version.
+The repository's `mise.toml` pins the Node and pnpm versions.
 [build-system.md](build-system.md#tool-versions) describes it.
+
+## Packages
+
+[pnpm](https://pnpm.io) installs the relay's packages. `package.json` names
+exact versions, and `pnpm add` writes them that way. `pnpm-workspace.yaml`
+makes an install fail when:
+
+- A version is less than a day old. Most malicious releases are pulled within
+  that day.
+- A version was published with weaker trust evidence, such as provenance, than
+  an earlier version of the same package. That is the usual sign of a stolen
+  publish token.
+- A package has a build script that the file doesn't name. The file turns off
+  the two the relay's packages have, because pnpm already installs the binary
+  each one checks for.
+
+The check and deploy workflows also run `pnpm audit signatures`, which fails
+if a package's registry signature doesn't verify.
 
 Routing uses [Hono](https://hono.dev). Request bodies are checked with
 [Zod](https://zod.dev).
@@ -437,16 +457,17 @@ make relay-check
 This installs the packages, generates the Worker's types with `wrangler types`,
 type-checks with `tsc`, runs the tests, and bundles with
 `wrangler deploy --dry-run`. Nothing is deployed. It needs
-[mise](https://mise.jdx.dev), which runs each step with the pinned Node. The
+[mise](https://mise.jdx.dev), which runs each step with the pinned Node and
+pnpm. The
 `Relay check` workflow runs the same steps on a pull request that changes
 `relay/` or `mise.toml`.
 
 To run only the tests, or the Worker locally:
 
 ```bash
-cd relay && npm test
+cd relay && pnpm test
 ```
 
 ```bash
-cd relay && npm run dev
+cd relay && pnpm dev
 ```

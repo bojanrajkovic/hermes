@@ -58,6 +58,9 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
 * `relay/` is a Cloudflare Worker in TypeScript. After a change under `relay/`, run
   `make relay-check`, which also runs its tests. [plans/relay.md](plans/relay.md) describes it.
 
+* `mise.toml` pins Node and pnpm. The relay uses pnpm, never npm: run its scripts from `relay/`
+  with `mise x -- pnpm <script>`, and add a package with `mise x -- pnpm add`.
+
 * For a UI change, also look at the result. Run the built executable with
   `HERMES_SNAPSHOT_DIR=<directory>` to write PNGs of every screen without opening the app.
   [plans/build-system.md](plans/build-system.md) lists the other test switches.
