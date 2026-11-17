@@ -114,7 +114,7 @@ private struct PublishedRelayRow: View {
         let refusal = store.relays.refusal(of: published.tenant)
         LabeledContent {
             if refusal == nil {
-                Button("Connect") { store.relays.join(published.tenant) }
+                Button("Connect") { store.relays.join(published.tenant, organization: published.organization) }
                     .help("Sign in with GitHub in your browser, through the account's App")
             }
         } label: {

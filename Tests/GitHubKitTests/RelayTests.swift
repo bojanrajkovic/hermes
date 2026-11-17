@@ -64,6 +64,17 @@ import Testing
 
     // MARK: Requests
 
+    @Test func theHelloNamesTheOrganizationOnlyWhenThereIsOne() throws {
+        func fields(_ hello: String) throws -> [String: String]? {
+            try JSONSerialization.jsonObject(with: Data(hello.utf8)) as? [String: String]
+        }
+
+        #expect(try fields(RelayConnection.hello(refreshToken: "token", organization: "acme"))
+            == ["type": "hello", "refreshToken": "token", "organization": "acme"])
+        #expect(try fields(RelayConnection.hello(refreshToken: "token", organization: nil))
+            == ["type": "hello", "refreshToken": "token"])
+    }
+
     @Test func aConnectionOpensTheTenantsWebSocket() {
         #expect(RelayConnection.url(for: tenant).absoluteString == "wss://relay.example.com/t/\(tenant.id)/connect")
         let local = RelayTenant(server: URL(string: "http://localhost:8787")!, id: tenant.id)!
