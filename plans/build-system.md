@@ -51,6 +51,13 @@ them on `PATH` anywhere in the repository.
 workflows install the same versions with `jdx/mise-action`, so a version
 changes in one place.
 
+Swift comes from Xcode, and `mise.toml` doesn't pin it. mise can install a
+swift.org toolchain, and that toolchain compiles the package and passes the
+tests. It can't run `scripts/make-icon.swift`, which `make build` needs: its
+script interpreter doesn't load AppKit. The macOS SDK, `codesign`, and
+`iconutil` come from Xcode either way, so the Xcode version decides what
+builds.
+
 ## The package
 
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every
