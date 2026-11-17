@@ -146,7 +146,7 @@ test: deps
 # Type-check and test the relay Worker, and bundle it without deploying. `mise x` runs each
 # command with the Node and pnpm that mise.toml pins, and installs them first when missing.
 relay-check:
-	cd relay && mise x -- pnpm install --frozen-lockfile && mise x -- pnpm check
+	cd relay && mise x -- pnpm install --frozen-lockfile && mise x -- pnpm check && mise x -- pnpm build
 	@echo "✓ relay checks"
 
 print-version:

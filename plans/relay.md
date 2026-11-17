@@ -283,8 +283,8 @@ openssl rand -hex 8
 The `Relay deploy` workflow runs on a push to `main` that changes `relay/`, and
 by hand. It:
 
-1. Runs the same check as `make relay-check`, which writes the bundle to
-   `relay/dist/index.js`.
+1. Runs the same steps as `make relay-check`. The last one, `pnpm build`,
+   writes the bundle to `relay/dist/index.js`.
 2. Attests the bundle with
    [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance).
    The attestation records the bundle's SHA-256, this repository, the workflow,
@@ -454,20 +454,17 @@ requests the relay receives.
 make relay-check
 ```
 
-This installs the packages, generates the Worker's types with `wrangler types`,
-type-checks with `tsc`, runs the tests, and bundles with
-`wrangler deploy --dry-run`. Nothing is deployed. It needs
-[mise](https://mise.jdx.dev), which runs each step with the pinned Node and
-pnpm. The
-`Relay check` workflow runs the same steps on a pull request that changes
-`relay/` or `mise.toml`.
+This installs the packages, then runs `pnpm check` and `pnpm build`. Nothing
+is deployed. It needs [mise](https://mise.jdx.dev), which runs each step with
+the pinned Node and pnpm. The `Relay check` workflow runs the same steps on a
+pull request that changes `relay/` or `mise.toml`.
 
-To run only the tests, or the Worker locally:
+The relay's scripts run from `relay/`:
 
-```bash
-cd relay && pnpm test
-```
-
-```bash
-cd relay && pnpm dev
-```
+| Script | What it does |
+|---|---|
+| `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck` and `test` together and reports every failure instead of stopping at the first. |
+| `pnpm typecheck` | `tsc`, against the types `pnpm check` generated. |
+| `pnpm test` | The tests. |
+| `pnpm build` | Bundles the Worker into `dist/index.js` with `wrangler deploy --dry-run`. |
+| `pnpm dev` | Runs the Worker locally. |

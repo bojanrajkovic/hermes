@@ -41,3 +41,4 @@ jobs:
       # Fails if a package's registry signature doesn't verify.
       - run: pnpm audit signatures
       - run: pnpm check
+      - run: pnpm build
