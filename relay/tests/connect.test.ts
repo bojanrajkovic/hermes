@@ -34,8 +34,15 @@ const refreshed = {
   scope: "",
 };
 
-/** Stands in for GitHub: the token endpoint answers `token`, and the repository list is served in `pages`. */
-function gitHub(token: unknown, pages: GitHubRepository[][] = []): MockInstance<typeof fetch> {
+/**
+ * Stands in for GitHub: the token endpoint answers `token`, the repository list is served in
+ * `pages`, and the question whether the user belongs to `acme` is answered with `membership`.
+ */
+function gitHub(
+  token: unknown,
+  pages: GitHubRepository[][] = [],
+  membership = 500,
+): MockInstance<typeof fetch> {
   // Octokit works out a token's expiry from the response's Date header.
   const headers = { date: new Date().toUTCString() };
   const answer = (url: URL, method: string): Response => {
@@ -50,6 +57,8 @@ function gitHub(token: unknown, pages: GitHubRepository[][] = []): MockInstance<
         return Response.json({ total_count: 0, repositories: pages[page - 1] ?? [] }, { headers });
       }
 
+      case "/user/memberships/orgs/acme":
+        return Response.json({ state: "active" }, { status: membership, headers });
       default:
         return new Response(`unexpected ${method} ${url.href}`, { status: 500 });
     }
@@ -195,6 +204,61 @@ describe("a socket's first message", () => {
       expect(opened.closeCode()).toBe(4003);
     });
     expect(opened.messages).toEqual([]);
+  });
+
+  describe("from a user who can see no repository, naming an organization", () => {
+    const helloFromAcme = JSON.stringify({
+      type: "hello",
+      refreshToken: "ghr_old",
+      organization: "acme",
+    });
+
+    it("closes with 4003 when GitHub says the user has nothing to do with it", async () => {
+      const tenant = await registeredTenant();
+      gitHub(refreshed, [], 404);
+      const opened = await socketTo(tenant);
+
+      opened.socket.send(helloFromAcme);
+
+      await vi.waitFor(() => {
+        expect(opened.closeCode()).toBe(4003);
+      });
+      expect(opened.messages).toEqual([]);
+    });
+
+    it.each([
+      ["says the user belongs to it", 200],
+      ["refuses to say", 403],
+      ["fails", 500],
+    ])("opens the session when GitHub %s", async (_name, membership) => {
+      const tenant = await registeredTenant();
+      gitHub(refreshed, [], membership);
+      const opened = await socketTo(tenant);
+
+      opened.socket.send(helloFromAcme);
+
+      await vi.waitFor(() => {
+        expect(opened.messages).toHaveLength(1);
+      });
+      expect(SessionMessage.parse(opened.messages[0]).repositories).toEqual([]);
+      expect(opened.closeCode()).toBeUndefined();
+    });
+
+    it("is not asked about when the user can see a repository", async () => {
+      const tenant = await registeredTenant();
+      const calls = gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]], 404);
+      const opened = await socketTo(tenant);
+
+      opened.socket.send(helloFromAcme);
+
+      await vi.waitFor(() => {
+        expect(opened.messages).toHaveLength(1);
+      });
+      const asked = calls.mock.calls.map(
+        ([input]) => new URL(input instanceof Request ? input.url : String(input)).pathname,
+      );
+      expect(asked).not.toContain("/user/memberships/orgs/acme");
+    });
   });
 
   it("closes with 1011 when GitHub is down, so the client keeps its token", async () => {

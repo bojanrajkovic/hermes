@@ -125,7 +125,9 @@ What is built and works, and what is known not to work or is unverified.
   can sign in through the tenant's App in the browser and open a socket, which
   the relay closes after eight hours. It sends each delivery, unchanged, to the
   sockets of the users who can see its repository, and closes every socket
-  when a delivery says someone's access changed. A workflow attests the
+  when a delivery says someone's access changed. A user who can see no
+  repository keeps their socket, unless GitHub says they are outside the
+  organization Hermes names. A workflow attests the
   bundle and deploys it, and another checks hourly that the script Cloudflare
   runs is one the first attested. It runs at `hermes-relay.services.coderinserepeat.com`. See [plans/relay.md](plans/relay.md).
 
@@ -154,6 +156,11 @@ What is built and works, and what is known not to work or is unverified.
   lookup. There is no keyboard command for it.
 
 **Unverified**
+
+- **The relay's membership question.** The relay asks GitHub
+  `GET /user/memberships/orgs/{org}` with a tenant App's user token. Its tests
+  stand in for GitHub. No real App's token has been used on that endpoint, for
+  the App's own organization or for another.
 
 - **Renovate.** `renovate.json` passes Renovate's validator, and a local run
   finds the dependencies in the workflows, `Package.swift`, and
