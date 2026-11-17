@@ -400,7 +400,9 @@ A fork that wants them sets the two environments' values described under
 ```
 relay/
 ├── src/
-│   ├── index.ts          the routes: parse the request, call the tenant, map the result
+│   ├── index.ts          the Worker's entry: exports the routes and the Tenant class
+│   ├── http/
+│   │   └── app.ts        the routes: parse the request, call the tenant, map the result
 │   ├── tenant.ts         the Tenant Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
