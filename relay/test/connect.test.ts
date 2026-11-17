@@ -136,7 +136,7 @@ describe("a socket's first message", () => {
     expect(expiresAt).toBeLessThanOrEqual(before + 8 * 60 * 60 + 5);
     expect(await storedRepositories(tenant)).toEqual([7, 8]);
 
-    const refresh = JSON.parse(String(calls.mock.calls[0][1]?.body));
+    const refresh = JSON.parse(String(calls.mock.calls[0]?.[1]?.body));
     expect(refresh).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_old" });
   });
 

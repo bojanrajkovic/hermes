@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.8.2",
+    "@tsconfig/strictest": "2.0.9",
     "typescript": "7.0.2",
     "vitest": "4.1.12",
     "wrangler": "4.162.0"

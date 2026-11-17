@@ -21,10 +21,10 @@ export function settingsProblems(settings: unknown): string[] {
       problems.push(`${key} is set: ${JSON.stringify(value)}`);
     }
   }
-  if (record.logpush === true) problems.push("logpush is on");
-  if (enabled(record.observability)) problems.push("observability is on");
+  if (record["logpush"] === true) problems.push("logpush is on");
+  if (enabled(record["observability"])) problems.push("observability is on");
 
-  const bindings = Array.isArray(record.bindings) ? (record.bindings as Binding[]) : [];
+  const bindings = Array.isArray(record["bindings"]) ? (record["bindings"] as Binding[]) : [];
   const found = bindings.map((binding) => `${String(binding.name)}:${String(binding.type)}`).sort();
   if (JSON.stringify(found) !== JSON.stringify(expectedBindings)) {
     problems.push(`bindings are ${JSON.stringify(found)}, not ${JSON.stringify(expectedBindings)}`);
@@ -40,5 +40,5 @@ function enabled(observability: unknown): boolean {
 }
 
 function isOn(part: unknown): boolean {
-  return typeof part === "object" && part !== null && (part as Record<string, unknown>).enabled === true;
+  return typeof part === "object" && part !== null && (part as Record<string, unknown>)["enabled"] === true;
 }

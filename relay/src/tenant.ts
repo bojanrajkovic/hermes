@@ -179,7 +179,7 @@ export class Tenant extends DurableObject<Env> {
    * Opens a socket. The client says who it is in its first message, not in this request,
    * so its refresh token is never in a header.
    */
-  async fetch(_request: Request): Promise<Response> {
+  override async fetch(_request: Request): Promise<Response> {
     const registration = await this.registration();
     if (!registration || !inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
       return new Response(null, { status: 404 });
@@ -203,7 +203,7 @@ export class Tenant extends DurableObject<Env> {
    * The relay uses the token, keeps the IDs of the repositories the user can see for as long
    * as the socket is open, and sends the replacement token back as the session message.
    */
-  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const session = socket.deserializeAttachment() as Session;
     // A client sends one message. Anything after it is ignored.
     if (session.state !== "awaitingHello") return;
@@ -261,15 +261,15 @@ export class Tenant extends DurableObject<Env> {
     if (outOfDate) this.end(socket, closeCode.recheck, "recheck");
   }
 
-  async alarm(): Promise<void> {
+  override async alarm(): Promise<void> {
     await this.closeExpiredSessions();
   }
 
-  async webSocketClose(socket: WebSocket): Promise<void> {
+  override async webSocketClose(socket: WebSocket): Promise<void> {
     this.forget(socket);
   }
 
-  async webSocketError(socket: WebSocket): Promise<void> {
+  override async webSocketError(socket: WebSocket): Promise<void> {
     this.forget(socket);
   }
 

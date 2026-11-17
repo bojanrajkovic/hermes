@@ -109,7 +109,7 @@ describe("POST /t/:tenant/session", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ refreshToken: "ghr_refresh" });
-    const [url, init] = gitHub.mock.calls[0];
+    const [url, init] = gitHub.mock.calls[0] ?? [];
     expect(String(url)).toBe("https://github.com/login/oauth/access_token");
     expect(JSON.parse(String(init?.body))).toEqual({
       client_id: "Iv1.client",

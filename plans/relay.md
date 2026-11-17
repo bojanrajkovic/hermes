@@ -413,7 +413,7 @@ relay/
 ├── test/                 Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
-├── tsconfig.json
+├── tsconfig.json         the compiler settings, on top of @tsconfig/strictest
 ├── package.json
 ├── pnpm-lock.yaml
 └── pnpm-workspace.yaml   pnpm's settings: which package versions it refuses, and which build scripts run

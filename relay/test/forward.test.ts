@@ -153,7 +153,7 @@ describe("forwarding a delivery", () => {
     await deliver(tenant, "pull_request", '{"repository":{"id":7},"number":3}');
 
     await vi.waitFor(() => expect(seesSeven.events()).toHaveLength(1));
-    expect(JSON.parse(seesSeven.events()[0]).payload.number).toBe(3);
+    expect(seesSeven.events().map((event) => JSON.parse(event).payload.number)).toEqual([3]);
     expect(seesEight.events().map((event) => JSON.parse(event).payload.number)).toEqual([1]);
   });
 });
