@@ -10,7 +10,7 @@
     "allowImportingTsExtensions": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"]
+    "types": ["node"]
   },
-  "include": ["src", "tests"]
+  "include": ["scripts", "*.ts"]
 }

@@ -1,16 +1,16 @@
 // Downloads the script Cloudflare is running for the relay and writes it to a file, so its
 // hash can be checked against the attested bundle.
 //
-// Usage: node scripts/deployed-script.mjs <output file>
+// Usage: node scripts/deployed-script.ts <output file>
 // Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN. RELAY_WORKER names the Worker and
 // defaults to hermes-relay.
 import { writeFile } from "node:fs/promises";
 
 const [output] = process.argv.slice(2);
 const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } = process.env;
-const worker = process.env.RELAY_WORKER ?? "hermes-relay";
+const worker = process.env["RELAY_WORKER"] ?? "hermes-relay";
 if (!output || !account || !token) {
-  console.error("usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/deployed-script.mjs <output file>");
+  console.error("usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/deployed-script.ts <output file>");
   process.exit(2);
 }
 

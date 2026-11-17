@@ -304,12 +304,12 @@ the Worker's own report. The `Relay verify` workflow closes that gap. It runs
 every hour, and `Relay deploy` calls it after each deploy. It:
 
 1. Downloads the script Cloudflare is running, with
-   `relay/scripts/deployed-script.mjs`. Cloudflare's
+   `relay/scripts/deployed-script.ts`. Cloudflare's
    `GET /accounts/{id}/workers/scripts/{name}/content/v2` returns the uploaded
    modules byte for byte.
 2. Runs `gh attestation verify` on it, which fails unless the `Relay deploy`
    workflow of this repository attested a file with the same hash.
-3. Reads the Worker's settings with `relay/scripts/check-settings.mjs`, and
+3. Reads the Worker's settings with `relay/scripts/check-settings.ts`, and
    fails when it has a Tail Worker, log push, observability, or a binding the
    relay does not use. Those sit outside the script, so its hash does not
    cover them, and a Tail Worker receives each request's address and headers.
@@ -408,8 +408,8 @@ relay/
 │   ├── worker-settings.ts   what the deployed Worker's settings must be; used by the verify workflow, not by the Worker
 │   └── github.ts         the calls to GitHub
 ├── scripts/
-│   ├── deployed-script.mjs   downloads the script Cloudflare is running
-│   └── check-settings.mjs    checks the deployed Worker's settings
+│   ├── deployed-script.ts    downloads the script Cloudflare is running
+│   └── check-settings.ts     checks the deployed Worker's settings
 ├── tests/                Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
@@ -421,6 +421,20 @@ relay/
 
 The repository's `mise.toml` pins the Node and pnpm versions.
 [build-system.md](build-system.md#tool-versions) describes it.
+
+The code runs in two places, so it type-checks as three projects. Each has
+only the types of the place it runs, so Worker code that reaches for a Node
+API fails to compile.
+
+| Project | Covers | Types |
+|---|---|---|
+| `tsconfig.json` | `scripts/` and the config files beside it, which Node runs | Node |
+| `src/tsconfig.json` | The Worker | The Workers runtime, from `wrangler types` |
+| `tests/tsconfig.json` | The tests | The Workers runtime and the Vitest plugin |
+
+Node runs the scripts as TypeScript, with no build step. The verify workflow
+runs them without installing packages, so they and `worker-settings.ts` import
+nothing from `node_modules`.
 
 ## Packages
 
@@ -464,7 +478,7 @@ The relay's scripts run from `relay/`:
 | Script | What it does |
 |---|---|
 | `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck` and `test` together and reports every failure instead of stopping at the first. |
-| `pnpm typecheck` | `tsc`, against the types `pnpm check` generated. |
+| `pnpm typecheck` | `tsc` on each of the three projects below, against the types `pnpm check` generated. |
 | `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
 | `pnpm build` | Bundles the Worker into `dist/index.js` with `wrangler deploy --dry-run`. |
 | `pnpm dev` | Runs the Worker locally. |

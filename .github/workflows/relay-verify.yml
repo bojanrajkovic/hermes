@@ -38,7 +38,7 @@ jobs:
           cache: false
 
       - name: Download the deployed script
-        run: node relay/scripts/deployed-script.mjs "$RUNNER_TEMP/deployed.js"
+        run: node relay/scripts/deployed-script.ts "$RUNNER_TEMP/deployed.js"
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -55,7 +55,7 @@ jobs:
       # Fails when the Worker has a Tail Worker, log push, observability, or a binding the
       # relay doesn't use. Those are outside the script, so the hash does not cover them.
       - name: Check the Worker's settings
-        run: node relay/scripts/check-settings.mjs
+        run: node relay/scripts/check-settings.ts
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
