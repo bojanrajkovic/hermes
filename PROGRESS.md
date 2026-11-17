@@ -123,7 +123,8 @@ What is built and works, and what is known not to work or is unverified.
   and the operator makes each one with `POST /invites`. It checks the signature of the App's
   webhook deliveries and deletes a tenant when its App is uninstalled. A user
   can sign in through the tenant's App in the browser and open a socket, which
-  the relay closes after eight hours. It closes every socket
+  the relay closes after eight hours. It sends each delivery, unchanged, to the
+  sockets of the users who can see its repository, and closes every socket
   when a delivery says someone's access changed.
   See [plans/relay.md](plans/relay.md).
 
