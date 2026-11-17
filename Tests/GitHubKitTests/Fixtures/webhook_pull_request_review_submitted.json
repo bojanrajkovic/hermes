@@ -1,0 +1,18 @@
+{
+  "action": "submitted",
+  "review": {
+    "id": 5913192338,
+    "node_id": "PRR_kwDOVqHLzs8AAAABYHQnkg",
+    "user": {
+      "login": "bojanrajkovic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/110747?v=4",
+      "type": "User"
+    },
+    "body": null,
+    "state": "commented",
+    "submitted_at": "2026-11-15T22:13:00Z",
+    "commit_id": "a1ced9bde73d65baa594b25a466a2acb508d7a68"
+  },
+  "pull_request": { "number": 53 },
+  "repository": { "name": "hermes-playground", "owner": { "login": "bojanrajkovic" } }
+}

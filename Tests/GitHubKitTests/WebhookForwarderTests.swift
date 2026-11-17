@@ -84,7 +84,15 @@ struct WebhookForwarderTests {
         for _ in 0..<100 where events.withLock({ $0.isEmpty }) { try await Task.sleep(for: .milliseconds(100)) }
         _ = try await GitHubAuth.run(gh, ["api", "-X", "DELETE", "repos/\(playground)/issues/comments/\(id)"])
 
-        #expect(events.withLock { $0.first } == WebhookEvent(repository: playground, pullRequest: 53))
+        let first = try #require(events.withLock { $0.first })
+        #expect(first.repository == playground)
+        #expect(first.pullRequest == 53)
+        if case .comment(let comment, let deleted)? = first.change {
+            #expect(comment.body == "Webhook forwarder live test.")
+            #expect(!deleted)
+        } else {
+            Issue.record("the delivery was not read as a new comment: \(String(describing: first.change))")
+        }
         forwarder.stop()
         for _ in 0..<50 where !exited.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(100)) }
         #expect(exited.withLock { $0 })

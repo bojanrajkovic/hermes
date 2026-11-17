@@ -6,10 +6,14 @@ public struct WebhookEvent: Sendable, Hashable {
     public let repository: RepositoryRef
     /// The pull request the event is about. Nil when it names none, such as a commit status.
     public let pullRequest: Int?
+    /// What the payload says changed. Nil when Hermes can't apply the payload and loads
+    /// what the event names instead.
+    public let change: WebhookChange?
 
-    public init(repository: RepositoryRef, pullRequest: Int?) {
+    public init(repository: RepositoryRef, pullRequest: Int?, change: WebhookChange? = nil) {
         self.repository = repository
         self.pullRequest = pullRequest
+        self.change = change
     }
 
     /// Reads one delivery's JSON body. Nil for a body that names no repository, and for the
@@ -36,12 +40,13 @@ public struct WebhookEvent: Sendable, Hashable {
             let issue: Issue?
             let check_suite: Checks?
         }
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: payload),
-              payload.zen == nil, let repository = payload.repository else { return nil }
+        guard let body = try? JSONDecoder().decode(Payload.self, from: payload),
+              body.zen == nil, let repository = body.repository else { return nil }
+        change = WebhookChange(payload: payload)
         self.repository = RepositoryRef(owner: repository.owner.login, name: repository.name)
-        pullRequest = payload.pull_request?.number
-            ?? payload.issue.flatMap { $0.pull_request == nil ? nil : $0.number }
-            ?? payload.check_suite?.pull_requests?.first?.number
+        pullRequest = body.pull_request?.number
+            ?? body.issue.flatMap { $0.pull_request == nil ? nil : $0.number }
+            ?? body.check_suite?.pull_requests?.first?.number
     }
 }
 
