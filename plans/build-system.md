@@ -28,6 +28,7 @@ flowchart LR
 | `make test` | Runs `swift test`. |
 | `make check` | Runs `swift build` only. No bundle and no signing. |
 | `make release` | Release build into `build/Hermes.app`. |
+| `make packages` | Run after a version change in `Package.swift`. Resolves the packages and re-copies the four grammar scanners in `Sources/TreeSitterScanners`. |
 | `make icon` | Regenerates `build/AppIcon.icns`. |
 | `make install` | Copies the app to `/Applications` and registers it with LaunchServices. |
 | `make clean` | Removes `build/`, `.build/`, and `dist/`. |
@@ -117,7 +118,8 @@ in.
 `make test` runs the tests that need nothing but the machine. The `Swift
 check` workflow runs `make check` and `make test` on GitHub's Xcode 27 image,
 for a pull request or a push to `main` that changes the package, its sources
-or tests, `.xcode-version`, or the Makefile.
+or tests, `.xcode-version`, or the Makefile. It first runs `make packages`
+and fails if that changes `Package.resolved` or a copied scanner.
 
 Other tests run only when an environment variable is set:
 

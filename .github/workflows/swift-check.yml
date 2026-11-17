@@ -42,5 +42,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Fails, and prints the difference, when Package.resolved or a copied grammar scanner doesn't
+      # match Package.swift. Renovate's post-upgrade script writes both without running Swift, so
+      # this is where Swift checks its work.
+      - name: Check Package.resolved and the copied scanners
+        run: |
+          make packages
+          git diff --exit-code -- Package.resolved Sources/TreeSitterScanners
       - run: make check
       - run: make test
