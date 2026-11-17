@@ -117,7 +117,11 @@ What is built and works, and what is known not to work or is unverified.
 
 **Relay**
 
-- A Cloudflare Worker in `relay/` that answers `GET /version`.
+- A Cloudflare Worker in `relay/` that registers tenants: an account's owner
+  sends an invite code and their GitHub App's credentials, and the relay stores
+  them in that tenant's Durable Object. An invite code registers one tenant,
+  and the operator makes each one with `POST /invites`. It checks the signature of the App's
+  webhook deliveries and deletes a tenant when its App is uninstalled.
   See [plans/relay.md](plans/relay.md).
 
 **Build and tests**

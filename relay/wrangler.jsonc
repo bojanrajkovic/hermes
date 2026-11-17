@@ -11,4 +11,16 @@
   "observability": { "enabled": false },
   // The deploy sets COMMIT to the commit it builds.
   "vars": { "COMMIT": "dev" },
+  // OPERATOR_TOKEN: what the operator sends to POST /invites to make an invite code.
+  "secrets": { "required": ["OPERATOR_TOKEN"] },
+  "durable_objects": {
+    "bindings": [
+      { "name": "INVITES", "class_name": "Invites" },
+      { "name": "TENANT", "class_name": "Tenant" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Tenant"] },
+    { "tag": "v2", "new_sqlite_classes": ["Invites"] },
+  ],
 }

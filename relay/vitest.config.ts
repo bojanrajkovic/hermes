@@ -1,6 +1,9 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { configDefaults, defineConfig } from "vitest/config";
 
+// The tests' value for the OPERATOR_TOKEN secret, which wrangler reads from the environment.
+process.env.OPERATOR_TOKEN = "operator-token";
+
 // The lint fixture test starts Oxlint, which needs Node.
 const NODE = ["tests/lint/**/*.test.ts"];
 

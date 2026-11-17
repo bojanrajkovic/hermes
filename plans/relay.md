@@ -2,23 +2,153 @@
 
 The relay is a Cloudflare Worker in [`relay/`](../relay).
 
+```mermaid
+graph LR
+    G[GitHub] -->|"POST /hook/#lt;tenant#gt;"| W[Relay Worker]
+    W --> T1["Durable Object<br/>tenant A"]
+    W --> T2["Durable Object<br/>tenant B"]
+```
+
+The Worker takes each request and hands it to the Durable Object of the tenant
+the address names. That object checks the delivery.
+
+## Tenants
+
+A tenant is a GitHub account whose owner registered a GitHub App of their own
+with the relay. The owner's client picks the tenant's ID: 32 lowercase hex
+characters.
+
+Each tenant is one Durable Object, named by the tenant's ID. The relay keeps no
+list of tenants. A tenant's Durable Object stores one thing:
+
+- Its registration: the invite code it used up and the App's ID, client ID,
+  client secret, and webhook secret.
+
 ## Requests
 
 | Request | Response |
 |---|---|
 | `GET /version` | `200 {"commit": "<sha>"}`: the commit the running Worker was built from. A local run reports `dev`. |
+| `POST /invites` | Makes an invite code, for the operator. See [Invite codes](#invite-codes). |
+| `PUT /tenants/<tenant>` | Registers a tenant. See below. |
+| `POST /hook/<tenant>` | Takes a webhook delivery from GitHub. See below. |
 
-A request the relay fails to handle answers `500` with no body. The relay
-prints nothing about it.
+A path with a malformed tenant ID answers `404`. A request the relay fails to
+handle answers `500` with no body. The relay prints nothing about it.
+
+### Registering a tenant
+
+The body is JSON:
+
+```json
+{
+  "invite": "an invite code",
+  "appID": 123456,
+  "clientID": "Iv1.0123456789abcdef",
+  "clientSecret": "…",
+  "webhookSecret": "…"
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `201` | The registration is stored. |
+| `400` | The body is not a registration. |
+| `403` | The relay never issued the invite code, or it has been used. Nothing is stored. |
+| `409` | The tenant is registered with different values. |
+
+A tenant registers once, so someone who learns a tenant's ID can't replace its
+credentials. Sending the stored registration again answers `201`, so a client
+whose first request succeeded but whose connection dropped can retry.
+
+A tenant's first registration uses its invite code up. A `400` or a `409`
+leaves the code unused.
+
+### Webhook deliveries
+
+A tenant's GitHub App sends its webhooks to `POST /hook/<tenant>`. The relay
+checks the `X-Hub-Signature-256` header against the tenant's webhook secret,
+using [`@octokit/webhooks-methods`](https://github.com/octokit/webhooks-methods.js).
+
+| Status | Meaning |
+|---|---|
+| `202` | The delivery is genuine. |
+| `401` | The signature is missing or wrong. |
+| `404` | No tenant with this ID is registered. |
+
+The relay reads three things from a genuine delivery: the `X-GitHub-Event`
+header, the payload's `action`, and `repository.id`. `classifyDelivery` in
+`delivery.ts` turns them into one of four actions:
+
+| Delivery | Action |
+|---|---|
+| `installation` with action `deleted` (the App was uninstalled) | Delete everything the tenant stored. Its ID is unknown afterwards. |
+| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. The relay drops it. |
+| Any other event that names a repository | Nothing. The relay drops it. |
+| Anything else | Ignored. |
+
+The relay stores nothing from a delivery.
+
+## Invite codes
+
+An invite code registers one tenant. The operator makes a code and gives it to
+the account's owner:
+
+```bash
+curl --fail -X POST -H "Authorization: Bearer $OPERATOR_TOKEN" \
+  https://<the relay's address>/invites
+```
+
+| Status | Meaning |
+|---|---|
+| `201` | `{"invite": "<code>"}`: a new code of 32 hex characters. |
+| `401` | The `Authorization` header is not `Bearer` and the operator token. |
+
+```mermaid
+sequenceDiagram
+    participant O as Operator
+    participant W as Relay Worker
+    participant I as Invites object
+    participant T as Tenant's object
+    participant H as Owner's Hermes
+    O->>W: POST /invites, with the operator token
+    W->>I: issue
+    Note over I: Stores the new code
+    W-->>O: the code
+    O-->>H: the code, by hand
+    H->>W: PUT /tenants/#lt;tenant#gt;, with the code
+    W->>T: register
+    T->>I: redeem the code
+    Note over I: Deletes the code
+    Note over T: Stores the registration
+```
+
+The codes live in one more Durable Object, `Invites`, named `invites`. It
+stores each code from the moment it is issued until a tenant registers with
+it, and nothing else: not who a code was for, and not which tenant used it.
+Using a code deletes it, so a second registration with the same code answers
+`403`, and so does one sent after the tenant's App is uninstalled. A code
+never runs out on its own, and the relay has no call that cancels one.
+
+Once a tenant is registered, the relay never looks at its code again. The
+relay has no call that stops a registered tenant.
+
+`OPERATOR_TOKEN` is a Worker secret. While it is empty, `POST /invites`
+answers `401` to everything. To make one:
+
+```bash
+openssl rand -hex 32
+```
 
 ## Layout
 
 ```
 relay/
 ├── src/                  everything the Worker runs, and nothing else
-│   ├── index.ts          the Worker's entry: exports the routes
+│   ├── index.ts          the Worker's entry: exports the routes and the Tenant class
 │   ├── http/
-│   │   └── app.ts        the routes
+│   │   └── app.ts        the routes: parse the request, call the tenant, map the result
+│   ├── tenant.ts         the Tenant Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
@@ -68,7 +198,8 @@ makes an install fail when:
 The check workflow also runs `pnpm audit signatures`, which fails
 if a package's registry signature doesn't verify.
 
-Routing uses [Hono](https://hono.dev).
+Routing uses [Hono](https://hono.dev). Request bodies are checked with
+[Zod](https://zod.dev).
 
 ## Lint
 
