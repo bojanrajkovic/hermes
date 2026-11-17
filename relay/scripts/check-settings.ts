@@ -4,7 +4,7 @@
 // Usage: node scripts/check-settings.ts
 // Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN. RELAY_WORKER names the Worker and
 // defaults to hermes-relay.
-import { settingsProblems } from "../src/worker-settings.ts";
+import { settingsProblems } from "./worker-settings.ts";
 
 const { CLOUDFLARE_ACCOUNT_ID: account = "", CLOUDFLARE_API_TOKEN: token = "" } = process.env;
 const worker = process.env["RELAY_WORKER"] ?? "hermes-relay";

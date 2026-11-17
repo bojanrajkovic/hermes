@@ -399,7 +399,7 @@ A fork that wants them sets the two environments' values described under
 
 ```
 relay/
-├── src/
+├── src/                  everything the Worker runs, and nothing else
 │   ├── index.ts          the Worker's entry: exports the routes and the Tenant class
 │   ├── http/
 │   │   └── app.ts        the routes: parse the request, call the tenant, map the result
@@ -408,11 +408,11 @@ relay/
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
 │   ├── json.ts           parses JSON text without throwing
-│   ├── worker-settings.ts   what the deployed Worker's settings must be; used by the verify workflow, not by the Worker
 │   └── github.ts         the calls to GitHub
 ├── scripts/
 │   ├── deployed-script.ts    downloads the script Cloudflare is running
-│   └── check-settings.ts     checks the deployed Worker's settings
+│   ├── check-settings.ts     checks the deployed Worker's settings
+│   └── worker-settings.ts    what those settings must be
 ├── tests/                Vitest tests, run inside the Workers runtime
 │   └── lint/             the lint fixture test and its fixture, run by Node
 ├── wrangler.jsonc        the Worker's name, bindings, and settings

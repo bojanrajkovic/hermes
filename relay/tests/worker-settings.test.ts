@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { settingsProblems } from "../src/worker-settings";
+import { settingsProblems } from "../scripts/worker-settings";
 
 // What Cloudflare returned for the deployed relay.
 const relay = {
