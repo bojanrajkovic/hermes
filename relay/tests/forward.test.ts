@@ -212,12 +212,15 @@ describe("a tenant that ends", () => {
 
     await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
     // The client's close reaches the relay after the tenant is deleted, and must leave nothing.
-    const left = await runInDurableObject(env.TENANT.getByName(tenant), async (_instance, state) => ({
-      keys: (await state.storage.list()).size,
-      tables: state.storage.sql
-        .exec("SELECT name FROM sqlite_master WHERE name = 'session_repository'")
-        .toArray().length,
-    }));
+    const left = await runInDurableObject(
+      env.TENANT.getByName(tenant),
+      async (_instance, state) => ({
+        keys: (await state.storage.list()).size,
+        tables: state.storage.sql
+          .exec("SELECT name FROM sqlite_master WHERE name = 'session_repository'")
+          .toArray().length,
+      }),
+    );
     expect(left).toEqual({ keys: 0, tables: 0 });
   });
 

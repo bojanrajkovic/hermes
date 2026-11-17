@@ -9,7 +9,9 @@ import { settingsProblems } from "../src/worker-settings.ts";
 const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } = process.env;
 const worker = process.env["RELAY_WORKER"] ?? "hermes-relay";
 if (!account || !token) {
-  console.error("usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/check-settings.ts");
+  console.error(
+    "usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/check-settings.ts",
+  );
   process.exit(2);
 }
 
@@ -18,7 +20,9 @@ const response = await fetch(
   { headers: { authorization: `Bearer ${token}` } },
 );
 if (!response.ok) {
-  console.error(`Cloudflare answered ${response.status} for ${worker}'s settings: ${await response.text()}`);
+  console.error(
+    `Cloudflare answered ${response.status} for ${worker}'s settings: ${await response.text()}`,
+  );
   process.exit(1);
 }
 

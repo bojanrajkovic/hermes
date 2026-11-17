@@ -107,11 +107,14 @@ describe("POST /hook/:tenant", () => {
     expect((await deliver(tenant, "pull_request", pullRequest, "")).status).toBe(401);
   });
 
-  it.each(["sha256=", "nope", "sha256=zz"])("refuses the malformed signature %j", async (signature) => {
-    const tenant = await registered();
+  it.each(["sha256=", "nope", "sha256=zz"])(
+    "refuses the malformed signature %j",
+    async (signature) => {
+      const tenant = await registered();
 
-    expect((await deliver(tenant, "pull_request", pullRequest, signature)).status).toBe(401);
-  });
+      expect((await deliver(tenant, "pull_request", pullRequest, signature)).status).toBe(401);
+    },
+  );
 
   it("refuses a signed delivery whose body was changed", async () => {
     const tenant = await registered();

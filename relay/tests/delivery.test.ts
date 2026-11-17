@@ -35,12 +35,14 @@ describe("classifyDelivery", () => {
   });
 
   it("reads an event whose repository is null", () => {
-    expect(classifyDelivery("installation", body({ action: "deleted", repository: null }))).toEqual({
-      action: "delete",
-    });
-    expect(classifyDelivery("organization", body({ action: "member_removed", repository: null }))).toEqual(
-      { action: "recheck" },
+    expect(classifyDelivery("installation", body({ action: "deleted", repository: null }))).toEqual(
+      {
+        action: "delete",
+      },
     );
+    expect(
+      classifyDelivery("organization", body({ action: "member_removed", repository: null })),
+    ).toEqual({ action: "recheck" });
   });
 
   it.each(["created", "suspend", "unsuspend", "new_permissions_accepted"])(
@@ -51,7 +53,9 @@ describe("classifyDelivery", () => {
   );
 
   it("ignores a delivery that names no repository", () => {
-    expect(classifyDelivery("ping", body({ zen: "Keep it simple." }))).toEqual({ action: "ignore" });
+    expect(classifyDelivery("ping", body({ zen: "Keep it simple." }))).toEqual({
+      action: "ignore",
+    });
   });
 
   it("ignores a body that is not a JSON object", () => {

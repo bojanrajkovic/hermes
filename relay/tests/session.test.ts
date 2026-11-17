@@ -52,9 +52,12 @@ describe("expiredCloseCode", () => {
     expect(expiredCloseCode({ id: "a", expiresAt: 1, state: "open" })).toBe(4001);
   });
 
-  it.each(["awaitingHello", "authorizing"] as const)("tells a socket still %s to sign in", (state) => {
-    expect(expiredCloseCode({ id: "a", expiresAt: 1, state })).toBe(4003);
-  });
+  it.each(["awaitingHello", "authorizing"] as const)(
+    "tells a socket still %s to sign in",
+    (state) => {
+      expect(expiredCloseCode({ id: "a", expiresAt: 1, state })).toBe(4003);
+    },
+  );
 });
 
 describe("PKCE values", () => {

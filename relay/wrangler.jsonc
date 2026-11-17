@@ -14,7 +14,7 @@
   // INVITE_CODES: comma-separated codes; a tenant needs one to register.
   "secrets": { "required": ["INVITE_CODES"] },
   "durable_objects": {
-    "bindings": [{ "name": "TENANT", "class_name": "Tenant" }]
+    "bindings": [{ "name": "TENANT", "class_name": "Tenant" }],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Tenant"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Tenant"] }],
 }

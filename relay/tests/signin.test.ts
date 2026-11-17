@@ -58,7 +58,9 @@ describe("GET /t/:tenant/login", () => {
     const location = new URL(response.headers.get("location") ?? "");
     expect(location.origin + location.pathname).toBe("https://github.com/login/oauth/authorize");
     expect(location.searchParams.get("client_id")).toBe("Iv1.client");
-    expect(location.searchParams.get("redirect_uri")).toBe(`https://relay.test/t/${tenant}/callback`);
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      `https://relay.test/t/${tenant}/callback`,
+    );
     expect(location.searchParams.get("state")).toBe("abc");
     expect(location.searchParams.get("code_challenge")).toBe(challenge);
     expect(location.searchParams.get("code_challenge_method")).toBe("S256");
@@ -72,7 +74,9 @@ describe("GET /t/:tenant/login", () => {
   });
 
   it("does not know an unregistered tenant", async () => {
-    expect((await get(`/t/${unregistered}/login?state=abc&code_challenge=${challenge}`)).status).toBe(404);
+    expect(
+      (await get(`/t/${unregistered}/login?state=abc&code_challenge=${challenge}`)).status,
+    ).toBe(404);
   });
 });
 

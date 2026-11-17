@@ -29,16 +29,21 @@ describe("settingsProblems", () => {
   });
 
   it("reports any other kind of tail consumer", () => {
-    const problems = settingsProblems({ ...relay, streaming_tail_consumers: [{ service: "listener" }] });
+    const problems = settingsProblems({
+      ...relay,
+      streaming_tail_consumers: [{ service: "listener" }],
+    });
     expect(problems).toHaveLength(1);
   });
 
   it("reports log push and observability", () => {
     expect(settingsProblems({ ...relay, logpush: true })).toEqual(["logpush is on"]);
-    expect(settingsProblems({ ...relay, observability: { enabled: true } })).toEqual(["observability is on"]);
-    expect(settingsProblems({ ...relay, observability: { enabled: false, logs: { enabled: true } } })).toEqual([
+    expect(settingsProblems({ ...relay, observability: { enabled: true } })).toEqual([
       "observability is on",
     ]);
+    expect(
+      settingsProblems({ ...relay, observability: { enabled: false, logs: { enabled: true } } }),
+    ).toEqual(["observability is on"]);
     expect(settingsProblems({ ...relay, observability: { enabled: false } })).toEqual([]);
   });
 

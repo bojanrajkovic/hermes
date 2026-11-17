@@ -10,7 +10,9 @@ const [output] = process.argv.slice(2);
 const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } = process.env;
 const worker = process.env["RELAY_WORKER"] ?? "hermes-relay";
 if (!output || !account || !token) {
-  console.error("usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/deployed-script.ts <output file>");
+  console.error(
+    "usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/deployed-script.ts <output file>",
+  );
   process.exit(2);
 }
 

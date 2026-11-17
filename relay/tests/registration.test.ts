@@ -60,6 +60,8 @@ describe("decideRegistration", () => {
 
   it("refuses to replace a stored registration", () => {
     const other = { ...registration, webhookSecret: "another" };
-    expect(decideRegistration(other, codes, registration)).toEqual({ outcome: "alreadyRegistered" });
+    expect(decideRegistration(other, codes, registration)).toEqual({
+      outcome: "alreadyRegistered",
+    });
   });
 });

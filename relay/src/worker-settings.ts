@@ -7,7 +7,11 @@
 
 type Binding = { name?: unknown; type?: unknown };
 
-const expectedBindings = ["COMMIT:plain_text", "INVITE_CODES:secret_text", "TENANT:durable_object_namespace"];
+const expectedBindings = [
+  "COMMIT:plain_text",
+  "INVITE_CODES:secret_text",
+  "TENANT:durable_object_namespace",
+];
 
 /** The ways a Worker's settings differ from the relay's. Empty when they match. */
 export function settingsProblems(settings: unknown): string[] {
@@ -40,5 +44,9 @@ function enabled(observability: unknown): boolean {
 }
 
 function isOn(part: unknown): boolean {
-  return typeof part === "object" && part !== null && (part as Record<string, unknown>)["enabled"] === true;
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    (part as Record<string, unknown>)["enabled"] === true
+  );
 }
