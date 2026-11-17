@@ -427,8 +427,12 @@ actor TokenCounter {
     @Test func restReadsSkipTheCache() async throws {
         let client = client { _ in .init() }
 
-        _ = try await client.get("/repos/o/r/actions/jobs/7")
-        #expect(StubProtocol.requests.withLock { $0.map(\.cachePolicy) } == [.reloadIgnoringLocalCacheData])
+        let path = "/repos/o/r/actions/jobs/7"
+        _ = try await client.get(path)
+        // The cancelled request of the test before this one can still reach the stub, after this
+        // test has cleared the list. It is for another path.
+        let policies = StubProtocol.requests.withLock { $0.filter { $0.path == path }.map(\.cachePolicy) }
+        #expect(policies == [.reloadIgnoringLocalCacheData])
     }
 
     @Test func aRefusedDiffIsTooLarge() async throws {
