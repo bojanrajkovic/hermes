@@ -39,8 +39,25 @@ running app too, because a view can compile and still lay out wrong.
 
 ## Tool versions
 
-Swift comes from Xcode. So do the macOS SDK, `codesign`, and `iconutil`, so
-the Xcode version decides what builds.
+`mise.toml` at the repository root pins the tools that [mise](https://mise.jdx.dev)
+installs. `mise install` installs them, and a shell with mise activated puts
+them on `PATH` anywhere in the repository.
+
+| Tool | Used by |
+|------|---------|
+| Node | The relay in `relay/`: its checks. |
+| pnpm | The relay's package manager. [relay.md](relay.md#packages) describes its settings. |
+
+`make relay-check` runs its commands through `mise x`, and the relay's
+workflow installs the same versions with `jdx/mise-action`, so a version
+changes in one place.
+
+Swift comes from Xcode, and `mise.toml` doesn't pin it. mise can install a
+swift.org toolchain, and that toolchain compiles the package and passes the
+tests. It can't run `scripts/make-icon.swift`, which `make build` needs: its
+script interpreter doesn't load AppKit. The macOS SDK, `codesign`, and
+`iconutil` come from Xcode either way, so the Xcode version decides what
+builds.
 
 `.xcode-version` names that Xcode. Three things read it:
 
@@ -55,9 +72,9 @@ the Xcode version decides what builds.
   version, and says to run `xcodes install`.
 
 `swift build` run outside `make` uses whatever `xcode-select` points at.
-The setting lives in the Makefile and not in the shell's environment: `git`
-on macOS runs through Xcode too, so a `DEVELOPER_DIR` set there for a version
-not yet installed would stop `git` working in this directory.
+The setting lives in the Makefile and not in `mise.toml`: `git` on macOS
+runs through Xcode too, so a `DEVELOPER_DIR` that mise set for a version not
+yet installed would stop `git` working in this directory.
 
 ## Dependency updates
 
