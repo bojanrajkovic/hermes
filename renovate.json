@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>bojanrajkovic/renovate-config"],
+  "semanticCommits": "disabled",
+  "lockFileMaintenance": {
+    "description": "The weekly refresh moves the packages the relay's own packages depend on, which are in its bundle, so a person merges it",
+    "automerge": false
+  },
+  "packageRules": [
+    {
+      "description": "A merge under relay/ deploys the relay. The packages its code imports are in the bundle tenants are told they can check, so a person merges their updates",
+      "matchFileNames": ["relay/**"],
+      "matchDepTypes": ["dependencies"],
+      "automerge": false
+    },
+    {
+      "description": "Wrangler builds the relay's bundle, so its updates change the bundle too",
+      "matchPackageNames": ["wrangler"],
+      "automerge": false
+    },
+    {
+      "description": "The actions in the relay's deploy and verify workflows build, attest, and check the bundle, so a person merges their updates",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "Swift packages never merge on their own. No workflow builds the app, and PROBLEMS.md ties several versions to copied files and to behavior a person checks",
+      "matchManagers": ["swift"],
+      "automerge": false,
+      "prBodyNotes": [
+        "Renovate changes `Package.swift` only. Run `swift package resolve` on this branch and commit `Package.resolved`, then run `make check` and `make test`. [PROBLEMS.md](../blob/main/PROBLEMS.md) lists what else to do for a grammar with a copied scanner and for `libghostty-spm`."
+      ]
+    },
+    {
+      "description": "tree-sitter-swift is pinned to a revision, because its release tags don't build. Renovate would offer a tag in its place",
+      "matchPackageNames": ["alex-pinkus/tree-sitter-swift"],
+      "enabled": false
+    }
+  ]
+}

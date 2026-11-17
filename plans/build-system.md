@@ -58,6 +58,47 @@ script interpreter doesn't load AppKit. The macOS SDK, `codesign`, and
 `iconutil` come from Xcode either way, so the Xcode version decides what
 builds.
 
+## Dependency updates
+
+[Renovate](https://docs.renovatebot.com) opens pull requests for dependency
+updates. `renovate.json` extends the preset airway and order-up share,
+`github>bojanrajkovic/renovate-config`, and adds the rules this repository
+needs. The preset merges minor, patch, and digest updates once their checks
+pass, and leaves majors and 0.x minors for a person.
+
+| Dependency | File | Merges on its own |
+|------------|------|-------------------|
+| Node and pnpm | `mise.toml` | Minor and patch |
+| The relay's lint, format, test, and type packages | `relay/package.json` | Minor and patch, once Relay check passes |
+| The packages the relay imports, and Wrangler | `relay/package.json` | No |
+| The relay's weekly lockfile refresh | `relay/pnpm-lock.yaml` | No |
+| Actions | `.github/workflows/` | No |
+| Swift packages written as `.package(url:)` | `Package.swift` | No |
+
+A merge under `relay/` deploys the relay. So nothing that changes its bundle,
+or the workflows that build, attest, and check it, merges without a person.
+The lockfile refresh counts, because it moves the packages that the relay's
+own packages depend on.
+
+A Swift update changes `Package.swift` only. Renovate doesn't write
+`Package.resolved` for packages named by URL, so the pull request's body says
+to run `swift package resolve` and commit the result.
+[PROBLEMS.md](../PROBLEMS.md) lists the extra step for a grammar with a
+copied scanner and for `libghostty-spm`.
+
+Renovate doesn't see these, and a person updates them:
+
+- The ten grammars `Package.swift` declares through its `grammar(…)` helper.
+  Renovate reads `.package(url:)` calls, not the helper.
+- `tree-sitter-swift`, which is pinned to a revision. `renovate.json` switches
+  it off, because Renovate would offer a release tag, and those don't build.
+- The Ruby grammar in `Vendor/tree-sitter-ruby`.
+- Xcode.
+
+Update pull requests are titled as plain sentences, such as "Update
+dependency hono to v4.14.0", like the rest of this repository's commits. The
+preset's `chore(deps):` prefixes are off.
+
 ## The package
 
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every
