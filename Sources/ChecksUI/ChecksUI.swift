@@ -12,18 +12,26 @@ public struct ChecksScreen: View {
     private let commitOID: String
     private let client: GitHubClient
     private let initiallySelected: Check.ID?
+    private let changes: WebhookChanges
 
     @State private var model = ChecksModel()
     @State private var refreshCount = 0
 
-    /// - Parameter initiallySelected: The check to show first, such as the one
-    ///   clicked in a ``ChecksSummary``. Passing a different check later
-    ///   selects it. With `nil`, the first failed check is selected.
-    public init(repository: RepositoryRef, commitOID: String, client: GitHubClient, initiallySelected: Check? = nil) {
+    /// - Parameters:
+    ///   - initiallySelected: The check to show first, such as the one
+    ///     clicked in a ``ChecksSummary``. Passing a different check later
+    ///     selects it. With `nil`, the first failed check is selected.
+    ///   - changes: What webhook deliveries have said about the commit's checks. When its
+    ///     count rises, the screen applies the latest change, or reloads the checks when it
+    ///     can't, ahead of its own polling.
+    public init(
+        repository: RepositoryRef, commitOID: String, client: GitHubClient, initiallySelected: Check? = nil, changes: WebhookChanges = WebhookChanges()
+    ) {
         self.repository = repository
         self.commitOID = commitOID
         self.client = client
         self.initiallySelected = initiallySelected?.id
+        self.changes = changes
     }
 
     public var body: some View {
@@ -60,6 +68,7 @@ public struct ChecksScreen: View {
                 repository: repository, commitOID: commitOID, client: client, preferredSelection: initiallySelected
             )
         }
+        .applying(changes, commitOID: commitOID, to: model) { refreshCount += 1 }
         .onChange(of: initiallySelected) { _, selected in
             if let selected { model.selection = selected }
         }
@@ -98,14 +107,19 @@ public struct ChecksSummary: View {
     private let commitOID: String
     private let client: GitHubClient
     private let onSelect: (Check) -> Void
+    private let changes: WebhookChanges
 
     @State private var model = ChecksModel()
     @State private var refreshCount = 0
 
-    public init(repository: RepositoryRef, commitOID: String, client: GitHubClient, onSelect: @escaping (Check) -> Void) {
+    /// - Parameter changes: As for ``ChecksScreen``.
+    public init(
+        repository: RepositoryRef, commitOID: String, client: GitHubClient, changes: WebhookChanges = WebhookChanges(), onSelect: @escaping (Check) -> Void
+    ) {
         self.repository = repository
         self.commitOID = commitOID
         self.client = client
+        self.changes = changes
         self.onSelect = onSelect
     }
 
@@ -124,6 +138,7 @@ public struct ChecksSummary: View {
         .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount)) {
             await model.run(repository: repository, commitOID: commitOID, client: client)
         }
+        .applying(changes, commitOID: commitOID, to: model) { refreshCount += 1 }
     }
 }
 
@@ -131,6 +146,32 @@ private struct LoadKey: Hashable {
     let repository: RepositoryRef
     let commitOID: String
     let refreshCount: Int
+}
+
+/// How many deliveries have changed one commit's checks.
+private struct CheckChanges: Equatable {
+    let commitOID: String
+    let count: Int
+}
+
+extension View {
+    /// Applies the latest of `changes` to `model` when their count rises, and calls `reload`
+    /// when the checks have to load: the change can't be applied, or a check is now queued
+    /// or running and nothing is reloading the list.
+    ///
+    /// A new workflow run sends one check run per job, and none can be applied until a load
+    /// knows the run. Such a burst calls `reload` at once and once more after, not once per
+    /// delivery, so the load it started is not started over by each.
+    fileprivate func applying(
+        _ changes: WebhookChanges, commitOID: String, to model: ChecksModel, reload: @escaping @MainActor () -> Void
+    ) -> some View {
+        onChange(of: CheckChanges(commitOID: commitOID, count: changes.count)) { seen, now in
+            // Another commit's count is not a change to this one.
+            guard seen.commitOID == now.commitOID else { return }
+            if let change = changes.only(since: seen.count), model.apply(change), !model.needsPolling { return }
+            model.changeLoads.load(reload)
+        }
+    }
 }
 
 /// Shows `content` once the checks have loaded and there are some; otherwise

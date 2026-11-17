@@ -15,6 +15,7 @@ What is built and works, and what is known not to work or is unverified.
   30 at a time.
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
 - Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own and picked, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
+- Applied payloads: a forwarder's delivery about a pull request's title, labels, draft state, state, reviewers, or auto-merge changes its row at once with no request. New commits change the row at once and then load the rest. An edited description, a review request, a conversation comment, and a review show in the open pull request at once. So do a reply in a review thread, a thread being resolved or reopened, a commit status, and a check run. A delivery that arrives late does not undo a newer one, and a load that was running when a delivery was applied runs once more. See [plans/webhooks.md](plans/webhooks.md).
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
 - Local stacks: a repository with a checkout has a Local tab of its stacked
@@ -171,6 +172,11 @@ What is built and works, and what is known not to work or is unverified.
 - **Approve and Request Changes.** Every pull request in the playground
   repository is the viewer's own, and GitHub rejects both verdicts on one's
   own pull request. Hermes disables them there, so neither has been sent.
+- **Applied payloads.** Reading a pull request, a comment, a review, a reply,
+  and a resolved thread is tested against deliveries captured from the
+  playground repository. Reading a status, a check run, and a push is tested
+  against payloads written by hand. Hermes has applied no delivery from a
+  running forwarder.
 - **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
   stored notary profile. The Makefile sets neither.
 
