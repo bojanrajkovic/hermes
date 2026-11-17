@@ -1,0 +1,37 @@
+# Audits the workflows for security problems, such as an action that isn't pinned to a commit.
+name: Workflow security
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+
+permissions: {}
+
+# A newer push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    name: zizmor
+    # One step of a few seconds, so the 1-vCPU runner is enough.
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read # check out the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # A finding fails the job and shows as an annotation on the pull request.
+      - uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          persona: auditor
+          advanced-security: false
+          annotations: true
