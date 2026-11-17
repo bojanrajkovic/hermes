@@ -7,6 +7,9 @@ graph LR
     G[GitHub] -->|"POST /hook/#lt;tenant#gt;"| W[Relay Worker]
     W --> T1["Durable Object<br/>tenant A"]
     W --> T2["Durable Object<br/>tenant B"]
+    T1 -->|WebSocket| M1["A member's Hermes"]
+    T1 -->|WebSocket| M2["Another member's Hermes"]
+    T2 -->|WebSocket| M3["A member's Hermes"]
 ```
 
 The Worker takes each request and hands it to the Durable Object of the tenant
@@ -19,10 +22,17 @@ with the relay. The owner's client picks the tenant's ID: 32 lowercase hex
 characters.
 
 Each tenant is one Durable Object, named by the tenant's ID. The relay keeps no
-list of tenants. A tenant's Durable Object stores one thing:
+list of tenants. A tenant's Durable Object stores two things:
 
 - Its registration: the invite code it used up and the App's ID, client ID,
   client secret, and webhook secret.
+- For each open socket, the IDs of the repositories that socket's user can see.
+  They are deleted when the socket closes. Each connect and each alarm also
+  deletes the IDs of any session that has no open socket, because a socket that
+  ends when the Durable Object shuts down may never report its close.
+
+A person in several organizations uses one tenant per organization, each with
+its own sign-in and its own socket.
 
 ## Requests
 
@@ -35,6 +45,7 @@ list of tenants. A tenant's Durable Object stores one thing:
 | `GET /t/<tenant>/login?state=<s>&code_challenge=<c>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
 | `GET /t/<tenant>/callback` | Where GitHub sends the browser after sign-in. Redirects to a `hermes://relay.session` link. |
 | `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
+| `GET /t/<tenant>/connect` | Opens a WebSocket for a signed-in user. See below. |
 
 A path with a malformed tenant ID answers `404`. A request the relay fails to
 handle, such as one that needs GitHub while GitHub is down, answers `500` with
@@ -86,8 +97,8 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 
 | Delivery | Action |
 |---|---|
-| `installation` with action `deleted` (the App was uninstalled) | Delete everything the tenant stored. Its ID is unknown afterwards. |
-| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. The relay drops it. |
+| `installation` with action `deleted` (the App was uninstalled) | Close every socket with code `4004` and delete everything the tenant stored. Its ID is unknown afterwards. |
+| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. Close every socket with code `4001`, so each client reconnects and is checked again. |
 | Any other event that names a repository | Nothing. The relay drops it. |
 | Anything else | Ignored. |
 
@@ -148,6 +159,92 @@ The App must have "Expire user authorization tokens" on, which is GitHub's
 default. With it off GitHub issues no refresh token. Octokit's
 `exchangeWebFlowCode` takes no verifier, so the exchange is one call with
 [`@octokit/request`](https://github.com/octokit/request.js).
+
+### Connecting
+
+The client opens a WebSocket at `GET /t/<tenant>/connect`. The request carries
+no token.
+
+| Status | Meaning |
+|---|---|
+| `101` | The socket is open. |
+| `404` | No tenant with this ID is registered. |
+| `426` | The request is not a WebSocket upgrade. |
+
+The client's first message says who it is:
+
+```json
+{ "type": "hello", "refreshToken": "<the refresh token>" }
+```
+
+The token is in a message and not a header because Cloudflare can show a
+Worker's operator each request's headers, and never what a socket carries.
+
+```mermaid
+stateDiagram-v2
+    [*] --> awaitingHello: socket opens
+    awaitingHello --> authorizing: hello
+    awaitingHello --> [*]: 60 seconds pass, or the message is not a hello (4003)
+    authorizing --> open: GitHub answers, session sent
+    authorizing --> [*]: GitHub refuses the token (4003)
+    authorizing --> [*]: GitHub can't be reached (1011)
+    open --> [*]: 8 hours pass, or access changed (4001)
+    open --> [*]: tenant gone (4004)
+```
+
+When the hello arrives, the relay:
+
+1. Uses the refresh token. GitHub answers with an access token and a new
+   refresh token, and the old one stops working.
+2. Lists the repositories the user can see through the tenant's App, with
+   `GET /user/installations` and
+   `GET /user/installations/{id}/repositories`. It reads at most 4,000.
+3. Stores those repositories' IDs under the socket's session ID and discards
+   the access token.
+
+Then it sends the session:
+
+```json
+{
+  "type": "session",
+  "refreshToken": "<the new refresh token>",
+  "expiresAt": 1794000000,
+  "repositories": ["acme/site", "acme/api"]
+}
+```
+
+The relay reads one message from a socket. Anything the client sends after
+its hello is ignored.
+
+A delivery can arrive while the relay is waiting on GitHub in steps 1 and 2.
+The relay leaves that socket open, because its refresh token is already spent
+and the client needs the new one:
+
+- If the delivery deleted the tenant, the socket closes with code `4004` and
+  gets no session.
+- If it closed every open socket because someone's access changed, the list
+  just read may be out of date. The relay sends the session so the client gets
+  its new refresh token, stores no repository IDs, and closes the socket with
+  code `4001`.
+
+The client must store the new refresh token at once. If the connection drops
+before the session arrives, the client holds a spent token, and the user has
+to sign in again.
+
+A socket stays open for eight hours. Then the relay closes it with code `4001`,
+and the client reconnects, so the user's access is checked again. An alarm on
+the Durable Object fires when the oldest socket runs out.
+
+| Close code | Meaning |
+|---|---|
+| `1011` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
+| `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
+| `4003` | Sign in again. GitHub refused the refresh token, the first message was not a hello, or none came within 60 seconds. |
+| `4004` | Stop. The App was uninstalled. |
+
+The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in
+memory. That is why each socket's state and the repository IDs are in storage
+and not in fields.
 
 ## Invite codes
 
@@ -282,6 +379,9 @@ A few house rules shape how the code reads:
 - No casts that claim more than the compiler knows. Parse with Zod, or narrow
   with a type guard.
 - A function that returns a promise is `async` and awaits what it returns.
+
+One cast remains. `sessionOf` in `tenant.ts` reads the session the relay
+attached to a socket, behind a disable comment that says why.
 
 Oxlint runs some rules through JavaScript plugins it marks as alpha.
 `tests/lint/lint.test.ts` lints `tests/lint/fixtures/violations.ts`, which
