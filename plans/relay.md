@@ -410,7 +410,7 @@ relay/
 ├── scripts/
 │   ├── deployed-script.mjs   downloads the script Cloudflare is running
 │   └── check-settings.mjs    checks the deployed Worker's settings
-├── test/                 Vitest tests, run inside the Workers runtime
+├── tests/                Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
 ├── tsconfig.json         the compiler settings, on top of @tsconfig/strictest
