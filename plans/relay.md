@@ -1,6 +1,8 @@
 # The relay
 
-The relay is a Cloudflare Worker in [`relay/`](../relay).
+The relay is a Cloudflare Worker in [`relay/`](../relay). It runs at
+`https://hermes-relay.services.coderinserepeat.com`. Registering a tenant takes an
+invite code from the relay's operator.
 
 ```mermaid
 graph LR
@@ -269,7 +271,7 @@ the account's owner:
 
 ```bash
 curl --fail -X POST -H "Authorization: Bearer $OPERATOR_TOKEN" \
-  https://<the relay's address>/invites
+  https://hermes-relay.services.coderinserepeat.com/invites
 ```
 
 | Status | Meaning |
@@ -306,12 +308,101 @@ never runs out on its own, and the relay has no call that cancels one.
 Once a tenant is registered, the relay never looks at its code again. The
 relay has no call that stops a registered tenant.
 
-`OPERATOR_TOKEN` is a Worker secret. While it is empty, `POST /invites`
-answers `401` to everything. To make one:
+`OPERATOR_TOKEN` is a Worker secret. The deploy workflow sets it from the
+`relay` environment's secret `RELAY_OPERATOR_TOKEN` on every deploy. While it
+is empty, `POST /invites` answers `401` to everything. To make one:
 
 ```bash
 openssl rand -hex 32
 ```
+
+## Deploying
+
+The `Relay deploy` workflow runs on a push to `main` that changes `relay/`, and
+by hand. It:
+
+1. Runs the same steps as `make relay-check`. The last one, `pnpm build`,
+   writes the bundle to `relay/dist/index.js`.
+2. Attests the bundle with
+   [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance).
+   The attestation records the bundle's SHA-256, this repository, the workflow,
+   and the commit, and goes into Sigstore's public log.
+3. Uploads that file with `wrangler deploy --no-bundle`, which does not rebuild
+   it. The same step sets `COMMIT` to the commit and `OPERATOR_TOKEN` from the
+   `RELAY_OPERATOR_TOKEN` secret.
+
+Anyone can check that a bundle they built came from this repository's workflow:
+
+```bash
+gh attestation verify relay/dist/index.js --repo bojanrajkovic/hermes
+```
+
+The attestation covers the bundle, not what Cloudflare runs, and `/version` is
+the Worker's own report. The `Relay verify` workflow closes that gap. It runs
+every hour, and `Relay deploy` calls it after each deploy. It:
+
+1. Downloads the script Cloudflare is running, with
+   `relay/scripts/deployed-script.ts`. Cloudflare's
+   `GET /accounts/{id}/workers/scripts/{name}/content/v2` returns the uploaded
+   modules byte for byte.
+2. Runs `gh attestation verify` on it, which fails unless the `Relay deploy`
+   workflow of this repository attested a file with the same hash.
+3. Reads the Worker's settings with `relay/scripts/check-settings.ts`, and
+   fails when it has a Tail Worker, log push, observability, or a binding the
+   relay does not use. Those sit outside the script, so its hash does not
+   cover them, and a Tail Worker receives each request's address and headers.
+
+A red `Relay verify` run means the relay is running something this
+repository's workflow did not build, or has a setting that lets something
+else observe its requests. Its runs and logs are public.
+
+The workflows' settings live in two GitHub environments, not in the
+repository, so only the job that names an environment can read its values. Both
+environments allow only the `main` branch.
+
+| Environment | Used by | Setting | Kind | Value |
+|---|---|---|---|---|
+| `relay` | The deploy job | `CLOUDFLARE_ACCOUNT_ID` | Variable | The Cloudflare account the relay runs in. |
+| | | `CLOUDFLARE_API_TOKEN` | Secret | A token that can deploy the `hermes-relay` Worker. |
+| | | `RELAY_OPERATOR_TOKEN` | Secret | What the operator sends to make an invite code. |
+| `relay-verify` | The verify job | `CLOUDFLARE_ACCOUNT_ID` | Variable | The same account. |
+| | | `CLOUDFLARE_API_TOKEN` | Secret | A token that can read the Worker's script. It needs no more than that. |
+
+The verify job runs every hour, so it has its own environment and can hold a
+token that cannot deploy.
+
+### The hostname
+
+`hermes-relay.services.coderinserepeat.com` is in a Route 53 zone, and a Worker
+custom domain needs its zone on Cloudflare. So the hostname is a Cloudflare for
+SaaS custom hostname on the `bojangl.es` zone, which is on Cloudflare:
+
+```mermaid
+graph LR
+    C[Client or GitHub] -->|hermes-relay.services.coderinserepeat.com| R53[Route 53 CNAME]
+    R53 --> F[saas-fallback.bojangl.es]
+    F --> CH[Custom hostname on bojangl.es]
+    CH -->|Workers route| W[hermes-relay Worker]
+```
+
+The CNAME, the custom hostname, its fallback origin, and the route are in the
+`home.coderinserepeat.com` repository's Terraform (`terraform/openshortlink/hermes-relay.tf`
+and `terraform/route53`). Cloudflare issues the hostname's certificate through
+SSL.com, so the `services` zone's CAA record allows `ssl.com`.
+
+The Worker's `workers.dev` address and preview URLs are off in
+`wrangler.jsonc`.
+
+Every workflow pins each action to a commit, so a moved tag can't change what
+builds, deploys, or verifies the relay. The workflows pass
+[zizmor](https://docs.zizmor.sh) with its `auditor` persona and online checks:
+
+```bash
+GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
+```
+
+Each job names its runner image, `ubuntu-26.04`, so a new `ubuntu-latest`
+can't change what a job runs on, and each has a time limit.
 
 ## Layout
 
@@ -327,6 +418,10 @@ relay/
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
 │   ├── json.ts           parses JSON text without throwing
 │   └── github.ts         the calls to GitHub
+├── scripts/
+│   ├── deployed-script.ts    downloads the script Cloudflare is running
+│   ├── check-settings.ts     checks the deployed Worker's settings
+│   └── worker-settings.ts    what those settings must be
 ├── tests/                Vitest tests, run inside the Workers runtime
 │   └── lint/             the lint fixture test and its fixture, run by Node
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
@@ -349,10 +444,14 @@ API fails to compile.
 
 | Project | Covers | Types |
 |---|---|---|
-| `tsconfig.json` | The config files beside it, which Node runs | Node |
+| `tsconfig.json` | `scripts/` and the config files beside it, which Node runs | Node |
 | `src/tsconfig.json` | The Worker | The Workers runtime, from `wrangler types` |
 | `tests/tsconfig.json` | The tests | The Workers runtime and the Vitest plugin |
 | `tests/lint/tsconfig.json` | The lint fixture test, which Node runs | Node |
+
+Node runs the scripts as TypeScript, with no build step. The verify workflow
+runs them without installing packages, so they and `worker-settings.ts` import
+nothing from `node_modules`.
 
 ## Packages
 
@@ -369,7 +468,7 @@ makes an install fail when:
   the two the relay's packages have, because pnpm already installs the binary
   each one checks for.
 
-The check workflow also runs `pnpm audit signatures`, which fails
+The check and deploy workflows also run `pnpm audit signatures`, which fails
 if a package's registry signature doesn't verify.
 
 Routing uses [Hono](https://hono.dev). Request bodies are checked with
@@ -393,7 +492,8 @@ A few house rules shape how the code reads:
 - Every `if` has braces, with a blank line after each block and before each
   `return`.
 - No casts that claim more than the compiler knows. Parse with Zod, or narrow
-  with a type guard.
+  with a type guard. `worker-settings.ts` narrows by hand, because the verify
+  workflow runs it with no packages installed.
 - A function that returns a promise is `async` and awaits what it returns.
 
 One cast remains. `sessionOf` in `tenant.ts` reads the session the relay

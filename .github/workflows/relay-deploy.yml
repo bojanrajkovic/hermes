@@ -1,0 +1,72 @@
+name: Relay deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "relay/**"
+      - ".github/workflows/relay-deploy.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+# One deploy at a time. A deploy in progress finishes before the next starts.
+concurrency:
+  group: relay-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Attest and deploy
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 15
+    # The Cloudflare account, the deploy token, and the operator token belong to this environment,
+    # which only runs from main.
+    environment: relay
+    permissions:
+      contents: read # check out the repository
+      id-token: write # sign the bundle's attestation
+      attestations: write # store the attestation
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs the Node and pnpm that mise.toml pins. No cache here: what this job installs is what it
+      # deploys.
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      # Fails if a package's registry signature doesn't verify.
+      - run: pnpm audit signatures
+
+      - run: pnpm check
+      # Writes the bundle to dist/index.js.
+      - run: pnpm build
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: relay/dist/index.js
+
+      # --no-bundle uploads dist/index.js as it is, so the deployed script is the attested file.
+      # The secrets file sets OPERATOR_TOKEN. Wrangler refuses a first deploy without it.
+      - run: |
+          printf 'OPERATOR_TOKEN=%s\n' "$RELAY_OPERATOR_TOKEN" > "$RUNNER_TEMP/relay.secrets"
+          pnpm exec wrangler deploy dist/index.js --no-bundle \
+            --var "COMMIT:${GITHUB_SHA}" --secrets-file "$RUNNER_TEMP/relay.secrets"
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RELAY_OPERATOR_TOKEN: ${{ secrets.RELAY_OPERATOR_TOKEN }}
+
+  verify:
+    name: Verify the deploy
+    needs: deploy
+    permissions:
+      contents: read # check out the repository
+      attestations: read # look up the bundle's attestation
+    uses: $/.github/workflows/relay-verify.yml
