@@ -465,6 +465,6 @@ The relay's scripts run from `relay/`:
 |---|---|
 | `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck` and `test` together and reports every failure instead of stopping at the first. |
 | `pnpm typecheck` | `tsc`, against the types `pnpm check` generated. |
-| `pnpm test` | The tests. |
+| `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
 | `pnpm build` | Bundles the Worker into `dist/index.js` with `wrangler deploy --dry-run`. |
 | `pnpm dev` | Runs the Worker locally. |
