@@ -52,6 +52,16 @@ host has a dot, which a GitHub login cannot have, so none reads as
 invitation. A tenant's ID is 32 lowercase hex characters, and its server is an
 `https` URL, or `http` on `localhost`.
 
+`AppStore.open(_:)` takes a relay link before it tries a place.
+
+- A setup link finishes the setup that is waiting for it.
+- A session link finishes the sign-in that is waiting for it.
+- A join link asks, in an alert that names the server, whether to join. The
+  link can come from anyone, so nothing is sent to the server before the user
+  agrees.
+
+A setup or session link whose `state` is not one Hermes sent is refused.
+
 ## Windows
 
 A link opens in the frontmost window. A link that ends in `?window=new` opens

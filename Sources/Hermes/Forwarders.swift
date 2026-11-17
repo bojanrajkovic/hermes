@@ -34,12 +34,18 @@ final class Forwarders {
     /// and says nothing of who made it, which the other admins of a shared repository would
     /// have to puzzle over. An organization's own forwarder is one webhook its owner chose.
     ///
-    /// - Parameter organizations: The organizations to forward whole: the ones the viewer
-    ///   owns, when the token has the scope for it.
+    /// - Parameters:
+    ///   - organizations: The organizations to forward whole: the ones the viewer
+    ///     owns, when the token has the scope for it.
+    ///   - covered: The repositories a connected relay tenant sends events for. They need
+    ///     no forwarder, and an organization whose watched repositories are all covered
+    ///     needs none either.
     static func targets(
-        watched: [RepositoryRef], viewer: String, organizations: Set<String>, waiting: Set<Target>, limit: Int = limit
+        watched: [RepositoryRef], viewer: String, organizations: Set<String>, waiting: Set<Target>,
+        covered: Set<RepositoryRef> = [], limit: Int = limit
     ) -> [Target] {
         var seen: Set<Target> = []
+        let watched = watched.filter { !covered.contains($0) }
         let wanted = watched.filter { organizations.contains($0.owner) }.map { Target.organization($0.owner) }
             + watched.filter { $0.owner == viewer }.map(Target.repository).uniqued().prefix(limit)
         return wanted.filter { !waiting.contains($0) && seen.insert($0).inserted }

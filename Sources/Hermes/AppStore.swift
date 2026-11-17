@@ -92,6 +92,8 @@ final class AppStore {
         }
     }
     let forwarders = Forwarders()
+    /// The relay tenants this Mac uses.
+    let relays: Relays
     /// Whether the `gh` token may create an organization's webhook, or nil until the first
     /// check answers. Checked when Hermes comes to the front, which is when a `gh auth refresh`
     /// in a terminal has just finished.
@@ -139,6 +141,7 @@ final class AppStore {
         self.sessions = sessions
         localStacks = LocalStacks(sessions: sessions)
         self.defaults = defaults
+        relays = Relays(defaults: defaults)
         showingAllBots = defaults.bool(forKey: Keys.showingAllBots)
         hasFinishedSetup = defaults.bool(forKey: Keys.finishedSetup)
         ignoredRepositories = Set((defaults.stringArray(forKey: Keys.ignoredRepositories) ?? []).compactMap { saved in
@@ -149,6 +152,10 @@ final class AppStore {
         forwardedOrganizations = Set(defaults.stringArray(forKey: Keys.forwardedOrganizations) ?? [])
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
+        relays.onEvent = { [weak self] event in
+            guard let webhook = WebhookEvent(payload: event.payload) else { return }
+            self?.reload(webhook, part: EventCounts.part(ofEvent: event.name))
+        }
     }
 
     /// Loads the signed-in user once. Windows that open later reuse it.
@@ -185,13 +192,16 @@ final class AppStore {
     }
 
     /// Runs a forwarder for each organization the user picked and each of the viewer's own
-    /// repositories that a window watches, or none when the setting is off.
+    /// repositories that a window watches, or none when the setting is off. A repository a
+    /// relay covers gets none.
     func syncForwarders() async {
+        relays.sync()
         guard usesWebhooks, let viewer = viewer?.login else { return forwarders.stopAll() }
         let logins = Set(windows.allObjects.compactMap { $0.account?.login })
         let wanted = Forwarders.targets(
             watched: logins.sorted().flatMap { watched(in: $0) }.map(\.repository), viewer: viewer,
-            organizations: hasOrganizationHookScope == true ? forwardedOrganizations.intersection(ownedOrganizations) : [], waiting: forwarders.waiting
+            organizations: hasOrganizationHookScope == true ? forwardedOrganizations.intersection(ownedOrganizations) : [],
+            waiting: forwarders.waiting, covered: relays.covered
         )
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
@@ -212,6 +222,9 @@ final class AppStore {
     /// - Parameter part: The count to raise for the pull request, when the event's name says
     ///   which part of it changed. A forwarder's deliveries carry no name.
     private func reload(_ event: WebhookEvent, part: EventCounts.Part? = nil) {
+        // A relay sends events for every repository the user can see. One in an account no
+        // window shows has nothing to update.
+        guard windows.allObjects.contains(where: { $0.account?.login == event.repository.owner }) else { return }
         let data = data(for: event.repository.owner)
         let held = event.pullRequest(among: data.heldPullRequests)
         Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(held?.number ?? 0)")
@@ -273,6 +286,7 @@ final class AppStore {
     /// Opens a link in the frontmost window, or in a new window when it ends in `?window=new`
     /// or no window is up. A link Hermes can't read is reported in the frontmost window.
     func open(_ url: URL) {
+        if let link = RelayLink(url: url) { return open(link) }
         guard let link = DeepLink(url: url) else {
             frontmost?.resolveError = "Hermes can't open \(url.absoluteString)."
             return
@@ -287,6 +301,82 @@ final class AppStore {
             waitingLinks.append(url)
         }
     }
+
+    /// Takes one step of setting up or joining a relay tenant. A link that fails is reported
+    /// in the frontmost window.
+    private func open(_ link: RelayLink) {
+        switch link {
+        case .setup(let code, let state):
+            // GitHub sends back the state Hermes gave it. Any other link was not asked for.
+            guard relays.setup?.state == state else {
+                frontmost?.resolveError = "This relay setup link does not belong to a setup Hermes started."
+                return
+            }
+            Task { await relays.finishSetup(code: code) }
+        case .session(let tenantID, let grant, let state):
+            Task {
+                if let error = await relays.finishSignIn(tenantID: tenantID, grant: grant, state: state) {
+                    frontmost?.resolveError = error
+                }
+                await syncForwarders()
+            }
+        case .join(let tenant):
+            if let refusal = relays.refusal(of: tenant) {
+                frontmost?.resolveError = refusal
+                return
+            }
+            let host = tenant.server.host() ?? tenant.server.absoluteString
+            guard offersRelay(tenant, question: "Join the relay at \(host)?", accept: "Join", decline: "Cancel") else { return }
+            relays.join(tenant)
+            // The tenant's owner may have published it since the launch read the accounts' files.
+            Task { await loadPublishedRelays() }
+        }
+    }
+
+    /// Asks whether to use a relay tenant. A link or a published file can come from someone
+    /// else, so the user sees the server before anything is sent to it.
+    private func offersRelay(_ tenant: RelayTenant, question: String, accept: String, decline: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = question
+        alert.informativeText = "The relay is at \(tenant.server.host() ?? tenant.server.absoluteString). Hermes opens your browser to sign in with GitHub. GitHub shows which account owns the relay's App. Cancel there if it is not the account you expect. The relay then sends this Mac the changes in the repositories you can see, as they happen."
+        alert.addButton(withTitle: accept)
+        alert.addButton(withTitle: decline)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Looks, once a launch, for a relay tenant that each of the viewer's accounts publishes
+    /// in its `.github-private` repository, and asks about the ones this Mac does not use. A tenant
+    /// the user turns down is not asked about again. Settings lists it, with a Connect button.
+    func discoverRelays() async {
+        guard !hasLookedForRelays, viewer != nil else { return }
+        hasLookedForRelays = true
+
+        for published in await loadPublishedRelays() where relays.shouldOffer(published.tenant) {
+            let name = account(published.account)?.name ?? published.account
+            if offersRelay(published.tenant, question: "\(name) has a relay. Connect?", accept: "Connect", decline: "Not Now") {
+                relays.join(published.tenant)
+            } else {
+                relays.decline(published.tenant)
+            }
+        }
+    }
+
+    /// Reads the relay tenant each of the viewer's accounts publishes, and records them. The
+    /// launch reads them, and so does joining a tenant by a link, which names no account.
+    @discardableResult
+    private func loadPublishedRelays() async -> [PublishedRelay] {
+        var published: [PublishedRelay] = []
+        for account in viewer?.accounts ?? [] {
+            // An account with no file, and one that can't be read, publishes no relay.
+            if let tenant = try? await client.publishedRelay(of: account.login) {
+                published.append(PublishedRelay(account: account.login, tenant: tenant))
+            }
+        }
+        relays.found(published)
+        return published
+    }
+
+    @ObservationIgnored private var hasLookedForRelays = false
 
     /// Called by a window once it is up, to open the links that came first.
     func windowIsUp() {

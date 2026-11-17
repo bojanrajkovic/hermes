@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
         if store.usesWebhooks { WebhookForwarder.endLeftovers() }
+        store.relays.sync()
         Task { await store.keepFresh() }
     }
 
@@ -52,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.forwarders.stopAll()
+        store.relays.stopAll()
     }
 
     /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.
@@ -121,6 +123,7 @@ struct WindowRoot: View {
                 model.store.windowIsUp()
                 if let url = state.url, let link = DeepLink(url: url) { model.pendingLink = link }
                 await model.start(login: state.login)
+                await model.store.discoverRelays()
             }
             .onChange(of: activeState, initial: true) {
                 if activeState == .key {
