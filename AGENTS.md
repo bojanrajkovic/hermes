@@ -72,4 +72,4 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
 ## Dependencies
 
 * Read [PROBLEMS.md](PROBLEMS.md) before changing a dependency version in `Package.swift`.
-  Several grammar versions are tied to files in `Sources/TreeSitterScanners` and `Vendor/`.
+  Several grammar versions are tied to files in `Sources/TreeSitterScanners`.

@@ -18,21 +18,12 @@ The copies must match the grammar versions. That is why `Package.swift` pins
 these four packages with `exact:`. To upgrade one, change its version and copy
 the new `src/scanner.c` over the file in `Sources/TreeSitterScanners`.
 
-## tree-sitter-swift is pinned to a revision
+## tree-sitter-swift is pinned to a tag with generated files
 
-The release tags of `alex-pinkus/tree-sitter-swift` do not contain the
-generated parser, so a tagged version does not build. `Package.swift` pins a
-revision that includes the generated files.
-
-## The Ruby grammar is vendored
-
-Cloning `tree-sitter/tree-sitter-ruby` through SwiftPM stalls. A copy of
-v0.23.1 lives in `Vendor/tree-sitter-ruby` and `Package.swift` uses it as a
-local package. The copy's manifest drops the upstream test target and its
-dependency.
-
-To upgrade, replace `src/` and `queries/` from the upstream release and update
-the version in the comment at the top of `Vendor/tree-sitter-ruby/Package.swift`.
+The plain release tags of `alex-pinkus/tree-sitter-swift`, such as `0.7.4`,
+do not contain the generated parser, so they do not build. Each release has
+a second tag that does, such as `0.7.4-with-generated-files`. `Package.swift`
+pins that one with `exact:`.
 
 ## libghostty-spm is pinned to an exact version
 
