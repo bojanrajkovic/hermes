@@ -40,14 +40,21 @@ export function decideRegistration(
   existing: Registration | undefined,
 ): RegistrationDecision {
   const parsed = Registration.safeParse(body);
-  if (!parsed.success) return { outcome: "invalid" };
+  if (!parsed.success) {
+    return { outcome: "invalid" };
+  }
+
   const registration = parsed.data;
 
-  if (existing) {
+  if (existing !== undefined) {
     const same = JSON.stringify(existing) === JSON.stringify(registration);
+
     return same ? { outcome: "accepted", registration } : { outcome: "alreadyRegistered" };
   }
 
-  if (!inviteAccepted(inviteCodes, registration.invite)) return { outcome: "inviteRefused" };
+  if (!inviteAccepted(inviteCodes, registration.invite)) {
+    return { outcome: "inviteRefused" };
+  }
+
   return { outcome: "accepted", registration };
 }

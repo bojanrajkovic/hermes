@@ -64,7 +64,7 @@ help:
 	@echo "  make / build      Build $(CONFIG) into ./$(APP)  (default)"
 	@echo "  check             Compile only (swift build) — no bundle/sign; CI/agent gate"
 	@echo "  test              Run the SwiftPM test suite"
-	@echo "  relay-check       Type-check, test, and bundle the relay Worker in ./relay (needs mise)"
+	@echo "  relay-check       Type-check, lint, test, and bundle the relay Worker in ./relay (needs mise)"
 	@echo "  release          Build release into ./$(APP)"
 	@echo "  run               Build and launch $(APP_NAME)"
 	@echo "  icon              Regenerate build/AppIcon.icns from scripts/make-icon.swift"
@@ -143,7 +143,7 @@ test: deps
 	swift test
 	@echo "✓ tests pass"
 
-# Type-check and test the relay Worker, and bundle it without deploying. `mise x` runs each
+# Type-check, lint, and test the relay Worker, and bundle it without deploying. `mise x` runs each
 # command with the Node and pnpm that mise.toml pins, and installs them first when missing.
 relay-check:
 	cd relay && mise x -- pnpm install --frozen-lockfile && mise x -- pnpm check && mise x -- pnpm build

@@ -1,7 +1,8 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { sign } from "@octokit/webhooks-methods";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 const registration = {
   invite: "first-code",
@@ -19,15 +20,15 @@ async function registeredTenant(): Promise<string> {
     method: "PUT",
     body: JSON.stringify(registration),
   });
+
   return tenant;
 }
 
 /** Stands in for GitHub: every refresh succeeds, and the user sees the repositories with these IDs. */
-function userSees(...repositories: number[]) {
+function userSees(...repositories: number[]): void {
   const headers = { date: new Date().toUTCString() };
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    switch (url.pathname) {
+  const answer = (path: string): Response => {
+    switch (path) {
       case "/login/oauth/access_token":
         return Response.json(
           {
@@ -46,58 +47,93 @@ function userSees(...repositories: number[]) {
         return Response.json(
           {
             total_count: repositories.length,
-            repositories: repositories.map((id) => ({ id, full_name: `acme/repo-${id}` })),
+            repositories: repositories.map((id) => ({ id, full_name: `acme/repo-${String(id)}` })),
           },
           { headers },
         );
     }
+  };
+
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+
+    return await Promise.resolve(answer(url.pathname));
   });
 }
 
+/** GitHub's held-back repository list: `release` lets it go, and `asked` says whether the relay asked for it. */
+type HeldAnswer = { release: () => void; asked: () => boolean };
+
 /** Like `userSees`, but GitHub holds back the repository list until `release` is called. */
-function userSeesAfterAWait(...repositories: number[]) {
-  let release = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
+function userSeesAfterAWait(...repositories: number[]): HeldAnswer {
+  const held = Promise.withResolvers<undefined>();
   let asked = false;
   userSees(...repositories);
-  const answer = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const answer = vi.mocked(globalThis.fetch).getMockImplementation();
+  assert(answer !== undefined, "userSees set no answer");
   vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname.endsWith("/repositories")) {
       asked = true;
-      await held;
+      await held.promise;
     }
-    return answer(input, init);
+
+    return await answer(input, init);
   });
-  return { release, asked: () => asked };
+
+  return {
+    release: () => {
+      held.resolve(undefined);
+    },
+    asked: () => asked,
+  };
 }
 
+/** The part of a forwarded pull request event the tests read. */
+const PullRequestEvent = z.object({ payload: z.object({ number: z.number() }) });
+
+/** The pull request number in a forwarded event. */
+function pullRequestNumber(event: string): number {
+  return PullRequestEvent.parse(JSON.parse(event)).payload.number;
+}
+
+/** A socket that has said hello, and what has arrived on it so far. */
+type HelloSocket = {
+  /** Whether the session message has arrived. */
+  hasSession: () => boolean;
+  /** The messages after the session message. */
+  events: () => string[];
+  closeCode: () => number | undefined;
+};
+
 /** A socket that has said hello. Its messages and close code can be awaited in order. */
-async function hello(tenant: string) {
+async function hello(tenant: string): Promise<HelloSocket> {
   const response = await exports.default.fetch(`https://relay.test/t/${tenant}/connect`, {
     headers: { upgrade: "websocket" },
   });
-  const socket = response.webSocket!;
+  const socket = response.webSocket;
+  assert(socket !== null, "the relay opened no socket");
   const messages: string[] = [];
-  let closeCode: number | undefined;
+  let closeCode: number | undefined = undefined;
   socket.addEventListener("message", (event) => messages.push(String(event.data)));
   socket.addEventListener("close", (event) => (closeCode = event.code));
   socket.accept();
   socket.send(JSON.stringify({ type: "hello", refreshToken: "ghr_old" }));
 
   return {
-    /** Whether the session message has arrived. */
     hasSession: () => messages.length > 0,
-    /** The messages after the session message. */
     events: () => messages.slice(1),
     closeCode: () => closeCode,
   };
 }
 
 /** A socket that has its session. */
-async function open(tenant: string) {
+async function open(tenant: string): Promise<HelloSocket> {
   const socket = await hello(tenant);
-  await vi.waitFor(() => expect(socket.hasSession()).toBe(true));
+  await vi.waitFor(() => {
+    expect(socket.hasSession()).toBe(true);
+  });
+
   return socket;
 }
 
@@ -111,14 +147,18 @@ async function deliver(tenant: string, event: string, body: string): Promise<num
     },
     body,
   });
+
   return response.status;
 }
 
-function storedSessions(tenant: string): Promise<number> {
-  return runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) => {
-    const sql = state.storage.sql;
+async function storedSessions(tenant: string): Promise<number> {
+  return await runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) => {
+    const { sql } = state.storage;
     const created = sql.exec("SELECT 1 FROM sqlite_master WHERE name = 'session_repository'");
-    if (created.toArray().length === 0) return 0;
+    if (created.toArray().length === 0) {
+      return 0;
+    }
+
     return sql.exec("SELECT DISTINCT session FROM session_repository").toArray().length;
   });
 }
@@ -135,7 +175,9 @@ describe("forwarding a delivery", () => {
 
     expect(await deliver(tenant, "pull_request", body)).toBe(202);
 
-    await vi.waitFor(() => expect(socket.events()).toHaveLength(1));
+    await vi.waitFor(() => {
+      expect(socket.events()).toHaveLength(1);
+    });
     expect(socket.events()[0]).toBe(
       `{"type":"event","event":"pull_request","delivery":"delivery-1","payload":${body}}`,
     );
@@ -152,9 +194,11 @@ describe("forwarding a delivery", () => {
     await deliver(tenant, "pull_request", '{"repository":{"id":9},"number":2}');
     await deliver(tenant, "pull_request", '{"repository":{"id":7},"number":3}');
 
-    await vi.waitFor(() => expect(seesSeven.events()).toHaveLength(1));
-    expect(seesSeven.events().map((event) => JSON.parse(event).payload.number)).toEqual([3]);
-    expect(seesEight.events().map((event) => JSON.parse(event).payload.number)).toEqual([1]);
+    await vi.waitFor(() => {
+      expect(seesSeven.events()).toHaveLength(1);
+    });
+    expect(seesSeven.events().map((event) => pullRequestNumber(event))).toEqual([3]);
+    expect(seesEight.events().map((event) => pullRequestNumber(event))).toEqual([1]);
   });
 });
 
@@ -166,7 +210,9 @@ describe("a change in who can see what", () => {
 
     await deliver(tenant, "member", '{"action":"removed","repository":{"id":7}}');
 
-    await vi.waitFor(() => expect(socket.closeCode()).toBe(4001));
+    await vi.waitFor(() => {
+      expect(socket.closeCode()).toBe(4001);
+    });
     expect(socket.events()).toEqual([]);
     expect(await storedSessions(tenant)).toBe(0);
   });
@@ -177,13 +223,17 @@ describe("a delivery that arrives while GitHub is answering for a socket", () =>
     const tenant = await registeredTenant();
     const gitHub = userSeesAfterAWait(7);
     const socket = await hello(tenant);
-    await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
+    await vi.waitFor(() => {
+      expect(gitHub.asked()).toBe(true);
+    });
 
     await deliver(tenant, "member", '{"action":"removed","repository":{"id":7}}');
     expect(socket.closeCode()).toBeUndefined();
     gitHub.release();
 
-    await vi.waitFor(() => expect(socket.closeCode()).toBe(4001));
+    await vi.waitFor(() => {
+      expect(socket.closeCode()).toBe(4001);
+    });
     expect(socket.hasSession()).toBe(true);
     expect(await storedSessions(tenant)).toBe(0);
   });
@@ -192,12 +242,16 @@ describe("a delivery that arrives while GitHub is answering for a socket", () =>
     const tenant = await registeredTenant();
     const gitHub = userSeesAfterAWait(7);
     const socket = await hello(tenant);
-    await vi.waitFor(() => expect(gitHub.asked()).toBe(true));
+    await vi.waitFor(() => {
+      expect(gitHub.asked()).toBe(true);
+    });
 
     await deliver(tenant, "installation", '{"action":"deleted"}');
     gitHub.release();
 
-    await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
+    await vi.waitFor(() => {
+      expect(socket.closeCode()).toBe(4004);
+    });
     expect(socket.hasSession()).toBe(false);
   });
 });
@@ -210,7 +264,9 @@ describe("a tenant that ends", () => {
 
     await deliver(tenant, "installation", '{"action":"deleted"}');
 
-    await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
+    await vi.waitFor(() => {
+      expect(socket.closeCode()).toBe(4004);
+    });
     // The client's close reaches the relay after the tenant is deleted, and must leave nothing.
     const left = await runInDurableObject(
       env.TENANT.getByName(tenant),
@@ -228,13 +284,15 @@ describe("a tenant that ends", () => {
     const tenant = await registeredTenant();
     userSees(7);
     const socket = await open(tenant);
-    await runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
-      state.storage.put("registration", { ...registration, invite: "withdrawn-code" }),
-    );
+    await runInDurableObject(env.TENANT.getByName(tenant), async (_instance, state) => {
+      await state.storage.put("registration", { ...registration, invite: "withdrawn-code" });
+    });
 
     expect(await deliver(tenant, "pull_request", '{"repository":{"id":7}}')).toBe(403);
 
-    await vi.waitFor(() => expect(socket.closeCode()).toBe(4004));
+    await vi.waitFor(() => {
+      expect(socket.closeCode()).toBe(4004);
+    });
     expect(socket.events()).toEqual([]);
   });
 });

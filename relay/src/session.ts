@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseJSON } from "./json";
 
 /** How long a socket stays open before the client must reconnect and have its access checked again. */
 export const sessionSeconds = 8 * 60 * 60;
@@ -42,25 +43,24 @@ const Hello = z.object({ type: z.literal("hello"), refreshToken: z.string().min(
  * operator the headers of a request and never the contents of a socket.
  */
 export function helloToken(message: string | ArrayBuffer): string | undefined {
-  if (typeof message !== "string") return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(message);
-  } catch {
+  if (typeof message !== "string") {
     return undefined;
   }
-  const hello = Hello.safeParse(parsed);
+
+  const hello = Hello.safeParse(parseJSON(message));
+
   return hello.success ? hello.data.refreshToken : undefined;
 }
 
+/** The sessions that have run out, and when the next one will, in Unix seconds. */
+export type Expiry = { expired: Session[]; next: number | undefined };
+
 /** Which sessions have run out at `now`, and when the next one will. */
-export function expiry(
-  sessions: Session[],
-  now: number,
-): { expired: Session[]; next: number | undefined } {
+export function expiry(sessions: Session[], now: number): Expiry {
   const expired = sessions.filter((session) => session.expiresAt <= now);
   const open = sessions.filter((session) => session.expiresAt > now);
   const next = open.length > 0 ? Math.min(...open.map((session) => session.expiresAt)) : undefined;
+
   return { expired, next };
 }
 
@@ -70,7 +70,7 @@ export function expiredCloseCode(session: Session): number {
 }
 
 /** A PKCE code challenge: the base64url SHA-256 of a verifier, 43 characters. */
-export const CodeChallenge = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+export const CodeChallenge = z.string().regex(/^[A-Za-z0-9_\-]{43}$/v);
 
 /** A PKCE code verifier, as RFC 7636 defines it. */
-export const CodeVerifier = z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/);
+export const CodeVerifier = z.string().regex(/^[A-Za-z0-9._~\-]{43,128}$/v);

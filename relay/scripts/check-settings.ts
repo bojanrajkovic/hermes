@@ -6,9 +6,9 @@
 // defaults to hermes-relay.
 import { settingsProblems } from "../src/worker-settings.ts";
 
-const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } = process.env;
+const { CLOUDFLARE_ACCOUNT_ID: account = "", CLOUDFLARE_API_TOKEN: token = "" } = process.env;
 const worker = process.env["RELAY_WORKER"] ?? "hermes-relay";
-if (!account || !token) {
+if (account === "" || token === "") {
   console.error(
     "usage: CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… node scripts/check-settings.ts",
   );
@@ -21,7 +21,7 @@ const response = await fetch(
 );
 if (!response.ok) {
   console.error(
-    `Cloudflare answered ${response.status} for ${worker}'s settings: ${await response.text()}`,
+    `Cloudflare answered ${String(response.status)} for ${worker}'s settings: ${await response.text()}`,
   );
   process.exit(1);
 }
@@ -31,6 +31,12 @@ const answer: unknown = await response.json();
 const settings =
   typeof answer === "object" && answer !== null && "result" in answer ? answer.result : undefined;
 const problems = settingsProblems(settings);
-for (const problem of problems) console.error(`${worker}: ${problem}`);
-if (problems.length > 0) process.exit(1);
+for (const problem of problems) {
+  console.error(`${worker}: ${problem}`);
+}
+
+if (problems.length > 0) {
+  process.exit(1);
+}
+
 console.log(`${worker}'s settings match the relay's`);

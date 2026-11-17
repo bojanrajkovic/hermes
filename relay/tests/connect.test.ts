@@ -1,6 +1,7 @@
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi, type MockInstance } from "vitest";
+import { z } from "zod";
 
 const registration = {
   invite: "first-code",
@@ -18,6 +19,7 @@ async function registeredTenant(): Promise<string> {
     method: "PUT",
     body: JSON.stringify(registration),
   });
+
   return tenant;
 }
 
@@ -33,11 +35,10 @@ const refreshed = {
 };
 
 /** Stands in for GitHub: the token endpoint answers `token`, and the repository list is served in `pages`. */
-function gitHub(token: unknown, pages: GitHubRepository[][] = []) {
+function gitHub(token: unknown, pages: GitHubRepository[][] = []): MockInstance<typeof fetch> {
   // Octokit works out a token's expiry from the response's Date header.
   const headers = { date: new Date().toUTCString() };
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
+  const answer = (url: URL, method: string): Response => {
     switch (url.pathname) {
       case "/login/oauth/access_token":
         return Response.json(token, { headers });
@@ -45,43 +46,68 @@ function gitHub(token: unknown, pages: GitHubRepository[][] = []) {
         return Response.json({ total_count: 1, installations: [{ id: 99 }] }, { headers });
       case "/user/installations/99/repositories": {
         const page = Number(url.searchParams.get("page") ?? "1");
+
         return Response.json({ total_count: 0, repositories: pages[page - 1] ?? [] }, { headers });
       }
+
       default:
-        return new Response(`unexpected ${init?.method ?? "GET"} ${url}`, { status: 500 });
+        return new Response(`unexpected ${method} ${url.href}`, { status: 500 });
     }
+  };
+
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+
+    return await Promise.resolve(answer(url, init?.method ?? "GET"));
   });
 }
 
-function connect(tenant: string, headers: Record<string, string> = { upgrade: "websocket" }) {
-  return exports.default.fetch(`https://relay.test/t/${tenant}/connect`, { headers });
+async function connect(
+  tenant: string,
+  headers: Record<string, string> = { upgrade: "websocket" },
+): Promise<Response> {
+  return await exports.default.fetch(`https://relay.test/t/${tenant}/connect`, { headers });
 }
 
+/** A socket, the messages that arrived on it, and the code it closed with. */
+type OpenedSocket = { socket: WebSocket; messages: unknown[]; closeCode: () => number | undefined };
+
 /** Opens a socket and records what arrives on it. Says nothing yet. */
-async function socketTo(tenant: string) {
+async function socketTo(tenant: string): Promise<OpenedSocket> {
   const response = await connect(tenant);
   expect(response.status).toBe(101);
-  const socket = response.webSocket!;
+  const socket = response.webSocket;
+  assert(socket !== null, "the relay opened no socket");
   const messages: unknown[] = [];
-  let closeCode: number | undefined;
+  let closeCode: number | undefined = undefined;
   socket.addEventListener("message", (event) => messages.push(JSON.parse(String(event.data))));
   socket.addEventListener("close", (event) => (closeCode = event.code));
   socket.accept();
+
   return { socket, messages, closeCode: () => closeCode };
 }
 
 const hello = JSON.stringify({ type: "hello", refreshToken: "ghr_old" });
 
+/** The parts of a session message the tests read. */
+const SessionMessage = z.object({ expiresAt: z.number(), repositories: z.array(z.string()) });
+
+/** A socket that has its session message, which is `first`. */
+type SessionSocket = OpenedSocket & { first: unknown };
+
 /** Opens a socket, says hello, and waits for the session message. */
-async function open(tenant: string) {
+async function open(tenant: string): Promise<SessionSocket> {
   const opened = await socketTo(tenant);
   opened.socket.send(hello);
-  await vi.waitFor(() => expect(opened.messages).toHaveLength(1));
+  await vi.waitFor(() => {
+    expect(opened.messages).toHaveLength(1);
+  });
+
   return { ...opened, first: opened.messages[0] };
 }
 
-function storedRepositories(tenant: string): Promise<number[]> {
-  return runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
+async function storedRepositories(tenant: string): Promise<number[]> {
+  return await runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
     state.storage.sql
       .exec<{ repository: number }>("SELECT repository FROM session_repository ORDER BY repository")
       .toArray()
@@ -131,26 +157,30 @@ describe("a socket's first message", () => {
       refreshToken: "ghr_new",
       repositories: ["acme/site", "acme/api"],
     });
-    const { expiresAt } = first as { expiresAt: number };
+    const { expiresAt } = SessionMessage.parse(first);
     expect(expiresAt).toBeGreaterThanOrEqual(before + 8 * 60 * 60);
     expect(expiresAt).toBeLessThanOrEqual(before + 8 * 60 * 60 + 5);
     expect(await storedRepositories(tenant)).toEqual([7, 8]);
 
-    const refresh = JSON.parse(String(calls.mock.calls[0]?.[1]?.body));
-    expect(refresh).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_old" });
+    const sent = calls.mock.calls[0]?.[1]?.body;
+    assert(typeof sent === "string", "the relay sent GitHub no text body");
+    expect(JSON.parse(sent)).toMatchObject({
+      grant_type: "refresh_token",
+      refresh_token: "ghr_old",
+    });
   });
 
   it("reads every page of the repository list", async () => {
     const tenant = await registeredTenant();
     const firstPage = Array.from({ length: 100 }, (_, index) => ({
       id: index + 1,
-      full_name: `acme/repo-${index + 1}`,
+      full_name: `acme/repo-${String(index + 1)}`,
     }));
     gitHub(refreshed, [firstPage, [{ id: 101, full_name: "acme/repo-101" }]]);
 
     const { first } = await open(tenant);
 
-    expect((first as { repositories: string[] }).repositories).toHaveLength(101);
+    expect(SessionMessage.parse(first).repositories).toHaveLength(101);
     expect(await storedRepositories(tenant)).toHaveLength(101);
   });
 
@@ -161,20 +191,24 @@ describe("a socket's first message", () => {
 
     opened.socket.send(hello);
 
-    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(4003);
+    });
     expect(opened.messages).toEqual([]);
   });
 
   it("closes with 1011 when GitHub is down, so the client keeps its token", async () => {
     const tenant = await registeredTenant();
     vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () => new Response("unavailable", { status: 503 }),
+      async () => await Promise.resolve(new Response("unavailable", { status: 503 })),
     );
     const opened = await socketTo(tenant);
 
     opened.socket.send(hello);
 
-    await vi.waitFor(() => expect(opened.closeCode()).toBe(1011));
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(1011);
+    });
   });
 
   it("closes with 4003, and asks GitHub nothing, when it is not a hello", async () => {
@@ -184,7 +218,9 @@ describe("a socket's first message", () => {
 
     opened.socket.send(JSON.stringify({ type: "subscribe" }));
 
-    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(4003);
+    });
     expect(calls).not.toHaveBeenCalled();
   });
 
@@ -211,7 +247,9 @@ describe("a socket's lifetime", () => {
     vi.setSystemTime(Date.now() + 61 * 1000);
     expect(await runDurableObjectAlarm(env.TENANT.getByName(tenant))).toBe(true);
 
-    await vi.waitFor(() => expect(opened.closeCode()).toBe(4003));
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(4003);
+    });
   });
 
   it("forgets a session's repositories when its socket closes", async () => {
@@ -221,7 +259,9 @@ describe("a socket's lifetime", () => {
 
     socket.close(1000, "done");
 
-    await vi.waitFor(async () => expect(await storedRepositories(tenant)).toEqual([]));
+    await vi.waitFor(async () => {
+      expect(await storedRepositories(tenant)).toEqual([]);
+    });
   });
 
   it("deletes the repositories of a session whose socket is gone", async () => {
@@ -245,10 +285,11 @@ describe("a socket's lifetime", () => {
     gitHub(refreshed, [[{ id: 7, full_name: "acme/site" }]]);
     const opened = await open(tenant);
     const stub = env.TENANT.getByName(tenant);
-    const { expiresAt } = opened.first as { expiresAt: number };
+    const { expiresAt } = SessionMessage.parse(opened.first);
 
     // The alarm is set for the moment the session runs out, and running it early closes nothing.
-    const alarm = () => runInDurableObject(stub, (_instance, state) => state.storage.getAlarm());
+    const alarm = async (): Promise<number | null> =>
+      await runInDurableObject(stub, async (_instance, state) => await state.storage.getAlarm());
     expect(await alarm()).toBe(expiresAt * 1000);
     await runDurableObjectAlarm(stub);
     expect(await storedRepositories(tenant)).toEqual([7]);
@@ -258,7 +299,9 @@ describe("a socket's lifetime", () => {
     vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000 + 1000);
     expect(await runDurableObjectAlarm(stub)).toBe(true);
 
-    await vi.waitFor(() => expect(opened.closeCode()).toBe(4001));
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(4001);
+    });
     expect(await storedRepositories(tenant)).toEqual([]);
   });
 });

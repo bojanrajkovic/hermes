@@ -1,8 +1,15 @@
 import { refreshToken as refresh } from "@octokit/oauth-methods";
 import { request } from "@octokit/request";
+import { z } from "zod";
 import type { Registration } from "./registration";
 
 type AppCredentials = Pick<Registration, "clientID" | "clientSecret">;
+
+/** GitHub's answer to a code. It answers 200 with an `error` field when it refuses. */
+const TokenAnswer = z.object({
+  refresh_token: z.unknown().optional(),
+  error: z.unknown().optional(),
+});
 
 /**
  * Trades the code GitHub gave the browser at sign-in for the user's refresh token.
@@ -31,12 +38,19 @@ export async function refreshTokenForCode(
       redirect_uri: redirectURL,
       code_verifier: verifier,
     });
-    // GitHub answers 200 with an `error` field when it refuses.
-    const answer = response.data as { refresh_token?: unknown; error?: unknown };
-    if (answer.error !== undefined) return undefined;
-    return typeof answer.refresh_token === "string" ? answer.refresh_token : undefined;
+    const answer = TokenAnswer.safeParse(response.data);
+    if (!answer.success || answer.data.error !== undefined) {
+      return undefined;
+    }
+
+    const { refresh_token: refreshToken } = answer.data;
+
+    return typeof refreshToken === "string" ? refreshToken : undefined;
   } catch (error) {
-    if (refusedByGitHub(error)) return undefined;
+    if (refusedByGitHub(error)) {
+      return undefined;
+    }
+
     throw error;
   }
 }
@@ -62,19 +76,23 @@ export async function accessForRefreshToken(
   app: AppCredentials,
   token: string,
 ): Promise<Access | undefined> {
-  let authentication;
-  try {
-    ({ authentication } = await refresh({
-      clientType: "github-app",
-      clientId: app.clientID,
-      clientSecret: app.clientSecret,
-      refreshToken: token,
-    }));
-  } catch (error) {
-    if (refusedByGitHub(error)) return undefined;
+  const refreshed = await refresh({
+    clientType: "github-app",
+    clientId: app.clientID,
+    clientSecret: app.clientSecret,
+    refreshToken: token,
+  }).catch((error: unknown) => {
+    if (refusedByGitHub(error)) {
+      return undefined;
+    }
+
     throw error;
+  });
+  if (refreshed === undefined) {
+    return undefined;
   }
 
+  const { authentication } = refreshed;
   const headers = { authorization: `token ${authentication.token}` };
   const installations = await request("GET /user/installations", { headers, per_page: pageSize });
 
@@ -92,9 +110,12 @@ export async function accessForRefreshToken(
       repositories.push(
         ...data.repositories.map((r) => ({ id: Number(r.id), fullName: r.full_name })),
       );
-      if (data.repositories.length < pageSize) break;
+      if (data.repositories.length < pageSize) {
+        break;
+      }
     }
   }
+
   return { refreshToken: authentication.refreshToken, repositories };
 }
 
@@ -103,6 +124,9 @@ export async function accessForRefreshToken(
  * token, and 500 when the request failed. Only a 4xx means GitHub refused.
  */
 function refusedByGitHub(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("status" in error)) return false;
+  if (typeof error !== "object" || error === null || !("status" in error)) {
+    return false;
+  }
+
   return typeof error.status === "number" && error.status >= 400 && error.status < 500;
 }

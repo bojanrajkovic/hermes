@@ -41,7 +41,10 @@ export type SignIn =
 /** Whether GitHub signed this delivery with the tenant's webhook secret. */
 async function signed(delivery: Delivery, secret: string): Promise<boolean> {
   // `verify` throws on an empty argument, and on a signature that is not `sha256=<hex>`.
-  if (delivery.signature === "" || delivery.body === "") return false;
+  if (delivery.signature === "" || delivery.body === "") {
+    return false;
+  }
+
   try {
     return await verify(secret, delivery.body, delivery.signature);
   } catch {
@@ -62,6 +65,12 @@ function now(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+/** The session a socket carries. */
+function sessionOf(socket: WebSocket): Session {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the relay attaches a Session to every socket it accepts, and nothing else writes the attachment
+  return socket.deserializeAttachment() as Session;
+}
+
 /** One tenant: an account whose owner registered its own GitHub App with the relay. */
 export class Tenant extends DurableObject<Env> {
   /**
@@ -78,16 +87,23 @@ export class Tenant extends DurableObject<Env> {
     if (decision.outcome === "accepted") {
       await this.ctx.storage.put("registration", decision.registration);
     }
+
     return decision.outcome;
   }
 
   async deliver(delivery: Delivery): Promise<DeliveryOutcome> {
     const registration = await this.registration();
-    if (!registration) return "unknownTenant";
+    if (registration === undefined) {
+      return "unknownTenant";
+    }
 
-    if (!(await signed(delivery, registration.webhookSecret))) return "badSignature";
+    if (!(await signed(delivery, registration.webhookSecret))) {
+      return "badSignature";
+    }
+
     if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
       this.closeEverySocket(closeCode.tenantGone, "invite withdrawn");
+
       return "inviteRevoked";
     }
 
@@ -106,12 +122,16 @@ export class Tenant extends DurableObject<Env> {
       case "ignore":
         break;
     }
+
     return "accepted";
   }
 
   /** Sends a delivery to the sockets whose user can see its repository. */
   private forward(delivery: Delivery, repository: number): void {
-    if (!this.hasSessionTable) return;
+    if (!this.hasSessionTable) {
+      return;
+    }
+
     const sessions = new Set(
       this.ctx.storage.sql
         .exec<{ session: string }>(
@@ -121,7 +141,9 @@ export class Tenant extends DurableObject<Env> {
         .toArray()
         .map((row) => row.session),
     );
-    if (sessions.size === 0) return;
+    if (sessions.size === 0) {
+      return;
+    }
 
     // The body goes in as GitHub sent it, so the client gets the payload byte for byte.
     const message =
@@ -129,8 +151,10 @@ export class Tenant extends DurableObject<Env> {
       `"delivery":${JSON.stringify(delivery.id)},"payload":${delivery.body}}`;
 
     for (const socket of this.ctx.getWebSockets()) {
-      const session = socket.deserializeAttachment() as Session;
-      if (sessions.has(session.id)) send(socket, message);
+      const session = sessionOf(socket);
+      if (sessions.has(session.id)) {
+        send(socket, message);
+      }
     }
   }
 
@@ -143,9 +167,15 @@ export class Tenant extends DurableObject<Env> {
   private closeEverySocket(code: number, reason: string): void {
     this.closures += 1;
     for (const socket of this.ctx.getWebSockets()) {
-      const { state } = socket.deserializeAttachment() as Session;
-      if (state === "authorizing") continue;
-      if (state === "awaitingHello" && code === closeCode.recheck) continue;
+      const { state } = sessionOf(socket);
+      if (state === "authorizing") {
+        continue;
+      }
+
+      if (state === "awaitingHello" && code === closeCode.recheck) {
+        continue;
+      }
+
       this.end(socket, code, reason);
     }
   }
@@ -168,11 +198,19 @@ export class Tenant extends DurableObject<Env> {
   /** Finishes a browser sign-in: trades GitHub's code for the user's refresh token. */
   async signIn(code: string, verifier: string, redirectURL: string): Promise<SignIn> {
     const registration = await this.registration();
-    if (!registration) return { outcome: "unknownTenant" };
-    if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) return { outcome: "refused" };
+    if (registration === undefined) {
+      return { outcome: "unknownTenant" };
+    }
+
+    if (!inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
+      return { outcome: "refused" };
+    }
 
     const refreshToken = await refreshTokenForCode(registration, code, verifier, redirectURL);
-    return refreshToken ? { outcome: "signedIn", refreshToken } : { outcome: "refused" };
+
+    return refreshToken === undefined || refreshToken === ""
+      ? { outcome: "refused" }
+      : { outcome: "signedIn", refreshToken };
   }
 
   /**
@@ -181,7 +219,7 @@ export class Tenant extends DurableObject<Env> {
    */
   override async fetch(_request: Request): Promise<Response> {
     const registration = await this.registration();
-    if (!registration || !inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
+    if (registration === undefined || !inviteAccepted(this.env.INVITE_CODES, registration.invite)) {
       return new Response(null, { status: 404 });
     }
 
@@ -194,6 +232,7 @@ export class Tenant extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(session);
     await this.closeExpiredSessions();
+
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -204,33 +243,56 @@ export class Tenant extends DurableObject<Env> {
    * as the socket is open, and sends the replacement token back as the session message.
    */
   override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const session = socket.deserializeAttachment() as Session;
+    const session = sessionOf(socket);
     // A client sends one message. Anything after it is ignored.
-    if (session.state !== "awaitingHello") return;
+    if (session.state !== "awaitingHello") {
+      return;
+    }
 
     const token = helloToken(message);
-    if (!token) return this.end(socket, closeCode.notAuthorized, "no hello");
+    if (token === undefined) {
+      this.end(socket, closeCode.notAuthorized, "no hello");
+
+      return;
+    }
+
     const registration = await this.registration();
-    if (!registration) return this.end(socket, closeCode.tenantGone, "uninstalled");
+    if (registration === undefined) {
+      this.end(socket, closeCode.tenantGone, "uninstalled");
+
+      return;
+    }
 
     socket.serializeAttachment({
       ...session,
       state: "authorizing",
       expiresAt: now() + authorizingSeconds,
     } satisfies Session);
-    const closures = this.closures;
+    const { closures } = this;
 
-    let access;
-    try {
-      access = await accessForRefreshToken(registration, token);
-    } catch {
-      return this.end(socket, closeCode.unreachable, "GitHub unreachable");
+    const access = await accessForRefreshToken(registration, token).catch(
+      () => "unreachable" as const,
+    );
+    if (access === "unreachable") {
+      this.end(socket, closeCode.unreachable, "GitHub unreachable");
+
+      return;
     }
-    if (!access) return this.end(socket, closeCode.notAuthorized, "token refused");
+
+    if (access === undefined) {
+      this.end(socket, closeCode.notAuthorized, "token refused");
+
+      return;
+    }
 
     // Deliveries ran while GitHub answered. One may have deleted the tenant, or closed every
     // open socket because someone's access changed, which makes the list just read out of date.
-    if (!(await this.registration())) return this.end(socket, closeCode.tenantGone, "uninstalled");
+    if ((await this.registration()) === undefined) {
+      this.end(socket, closeCode.tenantGone, "uninstalled");
+
+      return;
+    }
+
     const outOfDate = closures !== this.closures;
 
     const open: Session = { id: session.id, expiresAt: now() + sessionSeconds, state: "open" };
@@ -245,6 +307,7 @@ export class Tenant extends DurableObject<Env> {
         );
       }
     }
+
     await this.closeExpiredSessions();
 
     send(
@@ -258,35 +321,40 @@ export class Tenant extends DurableObject<Env> {
     );
     // The old refresh token is spent, so the client needs the session message either way.
     // With an out-of-date list it then reconnects for a fresh one.
-    if (outOfDate) this.end(socket, closeCode.recheck, "recheck");
+    if (outOfDate) {
+      this.end(socket, closeCode.recheck, "recheck");
+    }
   }
 
   override async alarm(): Promise<void> {
     await this.closeExpiredSessions();
   }
 
-  override async webSocketClose(socket: WebSocket): Promise<void> {
+  override webSocketClose(socket: WebSocket): void {
     this.forget(socket);
   }
 
-  override async webSocketError(socket: WebSocket): Promise<void> {
+  override webSocketError(socket: WebSocket): void {
     this.forget(socket);
   }
 
   /** Closes the sockets whose session ran out, and sets the alarm for the next one that will. */
   private async closeExpiredSessions(): Promise<void> {
     const sockets = this.ctx.getWebSockets();
-    const sessions = sockets.map((socket) => socket.deserializeAttachment() as Session);
+    const sessions = sockets.map((socket) => sessionOf(socket));
     const { expired, next } = expiry(sessions, now());
 
     for (const socket of sockets) {
-      const session = socket.deserializeAttachment() as Session;
+      const session = sessionOf(socket);
       if (expired.some((other) => other.id === session.id)) {
         this.end(socket, expiredCloseCode(session), "expired");
       }
     }
+
     this.forgetSessionsWithoutSocket(sessions.filter((session) => !expired.includes(session)));
-    if (next !== undefined) await this.ctx.storage.setAlarm(next * 1000);
+    if (next !== undefined) {
+      await this.ctx.storage.setAlarm(next * 1000);
+    }
   }
 
   /**
@@ -294,7 +362,10 @@ export class Tenant extends DurableObject<Env> {
    * the Durable Object shuts down may never report its close.
    */
   private forgetSessionsWithoutSocket(open: Session[]): void {
-    if (!this.hasSessionTable) return;
+    if (!this.hasSessionTable) {
+      return;
+    }
+
     const stored = this.ctx.storage.sql
       .exec<{ session: string }>("SELECT DISTINCT session FROM session_repository")
       .toArray();
@@ -307,8 +378,11 @@ export class Tenant extends DurableObject<Env> {
 
   /** Deletes the repository IDs kept for a socket's session. */
   private forget(socket: WebSocket): void {
-    if (!this.hasSessionTable) return;
-    const session = socket.deserializeAttachment() as Session;
+    if (!this.hasSessionTable) {
+      return;
+    }
+
+    const session = sessionOf(socket);
     this.ctx.storage.sql.exec("DELETE FROM session_repository WHERE session = ?", session.id);
   }
 
@@ -330,10 +404,11 @@ export class Tenant extends DurableObject<Env> {
     const tables = this.ctx.storage.sql.exec(
       "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_repository'",
     );
+
     return tables.toArray().length > 0;
   }
 
-  private registration(): Promise<Registration | undefined> {
-    return this.ctx.storage.get<Registration>("registration");
+  private async registration(): Promise<Registration | undefined> {
+    return await this.ctx.storage.get<Registration>("registration");
   }
 }

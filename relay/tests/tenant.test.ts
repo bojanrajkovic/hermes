@@ -15,20 +15,22 @@ const registration = {
 let next = 0;
 function newTenant(): string {
   next += 1;
+
   return next.toString(16).padStart(32, "0");
 }
 
-function register(tenant: string, body: unknown): Promise<Response> {
-  return exports.default.fetch(`https://relay.test/tenants/${tenant}`, {
+async function register(tenant: string, body: unknown): Promise<Response> {
+  return await exports.default.fetch(`https://relay.test/tenants/${tenant}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
-function stored(tenant: string): Promise<unknown> {
-  return runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
-    state.storage.get("registration"),
+async function stored(tenant: string): Promise<unknown> {
+  return await runInDurableObject(
+    env.TENANT.getByName(tenant),
+    async (_instance, state) => await state.storage.get("registration"),
   );
 }
 
@@ -76,7 +78,7 @@ describe("POST /hook/:tenant", () => {
     body: string,
     signature?: string,
   ): Promise<Response> {
-    return exports.default.fetch(`https://relay.test/hook/${tenant}`, {
+    return await exports.default.fetch(`https://relay.test/hook/${tenant}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -90,6 +92,7 @@ describe("POST /hook/:tenant", () => {
   async function registered(): Promise<string> {
     const tenant = newTenant();
     await register(tenant, registration);
+
     return tenant;
   }
 
@@ -139,9 +142,9 @@ describe("POST /hook/:tenant", () => {
 
   it("refuses deliveries once the tenant's invite code is withdrawn", async () => {
     const tenant = newTenant();
-    await runInDurableObject(env.TENANT.getByName(tenant), (_instance, state) =>
-      state.storage.put("registration", { ...registration, invite: "withdrawn-code" }),
-    );
+    await runInDurableObject(env.TENANT.getByName(tenant), async (_instance, state) => {
+      await state.storage.put("registration", { ...registration, invite: "withdrawn-code" });
+    });
 
     expect((await deliver(tenant, "pull_request", pullRequest)).status).toBe(403);
   });

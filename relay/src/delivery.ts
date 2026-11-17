@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseJSON } from "./json";
 
 // The only fields of a GitHub payload the relay reads.
 const Routing = z.object({
@@ -29,21 +30,23 @@ const accessEvents = new Set([
 /** Decides what the relay does with a delivery whose signature has been verified. */
 export function classifyDelivery(event: string, body: string): DeliveryAction {
   const parsed = Routing.safeParse(parseJSON(body));
-  if (!parsed.success) return { action: "ignore" };
+  if (!parsed.success) {
+    return { action: "ignore" };
+  }
+
   const payload = parsed.data;
 
   if (event === "installation") {
     return payload.action === "deleted" ? { action: "delete" } : { action: "ignore" };
   }
-  if (accessEvents.has(event)) return { action: "recheck" };
-  if (payload.repository) return { action: "forward", repository: payload.repository.id };
-  return { action: "ignore" };
-}
 
-function parseJSON(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
+  if (accessEvents.has(event)) {
+    return { action: "recheck" };
   }
+
+  if (payload.repository !== null && payload.repository !== undefined) {
+    return { action: "forward", repository: payload.repository.id };
+  }
+
+  return { action: "ignore" };
 }

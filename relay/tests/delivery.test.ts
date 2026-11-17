@@ -3,7 +3,7 @@ import { classifyDelivery } from "../src/delivery";
 
 const repository = { id: 7, full_name: "acme/site" };
 
-const body = (payload: unknown) => JSON.stringify(payload);
+const body = (payload: unknown): string => JSON.stringify(payload);
 
 describe("classifyDelivery", () => {
   it.each(["pull_request", "issue_comment", "check_run", "status", "some_future_event"])(

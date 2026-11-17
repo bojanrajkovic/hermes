@@ -1,5 +1,5 @@
 import { exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi, type MockInstance } from "vitest";
 
 const registration = {
   invite: "first-code",
@@ -17,33 +17,35 @@ async function registeredTenant(): Promise<string> {
     method: "PUT",
     body: JSON.stringify(registration),
   });
+
   return tenant;
 }
 
 const unregistered = "f".repeat(32);
 
-function get(path: string): Promise<Response> {
-  return exports.default.fetch(`https://relay.test${path}`, { redirect: "manual" });
+async function get(path: string): Promise<Response> {
+  return await exports.default.fetch(`https://relay.test${path}`, { redirect: "manual" });
 }
 
 // The example in RFC 7636, appendix B.
 const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 const challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
-function requestSession(tenant: string, body: unknown): Promise<Response> {
-  return exports.default.fetch(`https://relay.test/t/${tenant}/session`, {
+async function requestSession(tenant: string, body: unknown): Promise<Response> {
+  return await exports.default.fetch(`https://relay.test/t/${tenant}/session`, {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
 
 /** Answers GitHub's token endpoint with `answer`, and records what the relay sent it. */
-function gitHubAnswers(answer: unknown) {
+function gitHubAnswers(answer: unknown): MockInstance<typeof fetch> {
   // Octokit works out a token's expiry from the response's Date header.
   const headers = { date: new Date().toUTCString() };
+
   return vi
     .spyOn(globalThis, "fetch")
-    .mockImplementation(async () => Response.json(answer, { headers }));
+    .mockImplementation(async () => await Promise.resolve(Response.json(answer, { headers })));
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -114,8 +116,10 @@ describe("POST /t/:tenant/session", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ refreshToken: "ghr_refresh" });
     const [url, init] = gitHub.mock.calls[0] ?? [];
-    expect(String(url)).toBe("https://github.com/login/oauth/access_token");
-    expect(JSON.parse(String(init?.body))).toEqual({
+    expect(url).toBe("https://github.com/login/oauth/access_token");
+    const sent = init?.body;
+    assert(typeof sent === "string", "the relay sent GitHub no text body");
+    expect(JSON.parse(sent)).toEqual({
       client_id: "Iv1.client",
       client_secret: "client-secret",
       code: "gh-code",
@@ -144,7 +148,7 @@ describe("POST /t/:tenant/session", () => {
   it("reports an error, not a refusal, when GitHub is down", async () => {
     const tenant = await registeredTenant();
     vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () => new Response("unavailable", { status: 503 }),
+      async () => await Promise.resolve(new Response("unavailable", { status: 503 })),
     );
 
     expect((await requestSession(tenant, { grant: "gh-code", verifier })).status).toBe(500);

@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { CodeChallenge, CodeVerifier } from "./session";
+import type { Tenant } from "./tenant";
 
 export { Tenant } from "./tenant";
 
@@ -11,11 +12,12 @@ const app = new Hono<App>();
 // Hono's default handler prints the error. The relay prints nothing.
 app.onError((_error, c) => c.body(null, 500));
 
-const tenantID = /^[0-9a-f]{32}$/;
+const tenantID = /^[0-9a-f]{32}$/v;
 
 /** The Durable Object for the tenant named in the path, or undefined when the ID is malformed. */
-function tenant(c: Context<App>) {
+function tenant(c: Context<App>): DurableObjectStub<Tenant> | undefined {
   const id = c.req.param("tenant") ?? "";
+
   return tenantID.test(id) ? c.env.TENANT.getByName(id) : undefined;
 }
 
@@ -30,10 +32,13 @@ const registrationStatus = {
 
 app.put("/tenants/:tenant", async (c) => {
   const stub = tenant(c);
-  if (!stub) return c.notFound();
+  if (stub === undefined) {
+    return await c.notFound();
+  }
 
   const body: unknown = await c.req.json().catch(() => undefined);
   const outcome = await stub.register(body);
+
   return c.body(null, registrationStatus[outcome]);
 });
 
@@ -46,7 +51,9 @@ const deliveryStatus = {
 
 app.post("/hook/:tenant", async (c) => {
   const stub = tenant(c);
-  if (!stub) return c.notFound();
+  if (stub === undefined) {
+    return await c.notFound();
+  }
 
   const outcome = await stub.deliver({
     event: c.req.header("x-github-event") ?? "",
@@ -54,20 +61,26 @@ app.post("/hook/:tenant", async (c) => {
     signature: c.req.header("x-hub-signature-256") ?? "",
     body: await c.req.text(),
   });
+
   return c.body(null, deliveryStatus[outcome]);
 });
 
 /** Where GitHub sends the browser after sign-in. It must match one of the App's callback URLs. */
 function callbackURL(c: Context<App>): string {
-  return `${new URL(c.req.url).origin}/t/${c.req.param("tenant")}/callback`;
+  return `${new URL(c.req.url).origin}/t/${c.req.param("tenant") ?? ""}/callback`;
 }
 
 app.get("/t/:tenant/login", async (c) => {
   const clientID = await tenant(c)?.clientID();
-  if (!clientID) return c.notFound();
+  if (clientID === undefined) {
+    return await c.notFound();
+  }
+
   // The client keeps the verifier for this challenge and sends it with the grant.
   const challenge = CodeChallenge.safeParse(c.req.query("code_challenge"));
-  if (!challenge.success) return c.body(null, 400);
+  if (!challenge.success) {
+    return c.body(null, 400);
+  }
 
   const authorize = new URL("https://github.com/login/oauth/authorize");
   authorize.searchParams.set("client_id", clientID);
@@ -75,20 +88,27 @@ app.get("/t/:tenant/login", async (c) => {
   authorize.searchParams.set("state", c.req.query("state") ?? "");
   authorize.searchParams.set("code_challenge", challenge.data);
   authorize.searchParams.set("code_challenge_method", "S256");
+
   return c.redirect(authorize.toString());
 });
 
 // GitHub's code goes to Hermes as the grant, untouched: the relay holds nothing between the
 // browser's sign-in and the client's request for a session.
-app.get("/t/:tenant/callback", (c) => {
-  if (!tenant(c)) return c.notFound();
+app.get("/t/:tenant/callback", async (c) => {
+  if (tenant(c) === undefined) {
+    return await c.notFound();
+  }
+
   const code = c.req.query("code");
-  if (!code) return c.text("GitHub did not authorize the sign-in.", 400);
+  if (code === undefined || code === "") {
+    return c.text("GitHub did not authorize the sign-in.", 400);
+  }
 
   const link = new URL("hermes://relay.session");
   link.searchParams.set("tenant", c.req.param("tenant"));
   link.searchParams.set("grant", code);
   link.searchParams.set("state", c.req.query("state") ?? "");
+
   return c.redirect(link.toString());
 });
 
@@ -96,26 +116,37 @@ const SessionRequest = z.object({ grant: z.string().min(1), verifier: CodeVerifi
 
 app.post("/t/:tenant/session", async (c) => {
   const stub = tenant(c);
-  if (!stub) return c.notFound();
+  if (stub === undefined) {
+    return await c.notFound();
+  }
+
   const request = SessionRequest.safeParse(await c.req.json().catch(() => undefined));
-  if (!request.success) return c.body(null, 400);
+  if (!request.success) {
+    return c.body(null, 400);
+  }
 
   const signIn = await stub.signIn(request.data.grant, request.data.verifier, callbackURL(c));
   switch (signIn.outcome) {
     case "signedIn":
       return c.json({ refreshToken: signIn.refreshToken });
     case "unknownTenant":
-      return c.notFound();
+      return await c.notFound();
     case "refused":
       return c.body(null, 403);
   }
 });
 
-app.get("/t/:tenant/connect", (c) => {
+app.get("/t/:tenant/connect", async (c) => {
   const stub = tenant(c);
-  if (!stub) return c.notFound();
-  if (c.req.header("upgrade") !== "websocket") return c.body(null, 426);
-  return stub.fetch(c.req.raw);
+  if (stub === undefined) {
+    return await c.notFound();
+  }
+
+  if (c.req.header("upgrade") !== "websocket") {
+    return c.body(null, 426);
+  }
+
+  return await stub.fetch(c.req.raw);
 });
 
 export default app;

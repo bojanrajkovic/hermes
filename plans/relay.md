@@ -405,6 +405,7 @@ relay/
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
+│   ├── json.ts           parses JSON text without throwing
 │   ├── worker-settings.ts   what the deployed Worker's settings must be; used by the verify workflow, not by the Worker
 │   └── github.ts         the calls to GitHub
 ├── scripts/
@@ -413,6 +414,8 @@ relay/
 ├── tests/                Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
+├── oxlint.config.ts      the relay's own lint rules, each with a comment saying why
+├── oxlint.presets.ts     the rules of ESLint's and typescript-eslint's presets
 ├── .oxfmtrc.json         the formatter's settings
 ├── tsconfig.json         the compiler settings, on top of @tsconfig/strictest
 ├── package.json
@@ -458,6 +461,32 @@ if a package's registry signature doesn't verify.
 Routing uses [Hono](https://hono.dev). Request bodies are checked with
 [Zod](https://zod.dev).
 
+## Lint
+
+Oxlint runs the rules, and tsgolint runs the type-aware ones with TypeScript 7,
+reading each file's nearest `tsconfig.json`. The rules are the ones airway and
+order-up use, in two files:
+
+- `oxlint.presets.ts` holds the rules of ESLint's recommended preset and
+  typescript-eslint's `strictTypeChecked` and `stylisticTypeChecked` presets,
+  translated for Oxlint, which has no presets of its own.
+- `oxlint.config.ts` holds the house rules, each with a comment saying why.
+
+A few house rules shape how the code reads:
+
+- Types, not interfaces, and named return types instead of inline object
+  shapes.
+- Conditions are real booleans: `if (stub === undefined)`, never `if (!stub)`.
+- Every `if` has braces, with a blank line after each block and before each
+  `return`.
+- No casts that claim more than the compiler knows. Parse with Zod, or narrow
+  with a type guard. `worker-settings.ts` narrows by hand, because the verify
+  workflow runs it with no packages installed.
+- A function that returns a promise is `async` and awaits what it returns.
+
+One cast remains. `sessionOf` in `tenant.ts` reads the session the relay
+attached to a socket, behind a disable comment that says why.
+
 ## Settings
 
 Workers Logs are off in `wrangler.jsonc`, so Cloudflare keeps no record of the
@@ -478,9 +507,10 @@ The relay's scripts run from `relay/`:
 
 | Script | What it does |
 |---|---|
-| `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck` and `test` together and reports every failure instead of stopping at the first. |
+| `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck`, `lint`, `format:check`, and `test` together and reports every failure instead of stopping at the first. |
 | `pnpm typecheck` | `tsc` on each of the three projects below, against the types `pnpm check` generated. |
 | `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
+| `pnpm lint` | [Oxlint](https://oxc.rs/docs/guide/usage/linter), with type-aware rules. |
 | `pnpm format` / `format:check` | [Oxfmt](https://oxc.rs/docs/guide/usage/formatter): rewrite the files, or only report. It formats TypeScript and JSON at a width of 100. |
 | `pnpm build` | Bundles the Worker into `dist/index.js` with `wrangler deploy --dry-run`. |
 | `pnpm dev` | Runs the Worker locally. |
