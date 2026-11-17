@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["../worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"]
   },
-  "include": ["."]
+  "include": ["."],
+  "exclude": ["lint"]
 }

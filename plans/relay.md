@@ -412,6 +412,7 @@ relay/
 │   ├── deployed-script.ts    downloads the script Cloudflare is running
 │   └── check-settings.ts     checks the deployed Worker's settings
 ├── tests/                Vitest tests, run inside the Workers runtime
+│   └── lint/             the lint fixture test and its fixture, run by Node
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
 ├── oxlint.config.ts      the relay's own lint rules, each with a comment saying why
@@ -426,7 +427,7 @@ relay/
 The repository's `mise.toml` pins the Node and pnpm versions.
 [build-system.md](build-system.md#tool-versions) describes it.
 
-The code runs in two places, so it type-checks as three projects. Each has
+The code runs in two places, so it type-checks as four projects. Each has
 only the types of the place it runs, so Worker code that reaches for a Node
 API fails to compile.
 
@@ -435,6 +436,7 @@ API fails to compile.
 | `tsconfig.json` | `scripts/` and the config files beside it, which Node runs | Node |
 | `src/tsconfig.json` | The Worker | The Workers runtime, from `wrangler types` |
 | `tests/tsconfig.json` | The tests | The Workers runtime and the Vitest plugin |
+| `tests/lint/tsconfig.json` | The lint fixture test, which Node runs | Node |
 
 Node runs the scripts as TypeScript, with no build step. The verify workflow
 runs them without installing packages, so they and `worker-settings.ts` import
@@ -487,6 +489,14 @@ A few house rules shape how the code reads:
 One cast remains. `sessionOf` in `tenant.ts` reads the session the relay
 attached to a socket, behind a disable comment that says why.
 
+Oxlint runs some rules through JavaScript plugins it marks as alpha.
+`tests/lint/lint.test.ts` lints `tests/lint/fixtures/violations.ts`, which
+breaks a set of rules on purpose, including every rule that runs as an alpha
+plugin, and checks the exact count per rule. An Oxlint update that stops a
+rule reporting fails that test. `pnpm lint` skips the fixture. Vitest runs
+this test in a `node` project and the rest in a `worker` project, inside the
+Workers runtime.
+
 ## Settings
 
 Workers Logs are off in `wrangler.jsonc`, so Cloudflare keeps no record of the
@@ -508,7 +518,7 @@ The relay's scripts run from `relay/`:
 | Script | What it does |
 |---|---|
 | `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck`, `lint`, `format:check`, and `test` together and reports every failure instead of stopping at the first. |
-| `pnpm typecheck` | `tsc` on each of the three projects below, against the types `pnpm check` generated. |
+| `pnpm typecheck` | `tsc` on each of the four projects below, against the types `pnpm check` generated. |
 | `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
 | `pnpm lint` | [Oxlint](https://oxc.rs/docs/guide/usage/linter), with type-aware rules. |
 | `pnpm format` / `format:check` | [Oxfmt](https://oxc.rs/docs/guide/usage/formatter): rewrite the files, or only report. It formats TypeScript and JSON at a width of 100. |
