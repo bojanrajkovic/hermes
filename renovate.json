@@ -6,7 +6,36 @@
     "description": "The weekly refresh moves the packages the relay's own packages depend on, which are in its bundle, so a person merges it",
     "automerge": false
   },
+  "customDatasources": {
+    "xcode": {
+      "description": "Xcode's releases, from the feed the xcodes tool uses. Betas and release candidates are left out",
+      "defaultRegistryUrlTemplate": "https://xcodereleases.com/data.json",
+      "format": "json",
+      "transformTemplates": [
+        "{ \"releases\": $[version.release.release = true].{ \"version\": version.number }, \"homepage\": \"https://developer.apple.com/xcode/\" }"
+      ]
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Xcode the Makefile builds with",
+      "managerFilePatterns": ["/^\\.xcode-version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "Xcode",
+      "datasourceTemplate": "custom.xcode",
+      "versioningTemplate": "loose"
+    }
+  ],
   "packageRules": [
+    {
+      "description": "A new Xcode has to be installed on every Mac that builds Hermes before its update merges, and it changes the compiler and the SDK",
+      "matchPackageNames": ["Xcode"],
+      "automerge": false,
+      "prBodyNotes": [
+        "Install this Xcode with `xcodes install` on this branch, then run `make check`, `make test`, and `make build`."
+      ]
+    },
     {
       "description": "A merge under relay/ deploys the relay. The packages its code imports are in the bundle tenants are told they can check, so a person merges their updates",
       "matchFileNames": ["relay/**"],

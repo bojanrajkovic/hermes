@@ -58,6 +58,23 @@ script interpreter doesn't load AppKit. The macOS SDK, `codesign`, and
 `iconutil` come from Xcode either way, so the Xcode version decides what
 builds.
 
+`.xcode-version` names that Xcode. Three things read it:
+
+- **[xcodes](https://github.com/XcodesOrg/xcodes).** `xcodes install` with no
+  argument installs the version in the file.
+- **The Makefile.** It looks for that version in `/Applications`, under the
+  name xcodes gives it (`Xcode-27.1.0.app`) or the name GitHub's runners give
+  it (`Xcode_27.1.app`). When it finds one, it sets `DEVELOPER_DIR`, so every
+  command `make` runs uses that Xcode. The machine's `xcode-select` choice
+  stays as it is, and other projects keep theirs.
+- **`make deps`.** It fails when `xcodebuild -version` reports another
+  version, and says to run `xcodes install`.
+
+`swift build` run outside `make` uses whatever `xcode-select` points at.
+The setting lives in the Makefile and not in `mise.toml`: `git` on macOS
+runs through Xcode too, so a `DEVELOPER_DIR` that mise set for a version not
+yet installed would stop `git` working in this directory.
+
 ## Dependency updates
 
 [Renovate](https://docs.renovatebot.com) opens pull requests for dependency
@@ -74,6 +91,7 @@ pass, and leaves majors and 0.x minors for a person.
 | The relay's weekly lockfile refresh | `relay/pnpm-lock.yaml` | No |
 | Actions | `.github/workflows/` | No |
 | Swift packages | `Package.swift` | No |
+| Xcode | `.xcode-version` | No |
 
 A merge under `relay/` deploys the relay. So nothing that changes its bundle,
 or the workflows that build, attest, and check it, merges without a person.
@@ -88,9 +106,10 @@ to run `swift package resolve` and commit the result.
 [PROBLEMS.md](../PROBLEMS.md) lists the extra step for a grammar with a
 copied scanner and for `libghostty-spm`.
 
-Renovate doesn't see these, and a person updates them:
-
-- Xcode.
+Renovate learns of a new Xcode from `xcodereleases.com`, the feed xcodes
+itself uses, and offers releases only, not betas or release candidates. A
+`customDatasources` entry in `renovate.json` reads the feed. Install the new
+Xcode before merging its update, or `make deps` fails.
 
 Update pull requests are titled as plain sentences, such as "Update
 dependency hono to v4.14.0", like the rest of this repository's commits. The

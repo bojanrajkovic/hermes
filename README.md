@@ -10,7 +10,9 @@ a pull request or an issue.
 ## Requirements
 
 - macOS 26 or newer.
-- A Swift 6.2 toolchain. Xcode provides `swift`, `codesign`, and `iconutil`.
+- The Xcode that `.xcode-version` names. It provides `swift`, `codesign`, and
+  `iconutil`. With [xcodes](https://github.com/XcodesOrg/xcodes), `xcodes install`
+  installs it.
   The build does not use an Xcode project or `xcodebuild`.
 - The GitHub CLI, logged in: `brew install gh`, then `gh auth login`. Hermes
   reads its token from `gh auth token` and stores no credentials.
