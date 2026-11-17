@@ -1,0 +1,46 @@
+# Compiles the Swift package and runs its tests.
+name: Swift check
+
+on:
+  pull_request:
+    paths:
+      - "Package.swift"
+      - "Package.resolved"
+      - "Sources/**"
+      - "Tests/**"
+      - ".xcode-version"
+      - "Makefile"
+      - ".github/workflows/swift-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Package.swift"
+      - "Package.resolved"
+      - "Sources/**"
+      - "Tests/**"
+      - ".xcode-version"
+      - "Makefile"
+      - ".github/workflows/swift-check.yml"
+
+permissions:
+  contents: read # check out the repository
+
+# A newer push to the same pull request replaces the run in progress. Runs on main all finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    name: Compile and test
+    # The image with Xcode 27. The Makefile picks the version .xcode-version names from the ones
+    # the image carries, and `make deps` fails if it isn't there.
+    runs-on: xcode-27
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make check
+      - run: make test

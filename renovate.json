@@ -53,7 +53,7 @@
       "automerge": false
     },
     {
-      "description": "Swift packages never merge on their own. No workflow builds the app, and PROBLEMS.md ties several versions to copied files and to behavior a person checks",
+      "description": "Swift packages never merge on their own. PROBLEMS.md ties several versions to copied files and to behavior a person checks, which Swift check doesn't cover",
       "matchManagers": ["swift"],
       "automerge": false,
       "prBodyNotes": [

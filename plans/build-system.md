@@ -171,8 +171,12 @@ in.
 
 ## Tests
 
-`make test` runs the tests that need nothing but the machine. Other tests run
-only when an environment variable is set:
+`make test` runs the tests that need nothing but the machine. The `Swift
+check` workflow runs `make check` and `make test` on GitHub's Xcode 27 image,
+for a pull request or a push to `main` that changes the package, its sources
+or tests, `.xcode-version`, or the Makefile.
+
+Other tests run only when an environment variable is set:
 
 | Variable | What runs |
 |----------|-----------|
