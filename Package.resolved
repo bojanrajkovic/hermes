@@ -1,5 +1,5 @@
 {
-  "originHash" : "9a73aa671f060991afe0c6017ea91ee68c08698714de74b1a22df74e328d92f7",
+  "originHash" : "3f61beef34e87b15b2904b9103012eaac22cee7989ec2cc3e878bc009121411f",
   "pins" : [
     {
       "identity" : "displaylink",
@@ -141,7 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/alex-pinkus/tree-sitter-swift",
       "state" : {
-        "revision" : "82bb3a533e0801fd2bbaa11dc49676e10bf41948"
+        "revision" : "82bb3a533e0801fd2bbaa11dc49676e10bf41948",
+        "version" : "0.7.4-with-generated-files"
       }
     },
     {

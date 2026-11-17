@@ -14,8 +14,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/tree-sitter/swift-tree-sitter", from: "0.10.0"),
         .package(url: "https://github.com/Lakr233/libghostty-spm.git", exact: "2.2.2026110702"),
-        // The plain release tags omit the generated parser.
-        .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", revision: "82bb3a533e0801fd2bbaa11dc49676e10bf41948"),
+        // The plain release tags omit the generated parser. These tags include it.
+        .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", exact: "0.7.4-with-generated-files"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-javascript", exact: "0.25.0"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-go", from: "0.25.0"),

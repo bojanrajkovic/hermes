@@ -90,8 +90,6 @@ copied scanner and for `libghostty-spm`.
 
 Renovate doesn't see these, and a person updates them:
 
-- `tree-sitter-swift`, which is pinned to a revision. `renovate.json` switches
-  it off, because Renovate would offer a release tag, and those don't build.
 - Xcode.
 
 Update pull requests are titled as plain sentences, such as "Update

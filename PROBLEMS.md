@@ -18,11 +18,13 @@ The copies must match the grammar versions. That is why `Package.swift` pins
 these four packages with `exact:`. To upgrade one, change its version and copy
 the new `src/scanner.c` over the file in `Sources/TreeSitterScanners`.
 
-## tree-sitter-swift is pinned to a revision
+## tree-sitter-swift is pinned to a tag with generated files
 
-The release tags of `alex-pinkus/tree-sitter-swift` do not contain the
-generated parser, so a tagged version does not build. `Package.swift` pins a
-revision that includes the generated files.
+The plain release tags of `alex-pinkus/tree-sitter-swift`, such as `0.7.4`,
+do not contain the generated parser, so they do not build. Each release has
+a second tag that does, such as `0.7.4-with-generated-files`. `Package.swift`
+pins that one with `exact:`, and `renovate.json` tells Renovate that only
+those tags are versions.
 
 ## libghostty-spm is pinned to an exact version
 

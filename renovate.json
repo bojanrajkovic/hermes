@@ -32,9 +32,9 @@
       ]
     },
     {
-      "description": "tree-sitter-swift is pinned to a revision, because its release tags don't build. Renovate would offer a tag in its place",
+      "description": "tree-sitter-swift's plain tags omit the generated parser and don't build. Only its -with-generated-files tags count as versions",
       "matchPackageNames": ["alex-pinkus/tree-sitter-swift"],
-      "enabled": false
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-with-generated-files$"
     }
   ]
 }
