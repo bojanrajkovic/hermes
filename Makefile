@@ -64,7 +64,7 @@ NOTES_FILE       ?=
 
 .PHONY: all deps build check test release run clean install uninstall register help \
         icon check-version notary-setup sign zip-notary notarize staple zip-release \
-        checksum verify-release dist github-release print-version
+        checksum verify-release dist github-release print-version packages
 
 all: build
 
@@ -73,6 +73,7 @@ help:
 	@echo "  make / build      Build $(CONFIG) into ./$(APP)  (default)"
 	@echo "  check             Compile only (swift build) — no bundle/sign; CI/agent gate"
 	@echo "  test              Run the SwiftPM test suite"
+	@echo "  packages          After a version change in Package.swift: resolve the packages and re-copy the grammar scanners"
 	@echo "  release           Build release into ./$(APP)"
 	@echo "  run               Build and launch $(APP_NAME)"
 	@echo "  icon              Regenerate build/AppIcon.icns from scripts/make-icon.swift"
@@ -156,6 +157,17 @@ check: deps
 test: deps
 	swift test
 	@echo "✓ tests pass"
+
+# Bring Package.resolved and Sources/TreeSitterScanners in line with Package.swift. Four grammar
+# packages don't compile their scanner as a dependency (PROBLEMS.md), so the app compiles copies,
+# and the copies must come from the resolved versions. The YAML scanner includes its schema files.
+packages: deps
+	swift package resolve
+	@for language in css javascript python yaml; do \
+	  cp ".build/checkouts/tree-sitter-$$language/src/scanner.c" "Sources/TreeSitterScanners/$$language-scanner.c" || exit 1; \
+	done
+	@cp .build/checkouts/tree-sitter-yaml/src/schema.*.c Sources/TreeSitterScanners/
+	@echo "✓ Package.resolved and the copied scanners match Package.swift"
 
 print-version:
 	@echo "VERSION=$(VERSION)"
