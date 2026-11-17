@@ -8,31 +8,27 @@ import PackageDescription
 // target. The `Hermes` executable is the shell that wires them together.
 let swift6: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 
-func grammar(_ repo: String, _ version: Version) -> Package.Dependency {
-    .package(url: "https://github.com/\(repo)", from: version)
-}
-
 let package = Package(
     name: "Hermes",
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(url: "https://github.com/tree-sitter/swift-tree-sitter", from: "0.10.0"),
         .package(url: "https://github.com/Lakr233/libghostty-spm.git", exact: "2.2.2026110702"),
-        // The plain release tags omit the generated parser.
-        .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", revision: "82bb3a533e0801fd2bbaa11dc49676e10bf41948"),
-        grammar("tree-sitter/tree-sitter-typescript", "0.23.2"),
+        // The plain release tags omit the generated parser. These tags include it.
+        .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", exact: "0.7.4-with-generated-files"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-javascript", exact: "0.25.0"),
-        grammar("tree-sitter/tree-sitter-go", "0.25.0"),
-        grammar("tree-sitter/tree-sitter-rust", "0.24.2"),
-        grammar("tree-sitter/tree-sitter-c-sharp", "0.23.5"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-go", from: "0.25.0"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-rust", from: "0.24.2"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-c-sharp", from: "0.23.5"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-python", exact: "0.25.0"),
-        .package(path: "Vendor/tree-sitter-ruby"),
-        grammar("tree-sitter/tree-sitter-json", "0.24.8"),
-        grammar("tree-sitter/tree-sitter-bash", "0.25.1"),
-        grammar("tree-sitter-grammars/tree-sitter-hcl", "1.2.0"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-ruby", from: "0.23.1"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-bash", from: "0.25.1"),
+        .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-hcl", from: "1.2.0"),
         .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-yaml", exact: "0.7.2"),
-        grammar("tree-sitter-grammars/tree-sitter-toml", "0.7.0"),
-        grammar("tree-sitter/tree-sitter-html", "0.23.2"),
+        .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-toml", from: "0.7.0"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-html", from: "0.23.2"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-css", exact: "0.25.0"),
     ],
     targets: [

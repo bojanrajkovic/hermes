@@ -1,5 +1,5 @@
 {
-  "originHash" : "a4bec1aa975e6b06c962e9bc11fb8982dbdc984ba2d0809a1774c3cbb8d18acc",
+  "originHash" : "3f61beef34e87b15b2904b9103012eaac22cee7989ec2cc3e878bc009121411f",
   "pins" : [
     {
       "identity" : "displaylink",
@@ -119,6 +119,15 @@
       }
     },
     {
+      "identity" : "tree-sitter-ruby",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tree-sitter/tree-sitter-ruby",
+      "state" : {
+        "revision" : "71bd32fb7607035768799732addba884a37a6210",
+        "version" : "0.23.1"
+      }
+    },
+    {
       "identity" : "tree-sitter-rust",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tree-sitter/tree-sitter-rust",
@@ -132,7 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/alex-pinkus/tree-sitter-swift",
       "state" : {
-        "revision" : "82bb3a533e0801fd2bbaa11dc49676e10bf41948"
+        "revision" : "82bb3a533e0801fd2bbaa11dc49676e10bf41948",
+        "version" : "0.7.4-with-generated-files"
       }
     },
     {
