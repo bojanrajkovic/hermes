@@ -36,6 +36,28 @@ flowchart LR
 A change must pass `make check` and `make test`. Look at a UI change in the
 running app too, because a view can compile and still lay out wrong.
 
+## Tool versions
+
+Swift comes from Xcode. So do the macOS SDK, `codesign`, and `iconutil`, so
+the Xcode version decides what builds.
+
+`.xcode-version` names that Xcode. Three things read it:
+
+- **[xcodes](https://github.com/XcodesOrg/xcodes).** `xcodes install` with no
+  argument installs the version in the file.
+- **The Makefile.** It looks for that version in `/Applications`, under the
+  name xcodes gives it (`Xcode-27.1.0.app`) or the name GitHub's runners give
+  it (`Xcode_27.1.app`). When it finds one, it sets `DEVELOPER_DIR`, so every
+  command `make` runs uses that Xcode. The machine's `xcode-select` choice
+  stays as it is, and other projects keep theirs.
+- **`make deps`.** It fails when `xcodebuild -version` reports another
+  version, and says to run `xcodes install`.
+
+`swift build` run outside `make` uses whatever `xcode-select` points at.
+The setting lives in the Makefile and not in the shell's environment: `git`
+on macOS runs through Xcode too, so a `DEVELOPER_DIR` set there for a version
+not yet installed would stop `git` working in this directory.
+
 ## The package
 
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every

@@ -19,6 +19,15 @@ LSREGISTER   := /System/Library/Frameworks/CoreServices.framework/Versions/Curre
 MIN_MACOS    := 26
 MIN_SWIFT    := 6.0
 
+# The Xcode this repository builds with. `xcodes install` and `xcodes select` read the same file.
+# xcodes installs Xcode 27.1 as Xcode-27.1.0.app, and GitHub's runners have it as Xcode_27.1.app.
+# When one of those exists, every command make runs uses it, whatever `xcode-select` points at.
+XCODE_VERSION := $(shell cat .xcode-version)
+XCODE_APP     := $(firstword $(wildcard $(foreach v,$(XCODE_VERSION) $(XCODE_VERSION).0,/Applications/Xcode-$(v).app /Applications/Xcode_$(v).app)))
+ifneq ($(XCODE_APP),)
+export DEVELOPER_DIR := $(XCODE_APP)/Contents/Developer
+endif
+
 APP_NAME      := Hermes
 ENTITLEMENTS  := Hermes/Hermes.entitlements
 
@@ -101,6 +110,12 @@ deps:
 	@command -v swift >/dev/null 2>&1 || { \
 	  echo "  ✗ swift not on PATH. Install Xcode (App Store) or the Swift toolchain"; \
 	  echo "    from https://swift.org/install/macos/, then re-run."; exit 1; }
+	@XCODE_LINE=$$(xcodebuild -version 2>/dev/null | head -1); \
+	if [ "$$XCODE_LINE" != "Xcode $(XCODE_VERSION)" ]; then \
+	  echo "  ✗ $(APP_NAME) builds with Xcode $(XCODE_VERSION) (.xcode-version). Found: $${XCODE_LINE:-no Xcode}."; \
+	  echo "    Install it with: xcodes install"; exit 1; \
+	fi; \
+	echo "  ✓ $$XCODE_LINE"
 	@SW_LINE=$$(swift --version 2>&1 | head -1); \
 	echo "  ✓ $$SW_LINE"
 	@[ -f Package.swift ] || { echo "  ✗ Package.swift not found. Run make from the repo root."; exit 1; }

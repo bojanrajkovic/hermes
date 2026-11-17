@@ -17,7 +17,7 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 - [plans/deep-links.md](plans/deep-links.md): the `hermes://` links and what each opens.
 - [plans/sessions.md](plans/sessions.md): launching Claude Code sessions, worktrees, and the embedded terminal.
 - [plans/design-system.md](plans/design-system.md): the type scale, layout metrics, and shared views in `HermesUI`.
-- [plans/build-system.md](plans/build-system.md): how `make` and `build.sh` turn the package into a signed app, and the test switches.
+- [plans/build-system.md](plans/build-system.md): how `make` and `build.sh` turn the package into a signed app, the Xcode version `.xcode-version` pins, and the test switches.
 
 ## Decisions
 
