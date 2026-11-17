@@ -15,8 +15,10 @@ YAML scanner's three schema files. `SyntaxKit` depends on it, which supplies
 the missing symbols.
 
 The copies must match the grammar versions. That is why `Package.swift` pins
-these four packages with `exact:`. To upgrade one, change its version and copy
-the new `src/scanner.c` over the file in `Sources/TreeSitterScanners`.
+these four packages with `exact:`. To upgrade one, change its version and run
+`make packages`, which resolves the packages and copies each new
+`src/scanner.c` over the file in `Sources/TreeSitterScanners`. On a pull
+request, the `Swift packages` workflow does this and commits the result.
 
 ## tree-sitter-swift is pinned to a tag with generated files
 

@@ -1,0 +1,117 @@
+# Finishes a pull request that changes Package.swift, such as one of Renovate's. Renovate edits the
+# manifest only. This runs `make packages`, which resolves the packages and re-copies the grammar
+# scanners PROBLEMS.md describes, and commits any difference to the pull request as the releaser
+# bot. The bot's commits start Swift check, which GITHUB_TOKEN's wouldn't, and Renovate ignores
+# them (gitIgnoredAuthors in renovate.json), so it keeps rebasing its branch.
+#
+# Resolving runs the manifests of the packages the pull request names, so that job gets no secrets
+# and hands over only a patch. The job that holds the App token runs no package code: it applies
+# the patch, limited to Package.resolved and Sources/TreeSitterScanners, and pushes.
+name: Swift packages
+
+on:
+  pull_request:
+    paths:
+      - "Package.swift"
+      - ".github/workflows/swift-packages.yml"
+
+permissions: {}
+
+# A newer push to the same pull request replaces the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Resolve the packages
+    # A fork's pull request can't be pushed to.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # The image with Xcode 27. The Makefile picks the version .xcode-version names.
+    runs-on: xcode-27
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 20
+    permissions:
+      contents: read # check out the repository
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: make packages
+      - name: Diff the resolved packages and the copied scanners
+        id: diff
+        run: |
+          # Intent-to-add, so new files show up in the diff too.
+          git add --intent-to-add -- Package.resolved Sources/TreeSitterScanners
+          git diff --binary -- Package.resolved Sources/TreeSitterScanners > packages.patch
+          if [ -s packages.patch ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Package.resolved and the copied scanners already match Package.swift."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-patch
+          path: packages.patch
+          retention-days: 1
+
+  commit:
+    name: Commit the result
+    needs: resolve
+    if: needs.resolve.outputs.changed == 'true'
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 5
+    # The releaser bot's App ID and private key belong to this environment.
+    environment: ci
+    permissions:
+      contents: read # check out the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages-patch
+          path: ${{ runner.temp }}/packages
+      - name: Apply the patch to Package.resolved and the copied scanners only
+        env:
+          PATCH: ${{ runner.temp }}/packages/packages.patch
+        run: |
+          # The patch came from a job that ran packages' manifests, so it may touch nothing else.
+          if git apply --numstat -- "$PATCH" | cut -f3 |
+            grep -v -e '^Package\.resolved$' -e '^Sources/TreeSitterScanners/'; then
+            echo "The patch touches files outside Package.resolved and Sources/TreeSitterScanners/." >&2
+            exit 1
+          fi
+          git apply -- "$PATCH"
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # GitHub's noreply form for the bot, which renovate.json's gitIgnoredAuthors lists.
+          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git add -- Package.resolved Sources/TreeSitterScanners
+          git commit -m "Resolve the packages Package.swift names"
+          # A push onto the commit the patch was made from, so it fails if the branch moved since.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"

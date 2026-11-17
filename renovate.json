@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>bojanrajkovic/renovate-config"],
   "semanticCommits": "disabled",
+  "gitIgnoredAuthors": ["259478270+bojan-s-releaser-bot[bot]@users.noreply.github.com"],
   "lockFileMaintenance": {
     "description": "The weekly refresh moves the packages the relay's own packages depend on, which are in its bundle, so a person merges it",
     "automerge": false
@@ -57,7 +58,7 @@
       "matchManagers": ["swift"],
       "automerge": false,
       "prBodyNotes": [
-        "Renovate changes `Package.swift` only. Run `swift package resolve` on this branch and commit `Package.resolved`, then run `make check` and `make test`. [PROBLEMS.md](../blob/main/PROBLEMS.md) lists what else to do for a grammar with a copied scanner and for `libghostty-spm`."
+        "Renovate changes `Package.swift` only. The **Swift packages** workflow runs `make packages` and commits `Package.resolved` and any re-copied grammar scanner to this branch. Review that commit. [PROBLEMS.md](../blob/main/PROBLEMS.md) says what to check by hand for `libghostty-spm`."
       ]
     },
     {

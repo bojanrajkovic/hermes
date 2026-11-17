@@ -28,6 +28,7 @@ flowchart LR
 | `make test` | Runs `swift test`. |
 | `make check` | Runs `swift build` only. No bundle and no signing. |
 | `make release` | Release build into `build/Hermes.app`. |
+| `make packages` | Run after a version change in `Package.swift`. Resolves the packages and re-copies the four grammar scanners in `Sources/TreeSitterScanners`. |
 | `make icon` | Regenerates `build/AppIcon.icns`. |
 | `make install` | Copies the app to `/Applications` and registers it with LaunchServices. |
 | `make clean` | Removes `build/`, `.build/`, and `dist/`. |
@@ -100,11 +101,35 @@ own packages depend on.
 
 Renovate reads `.package(url:)` calls, so `Package.swift` writes each
 dependency that way and has no helper function for them. A Swift update
-changes `Package.swift` only. Renovate doesn't write
-`Package.resolved` for packages named by URL, so the pull request's body says
-to run `swift package resolve` and commit the result.
-[PROBLEMS.md](../PROBLEMS.md) lists the extra step for a grammar with a
-copied scanner and for `libghostty-spm`.
+changes `Package.swift` only: Renovate doesn't write `Package.resolved` for
+packages named by URL, and four grammars have a copied scanner that must
+match their version ([PROBLEMS.md](../PROBLEMS.md)).
+
+The `Swift packages` workflow finishes the pull request. It runs
+`make packages` on GitHub's Xcode 27 image and commits `Package.resolved` and
+any re-copied scanner to the branch.
+
+```mermaid
+sequenceDiagram
+    participant R as Renovate
+    participant P as Pull request branch
+    participant M as Resolve job (macOS, no secrets)
+    participant C as Commit job (holds the bot's token)
+    R->>P: changes a version in Package.swift
+    P->>M: Swift packages starts
+    Note over M: make packages
+    M->>C: a patch, as an artifact
+    Note over C: Refuse a patch that touches anything but<br/>Package.resolved and Sources/TreeSitterScanners.
+    C->>P: commit, as the releaser bot
+    P->>P: Swift check runs on the bot's commit
+```
+
+- Resolving runs the manifests of the packages the pull request names. So
+  that job holds no secrets, and the job that pushes runs no package code.
+- The bot's App ID and private key are in the `ci` environment, as
+  `RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`.
+- `renovate.json` lists the bot in `gitIgnoredAuthors`, so Renovate keeps
+  rebasing a branch the bot has committed to.
 
 Renovate learns of a new Xcode from `xcodereleases.com`, the feed xcodes
 itself uses, and offers releases only, not betas or release candidates. A
