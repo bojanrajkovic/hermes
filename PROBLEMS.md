@@ -26,7 +26,8 @@ without running Swift, and `Swift check` fails if the two disagree.
 The plain release tags of `alex-pinkus/tree-sitter-swift`, such as `0.7.4`,
 do not contain the generated parser, so they do not build. Each release has
 a second tag that does, such as `0.7.4-with-generated-files`. `Package.swift`
-pins that one with `exact:`.
+pins that one with `exact:`, and `renovate.json` tells Renovate that only
+those tags are versions.
 
 ## libghostty-spm is pinned to an exact version
 

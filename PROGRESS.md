@@ -122,6 +122,8 @@ What is built and works, and what is known not to work or is unverified.
 - Tests that need the network, a real terminal, or a person to look at a PNG
   run only when their environment variable is set. See
   [plans/build-system.md](plans/build-system.md).
+- `renovate.json` sets which dependency updates Renovate opens and which it
+  merges. See [plans/build-system.md](plans/build-system.md#dependency-updates).
 
 ## Known limits
 
@@ -137,6 +139,10 @@ What is built and works, and what is known not to work or is unverified.
   lookup. There is no keyboard command for it.
 
 **Unverified**
+
+- **Renovate.** `renovate.json` passes Renovate's validator, and a local run
+  finds the dependencies in the workflows, `Package.swift`, and
+  `.xcode-version`. Renovate has not run on this repository.
 
 - **Cloud sessions.** `claude --environment <id>` is built from the output of
   `claude --help`. No cloud session has been run from Hermes.

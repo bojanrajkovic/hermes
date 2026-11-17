@@ -1,0 +1,74 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>bojanrajkovic/renovate-config"],
+  "semanticCommits": "disabled",
+  "lockFileMaintenance": {
+    "description": "The weekly refresh moves the packages the relay's own packages depend on, which are in its bundle, so a person merges it",
+    "automerge": false
+  },
+  "customDatasources": {
+    "xcode": {
+      "description": "Xcode's releases, from the feed the xcodes tool uses. Betas and release candidates are left out",
+      "defaultRegistryUrlTemplate": "https://xcodereleases.com/data.json",
+      "format": "json",
+      "transformTemplates": [
+        "{ \"releases\": $[version.release.release = true].{ \"version\": version.number }, \"homepage\": \"https://developer.apple.com/xcode/\" }"
+      ]
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Xcode the Makefile builds with",
+      "managerFilePatterns": ["/^\\.xcode-version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "Xcode",
+      "datasourceTemplate": "custom.xcode",
+      "versioningTemplate": "loose"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A new Xcode has to be installed on every Mac that builds Hermes before its update merges, and it changes the compiler and the SDK",
+      "matchPackageNames": ["Xcode"],
+      "automerge": false,
+      "prBodyNotes": [
+        "Install this Xcode with `xcodes install` on this branch, then run `make check`, `make test`, and `make build`."
+      ]
+    },
+    {
+      "description": "A merge under relay/ deploys the relay. The packages its code imports are in the bundle tenants are told they can check, so a person merges their updates",
+      "matchFileNames": ["relay/**"],
+      "matchDepTypes": ["dependencies"],
+      "automerge": false
+    },
+    {
+      "description": "Wrangler builds the relay's bundle, so its updates change the bundle too",
+      "matchPackageNames": ["wrangler"],
+      "automerge": false
+    },
+    {
+      "description": "The actions in the relay's deploy and verify workflows build, attest, and check the bundle, so a person merges their updates",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "Swift packages never merge on their own. PROBLEMS.md ties several versions to copied files and to behavior a person checks, which Swift check doesn't cover",
+      "matchManagers": ["swift"],
+      "automerge": false,
+      "postUpgradeTasks": {
+        "commands": ["scripts/renovate/swift-packages.sh"],
+        "fileFilters": ["Package.resolved", "Sources/TreeSitterScanners/*.c"],
+        "executionMode": "branch"
+      },
+      "prBodyNotes": [
+        "Renovate changes `Package.swift`, and `scripts/renovate/swift-packages.sh` updates `Package.resolved` and re-copies a changed grammar scanner without running Swift. If **Swift check** fails at its first step, run `make packages` on this branch and push the result. [PROBLEMS.md](../blob/main/PROBLEMS.md) says what to check by hand for `libghostty-spm`."
+      ]
+    },
+    {
+      "description": "tree-sitter-swift's plain tags omit the generated parser and don't build. Only its -with-generated-files tags count as versions",
+      "matchPackageNames": ["alex-pinkus/tree-sitter-swift"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-with-generated-files$"
+    }
+  ]
+}

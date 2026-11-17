@@ -59,6 +59,74 @@ The setting lives in the Makefile and not in the shell's environment: `git`
 on macOS runs through Xcode too, so a `DEVELOPER_DIR` set there for a version
 not yet installed would stop `git` working in this directory.
 
+## Dependency updates
+
+[Renovate](https://docs.renovatebot.com) opens pull requests for dependency
+updates. `renovate.json` extends a shared preset,
+`github>bojanrajkovic/renovate-config`, and adds the rules this repository
+needs. The preset merges minor, patch, and digest updates once their checks
+pass, and leaves majors and 0.x minors for a person.
+
+| Dependency | File | Merges on its own |
+|------------|------|-------------------|
+| Node and pnpm | `mise.toml` | Minor and patch |
+| The relay's lint, format, test, and type packages | `relay/package.json` | Minor and patch, once Relay check passes |
+| The packages the relay imports, and Wrangler | `relay/package.json` | No |
+| The relay's weekly lockfile refresh | `relay/pnpm-lock.yaml` | No |
+| Actions | `.github/workflows/` | No |
+| Swift packages | `Package.swift` | No |
+| Xcode | `.xcode-version` | No |
+
+A merge under `relay/` deploys the relay. So nothing that changes its bundle,
+or the workflows that build, attest, and check it, merges without a person.
+The lockfile refresh counts, because it moves the packages that the relay's
+own packages depend on.
+
+Renovate reads `.package(url:)` calls, so `Package.swift` writes each
+dependency that way and has no helper function for them. A Swift update
+changes `Package.swift` only: Renovate doesn't write `Package.resolved` for
+packages named by URL, and four grammars have a copied scanner that must
+match their version ([PROBLEMS.md](../PROBLEMS.md)).
+
+`scripts/renovate/swift-packages.sh` finishes the update. Renovate runs it as
+a post-upgrade task, in the same commit as the version change.
+
+```mermaid
+sequenceDiagram
+    participant R as Renovate's worker
+    participant G as The package's repository
+    participant P as Pull request branch
+    participant C as Swift check (macOS)
+    Note over R: Changes a version in Package.swift
+    R->>G: which commit is the new tag?
+    R->>G: the scanner files at that commit
+    Note over R: Writes Package.resolved and the copied scanner
+    R->>P: one commit
+    P->>C: starts
+    Note over C: make packages, then fail if anything changed
+```
+
+- **The script runs no Swift and no package code.** `swift package resolve`
+  would run the manifest of the version just brought in, and the worker holds
+  a key that can write to every repository. The script only asks `git` for a
+  tag's commit and fetches files.
+- **It writes what SwiftPM would.** `Package.resolved` carries the SHA-256 of
+  `Package.swift`, so the script can stamp it without SwiftPM.
+- **It can't follow a package `Package.swift` doesn't name.** An update to
+  `swift-tree-sitter` or `libghostty-spm` can move `tree-sitter` or
+  `DisplayLink`, which only they depend on. `Swift check` runs `make packages`
+  first and fails if it changes anything. Run `make packages` on the branch
+  and push the result.
+
+Renovate learns of a new Xcode from `xcodereleases.com`, the feed xcodes
+itself uses, and offers releases only, not betas or release candidates. A
+`customDatasources` entry in `renovate.json` reads the feed. Install the new
+Xcode before merging its update, or `make deps` fails.
+
+Update pull requests are titled as plain sentences, such as "Update
+dependency hono to v4.14.0", like the rest of this repository's commits. The
+preset's `chore(deps):` prefixes are off.
+
 ## The package
 
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every
