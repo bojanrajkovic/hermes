@@ -9,6 +9,10 @@ The forwarder is `gh webhook forward`, from the `cli/gh-webhook` extension of
 the GitHub CLI. Only GitHub sees a forwarder's deliveries: no server sits
 between it and Hermes.
 
+A forwarder needs admin rights on its repository. For repositories where the
+user has none, an account's owner can set up a [relay](relay-client.md)
+tenant. A repository that a connected tenant covers gets no forwarder.
+
 ```mermaid
 sequenceDiagram
     participant GH as GitHub
@@ -42,8 +46,9 @@ those, so they share loads the way a burst about one pull request does.
 The timer refresh never stops, so a forwarder that ends costs nothing but the
 delay.
 
-A burst of deliveries about one pull request loads it on the first and once
-more after, not once per delivery.
+`AppStore.reload` does this for a relay's events too. A burst of deliveries
+about one pull request loads it on the first and once more after, not once
+per delivery. [relay-client.md](relay-client.md) has the rule.
 
 ## Applying a payload
 

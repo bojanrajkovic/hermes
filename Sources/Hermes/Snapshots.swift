@@ -50,7 +50,21 @@ enum Snapshots {
 
         let defaults = UserDefaults(suiteName: "hermes-snapshots")!
         defaults.removePersistentDomain(forName: "hermes-snapshots")
+        // Three relay tenants, so Settings shows a row for one this Mac set up, one it uses that an
+        // account publishes, and one an account publishes that it does not use. No relay is contacted.
+        let tenants = ["0a", "0b", "0c"].compactMap {
+            RelayTenant(server: URL(string: "https://relay.example.invalid")!, id: String(repeating: $0, count: 16))
+        }
+        let memberships = [
+            RelayMembership(tenant: tenants[0], app: .init(account: "acme", slug: "hermes-acme")),
+            RelayMembership(tenant: tenants[1], app: nil),
+        ]
+        defaults.set(try? JSONEncoder().encode(memberships), forKey: Relays.key)
         let model = WindowModel(defaults: defaults)
+        model.store.relays.found([
+            PublishedRelay(account: "hubot-org", tenant: tenants[1]),
+            PublishedRelay(account: "octo-org", tenant: tenants[2]),
+        ])
         await model.start()
         guard let viewer = model.viewer else {
             if case .failed(let problem) = model.startup {
@@ -66,6 +80,7 @@ enum Snapshots {
         try await scene("setup-account", size: setupSize, SetupSheet(viewer: viewer, finish: {}), model: model)
         try await scene("setup-checkouts", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .checkouts), model: model)
         try await scene("setup-updates", size: setupSize, SetupSheet(viewer: viewer, finish: {}, page: .updates), model: model)
+        try await scene("relay-setup", size: setupSize, RelaySetupSheet(), model: model)
         model.store.hasFinishedSetup = true
 
         // The personal account.

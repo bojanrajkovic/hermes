@@ -61,6 +61,7 @@ invitation. A tenant's ID is 32 lowercase hex characters, and its server is an
   agrees.
 
 A setup or session link whose `state` is not one Hermes sent is refused.
+[relay-client.md](relay-client.md) has each flow.
 
 ## Windows
 
