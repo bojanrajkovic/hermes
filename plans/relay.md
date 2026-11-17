@@ -413,6 +413,7 @@ relay/
 ├── tests/                Vitest tests, run inside the Workers runtime
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
 ├── vitest.config.ts
+├── .oxfmtrc.json         the formatter's settings
 ├── tsconfig.json         the compiler settings, on top of @tsconfig/strictest
 ├── package.json
 ├── pnpm-lock.yaml
@@ -480,5 +481,6 @@ The relay's scripts run from `relay/`:
 | `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck` and `test` together and reports every failure instead of stopping at the first. |
 | `pnpm typecheck` | `tsc` on each of the three projects below, against the types `pnpm check` generated. |
 | `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
+| `pnpm format` / `format:check` | [Oxfmt](https://oxc.rs/docs/guide/usage/formatter): rewrite the files, or only report. It formats TypeScript and JSON at a width of 100. |
 | `pnpm build` | Bundles the Worker into `dist/index.js` with `wrangler deploy --dry-run`. |
 | `pnpm dev` | Runs the Worker locally. |
