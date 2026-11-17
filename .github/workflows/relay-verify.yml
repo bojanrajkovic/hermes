@@ -20,7 +20,9 @@ concurrency:
 jobs:
   verify:
     name: Compare the deployed Worker with what this repository built
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 10
     # The Cloudflare account and a token that can read the Worker's script belong to this
     # environment, which only runs from main.
     environment: relay-verify

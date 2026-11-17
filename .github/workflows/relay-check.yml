@@ -16,15 +16,17 @@ on:
 permissions:
   contents: read # check out the repository
 
-# A newer push to the same branch or pull request replaces the run in progress.
+# A newer push to the same pull request replaces the run in progress. Runs on main all finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
-    name: Type-check, test, and bundle
-    runs-on: ubuntu-latest
+    name: Lint, test, and bundle
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: relay

@@ -18,7 +18,9 @@ concurrency:
 jobs:
   deploy:
     name: Attest and deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 15
     # The Cloudflare account, the deploy token, and the invite codes belong to this environment,
     # which only runs from main.
     environment: relay

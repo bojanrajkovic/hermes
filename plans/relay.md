@@ -363,6 +363,13 @@ builds, deploys, or verifies the relay. The workflows pass
 GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
 ```
 
+The `Workflow security` workflow runs the same audit on a pull request that
+changes a workflow, and on the push to `main`. A finding fails it and shows as
+an annotation on the pull request.
+
+Each job names its runner image, `ubuntu-26.04`, so a new `ubuntu-latest`
+can't change what a job runs on, and each has a time limit.
+
 ## Running your own relay
 
 Anyone can run this Worker in their own Cloudflare account, and point their
