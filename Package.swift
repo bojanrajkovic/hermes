@@ -22,7 +22,7 @@ let package = Package(
         .package(url: "https://github.com/tree-sitter/tree-sitter-rust", from: "0.24.2"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-c-sharp", from: "0.23.5"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-python", exact: "0.25.0"),
-        .package(path: "Vendor/tree-sitter-ruby"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-ruby", from: "0.23.1"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-bash", from: "0.25.1"),
         .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-hcl", from: "1.2.0"),

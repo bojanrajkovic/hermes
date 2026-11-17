@@ -92,7 +92,6 @@ Renovate doesn't see these, and a person updates them:
 
 - `tree-sitter-swift`, which is pinned to a revision. `renovate.json` switches
   it off, because Renovate would offer a release tag, and those don't build.
-- The Ruby grammar in `Vendor/tree-sitter-ruby`.
 - Xcode.
 
 Update pull requests are titled as plain sentences, such as "Update
@@ -110,11 +109,11 @@ Swift target in Swift 6 language mode.
   grammar packages do not compile when used as dependencies.
 - Nine test targets: one for each library except `HermesUI` and
   `TreeSitterScanners`, and `HermesTests` for the app.
-- Dependencies: `swift-tree-sitter`, 15 tree-sitter grammars (Ruby from
-  `Vendor/tree-sitter-ruby`), and `libghostty-spm` for the terminal.
+- Dependencies: `swift-tree-sitter`, 15 tree-sitter grammars, and
+  `libghostty-spm` for the terminal.
 
-[PROBLEMS.md](../PROBLEMS.md) explains the pinned versions, the vendored
-grammar, and the scanner target.
+[PROBLEMS.md](../PROBLEMS.md) explains the pinned versions and the
+scanner target.
 
 ## What `build.sh` does
 

@@ -24,16 +24,6 @@ The release tags of `alex-pinkus/tree-sitter-swift` do not contain the
 generated parser, so a tagged version does not build. `Package.swift` pins a
 revision that includes the generated files.
 
-## The Ruby grammar is vendored
-
-Cloning `tree-sitter/tree-sitter-ruby` through SwiftPM stalls. A copy of
-v0.23.1 lives in `Vendor/tree-sitter-ruby` and `Package.swift` uses it as a
-local package. The copy's manifest drops the upstream test target and its
-dependency.
-
-To upgrade, replace `src/` and `queries/` from the upstream release and update
-the version in the comment at the top of `Vendor/tree-sitter-ruby/Package.swift`.
-
 ## libghostty-spm is pinned to an exact version
 
 `libghostty-spm` ships a prebuilt libghostty and tags date-stamped builds,
