@@ -3,6 +3,7 @@
 The relay is a Cloudflare Worker in [`relay/`](../relay). It runs at
 `https://hermes-relay.services.coderinserepeat.com`. Registering a tenant takes an
 invite code from the relay's operator.
+[relay-client.md](relay-client.md) describes Hermes's side.
 
 ```mermaid
 graph LR
@@ -17,6 +18,8 @@ graph LR
 The Worker takes each request and hands it to the Durable Object of the tenant
 the address names. That object checks the delivery and sends it down the open
 sockets of the members who can see its repository.
+[relay-privacy.md](relay-privacy.md) says what the relay's operator can and
+cannot see.
 
 ## Tenants
 
@@ -401,8 +404,46 @@ builds, deploys, or verifies the relay. The workflows pass
 GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
 ```
 
+The `Workflow security` workflow runs the same audit on a pull request that
+changes a workflow, and on the push to `main`. A finding fails it and shows as
+an annotation on the pull request.
+
 Each job names its runner image, `ubuntu-26.04`, so a new `ubuntu-latest`
 can't change what a job runs on, and each has a time limit.
+
+## Running your own relay
+
+Anyone can run this Worker in their own Cloudflare account, and point their
+tenants at it from Hermes's setup sheet. Then the relay's operator is the
+account's owner, not the hosted relay's.
+
+1. In `relay/wrangler.jsonc`, give the Worker an address. Either set
+   `workers_dev` to `true`, which serves it at
+   `<name>.<your-subdomain>.workers.dev`, or add a route for a hostname in a
+   zone your Cloudflare account holds.
+2. Make an operator token with `openssl rand -hex 32`, and write it to a file
+   outside the repository, as one line: `OPERATOR_TOKEN=<token>`. Wrangler
+   refuses the first deploy of this Worker without it.
+3. Deploy:
+
+   ```bash
+   cd relay && pnpm install --frozen-lockfile && pnpm exec wrangler deploy --secrets-file <path to the file>
+   ```
+
+4. Check it answers:
+
+   ```bash
+   curl https://<the relay's address>/version
+   ```
+
+5. Make an invite code, as [Invite codes](#invite-codes) shows, with your
+   relay's address and token.
+6. In Hermes, open "Set Up a Relay…", enter the relay's `https` address as the
+   server, and use the invite code.
+
+The deploy and verify workflows in this repository deploy the hosted relay.
+A fork that wants them sets the two environments' values described under
+[Deploying](#deploying).
 
 ## Layout
 
