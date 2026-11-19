@@ -70,3 +70,6 @@ jobs:
       contents: read # check out the repository
       attestations: read # look up the bundle's attestation
     uses: $/.github/workflows/relay-verify.yml
+    # The name is enough: GitHub fills it in from the relay-verify environment the called job uses.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
