@@ -54,6 +54,19 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 - A command palette jumps to a repository, a pull request, or an issue. It
   also opens `repo#123` for items that are not in the lists.
 
+**Live updates**
+
+- With "Get changes as they happen" on, a change in a repository you
+  administer shows in about two seconds, through the GitHub CLI's webhook
+  forwarder.
+- A relay does the same for repositories you don't administer. An account's
+  owner sets one up from Settings, which creates a GitHub App that belongs to
+  the account, and members connect from Hermes. The relay passes GitHub's
+  events on and stores nothing from them. Its code is in `relay/`, and you can
+  run your own. See [plans/relay-client.md](plans/relay-client.md),
+  [plans/relay.md](plans/relay.md), and, for what the relay's operator can
+  see, [plans/relay-privacy.md](plans/relay-privacy.md).
+
 **Diffs**
 
 - Every changed file in one scrolling list, with a file tree beside it.
