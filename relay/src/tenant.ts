@@ -10,7 +10,7 @@ import {
   expiredCloseCode,
   expiry,
   helloSeconds,
-  helloToken,
+  hello,
   sessionSeconds,
   type Session,
 } from "./session";
@@ -246,8 +246,8 @@ export class Tenant extends DurableObject<Env> {
       return;
     }
 
-    const token = helloToken(message);
-    if (token === undefined) {
+    const greeting = hello(message);
+    if (greeting === undefined) {
       this.end(socket, closeCode.notAuthorized, "no hello");
 
       return;
@@ -267,9 +267,11 @@ export class Tenant extends DurableObject<Env> {
     } satisfies Session);
     const { closures } = this;
 
-    const access = await accessForRefreshToken(registration, token).catch(
-      () => "unreachable" as const,
-    );
+    const access = await accessForRefreshToken(
+      registration,
+      greeting.refreshToken,
+      greeting.organization,
+    ).catch(() => "unreachable" as const);
     if (access === "unreachable") {
       this.end(socket, closeCode.unreachable, "GitHub unreachable");
 
@@ -278,6 +280,14 @@ export class Tenant extends DurableObject<Env> {
 
     if (access === undefined) {
       this.end(socket, closeCode.notAuthorized, "token refused");
+
+      return;
+    }
+
+    // The new refresh token is not sent: someone GitHub says is outside the organization has
+    // no use for a session, and Hermes stops reconnecting when its token is spent.
+    if (!access.affiliated) {
+      this.end(socket, closeCode.notAuthorized, "not a member");
 
       return;
     }

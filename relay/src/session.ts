@@ -34,22 +34,41 @@ export type Session = {
   state: "awaitingHello" | "authorizing" | "open";
 };
 
-const Hello = z.object({ type: z.literal("hello"), refreshToken: z.string().min(1) });
+/** A GitHub login. It goes into the path of a request to GitHub, so nothing else gets through. */
+const Login = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9\-]{0,38}$/v);
+
+const HelloMessage = z.object({
+  type: z.literal("hello"),
+  refreshToken: z.string().min(1),
+  organization: Login.optional(),
+});
 
 /**
- * The refresh token from a socket's first message, `{"type":"hello","refreshToken":"…"}`.
+ * What a socket's first message carries: the user's refresh token, and the organization the
+ * client says the tenant belongs to, when it knows one.
+ */
+export type Hello = { refreshToken: string; organization: string | undefined };
+
+/**
+ * Reads a socket's first message, `{"type":"hello","refreshToken":"…","organization":"acme"}`.
  *
  * The token travels in a message, not a header, because Cloudflare can show a Worker's
  * operator the headers of a request and never the contents of a socket.
+ *
+ * The relay does not trust `organization` and does not store it. It only names the
+ * organization in one question to GitHub: see `accessForRefreshToken`.
  */
-export function helloToken(message: string | ArrayBuffer): string | undefined {
+export function hello(message: string | ArrayBuffer): Hello | undefined {
   if (typeof message !== "string") {
     return undefined;
   }
 
-  const hello = Hello.safeParse(parseJSON(message));
+  const parsed = HelloMessage.safeParse(parseJSON(message));
+  if (!parsed.success) {
+    return undefined;
+  }
 
-  return hello.success ? hello.data.refreshToken : undefined;
+  return { refreshToken: parsed.data.refreshToken, organization: parsed.data.organization };
 }
 
 /** The sessions that have run out, and when the next one will, in Unix seconds. */

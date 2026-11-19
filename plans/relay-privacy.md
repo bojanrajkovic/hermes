@@ -73,7 +73,10 @@ and makes no call as the App. Hermes loads everything with the user's own
 
 **GitHub decides who sees what.** A member signs in through the tenant's App.
 The relay uses the resulting token once, to ask GitHub which repositories that
-member can see, and keeps only their IDs. It never stores a login or a token.
+member can see, and keeps only their IDs. When there are none, it asks GitHub
+whether the user belongs to the organization Hermes names, and closes the
+socket of someone who doesn't. It never stores a login, an organization, or a
+token.
 
 ## The life of a delivery
 

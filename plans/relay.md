@@ -195,11 +195,16 @@ no token.
 The client's first message says who it is:
 
 ```json
-{ "type": "hello", "refreshToken": "<the refresh token>" }
+{ "type": "hello", "refreshToken": "<the refresh token>", "organization": "acme" }
 ```
 
 The token is in a message and not a header because Cloudflare can show a
 Worker's operator each request's headers, and never what a socket carries.
+
+`organization` is optional: the login of the organization the client believes
+the tenant belongs to. The relay keeps no record of which account a tenant
+belongs to, and it does not store this value or trust it. It uses it in one
+question to GitHub, described below.
 
 ```mermaid
 stateDiagram-v2
@@ -207,7 +212,7 @@ stateDiagram-v2
     awaitingHello --> authorizing: hello
     awaitingHello --> [*]: 60 seconds pass, or the message is not a hello (4003)
     authorizing --> open: GitHub answers, session sent
-    authorizing --> [*]: GitHub refuses the token (4003)
+    authorizing --> [*]: GitHub refuses the token, or says the user is outside the organization (4003)
     authorizing --> [*]: GitHub can't be reached (1011)
     open --> [*]: 8 hours pass, or access changed (4001)
     open --> [*]: tenant gone (4004)
@@ -220,8 +225,29 @@ When the hello arrives, the relay:
 2. Lists the repositories the user can see through the tenant's App, with
    `GET /user/installations` and
    `GET /user/installations/{id}/repositories`. It reads at most 4,000.
-3. Stores those repositories' IDs under the socket's session ID and discards
+3. When the list is empty and the hello names an organization, asks GitHub
+   whether the user belongs to it, with `GET /user/memberships/orgs/{org}`.
+4. Stores those repositories' IDs under the socket's session ID and discards
    the access token.
+
+Step 3 tells two people apart who both see no repository. A member whose
+access is still being granted keeps the socket, and gets the repositories
+when the grant's delivery makes every socket reconnect. Someone GitHub calls
+"not affiliated" with the organization, a `404`, is closed with `4003` and
+gets no new refresh token, so Hermes stops reconnecting.
+
+| GitHub's answer | The relay |
+|---|---|
+| A membership, active or pending | Opens the session with an empty list. |
+| `404` | Closes with `4003`. |
+| Any other refusal, or no answer | Opens the session with an empty list. Only a `404` says the user is outside. |
+
+The client's word is enough because the token belongs to the tenant's App,
+which is installed on one account. GitHub answers this question only for an
+organization the App is installed on, so naming another organization gets a
+refusal, not a membership. And the answer decides only whether an empty
+socket stays open: forwarding still needs the repository in the user's list.
+A personal account has no memberships, so Hermes names none for one.
 
 Then it sends the session:
 
@@ -260,7 +286,7 @@ the Durable Object fires when the oldest socket runs out.
 |---|---|
 | `1011` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
 | `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
-| `4003` | Sign in again. GitHub refused the refresh token, the first message was not a hello, or none came within 60 seconds. |
+| `4003` | Sign in again. GitHub refused the refresh token, GitHub said the user is outside the organization the hello named, the first message was not a hello, or none came within 60 seconds. |
 | `4004` | Stop. The App was uninstalled. |
 
 The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in

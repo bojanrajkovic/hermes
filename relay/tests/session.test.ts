@@ -4,13 +4,23 @@ import {
   CodeVerifier,
   expiredCloseCode,
   expiry,
-  helloToken,
+  hello,
   type Session,
 } from "../src/session";
 
-describe("helloToken", () => {
+describe("hello", () => {
   it("reads the refresh token from a hello", () => {
-    expect(helloToken('{"type":"hello","refreshToken":"ghr_abc"}')).toBe("ghr_abc");
+    expect(hello('{"type":"hello","refreshToken":"ghr_abc"}')).toEqual({
+      refreshToken: "ghr_abc",
+      organization: undefined,
+    });
+  });
+
+  it("reads the organization the client names", () => {
+    expect(hello('{"type":"hello","refreshToken":"ghr_abc","organization":"acme-inc"}')).toEqual({
+      refreshToken: "ghr_abc",
+      organization: "acme-inc",
+    });
   });
 
   it.each([
@@ -19,13 +29,23 @@ describe("helloToken", () => {
     ["no token", '{"type":"hello"}'],
     ["an empty token", '{"type":"hello","refreshToken":""}'],
     ["a token that is not text", '{"type":"hello","refreshToken":7}'],
+    // The organization goes into a request's path, so only a login gets through.
+    [
+      "an organization with a path in it",
+      '{"type":"hello","refreshToken":"t","organization":"a/../b"}',
+    ],
+    [
+      "an organization longer than a login",
+      `{"type":"hello","refreshToken":"t","organization":"${"a".repeat(40)}"}`,
+    ],
+    ["an empty organization", '{"type":"hello","refreshToken":"t","organization":""}'],
     ["null", "null"],
   ])("finds none in %s", (_name, message) => {
-    expect(helloToken(message)).toBeUndefined();
+    expect(hello(message)).toBeUndefined();
   });
 
   it("finds none in a binary message", () => {
-    expect(helloToken(new ArrayBuffer(8))).toBeUndefined();
+    expect(hello(new ArrayBuffer(8))).toBeUndefined();
   });
 });
 
