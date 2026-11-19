@@ -17,6 +17,11 @@ struct RelayMembership: Codable, Hashable, Identifiable {
     /// The App behind the tenant, when this user set the tenant up. Nil for a tenant joined
     /// by a link, whose App belongs to someone else.
     let app: App?
+    /// The organization the tenant belongs to, when Hermes knows it: the tenant was set up
+    /// for one, or found in one's `.github-private`. Hermes names it to the relay, which can
+    /// then tell a member who has no repository yet from someone outside the organization.
+    /// Nil for a personal account, which has no members to ask GitHub about.
+    var organization: String?
 
     var id: String { tenant.id }
 }
@@ -25,9 +30,12 @@ struct RelayMembership: Codable, Hashable, Identifiable {
 struct PublishedRelay: Hashable, Identifiable {
     /// The account's login.
     let account: String
+    var isOrganization = false
     let tenant: RelayTenant
 
     var id: String { "\(account)/\(tenant.id)" }
+    /// The account's login, when the account is an organization.
+    var organization: String? { isOrganization ? account : nil }
 }
 
 /// What a tenant's connection is doing.
@@ -250,7 +258,10 @@ final class Relays {
             return
         }
 
-        let membership = RelayMembership(tenant: setup.tenant, app: .init(account: setup.account.login, slug: credentials.slug))
+        let membership = RelayMembership(
+            tenant: setup.tenant, app: .init(account: setup.account.login, slug: credentials.slug),
+            organization: setup.account.kind == .organization ? setup.account.login : nil
+        )
         memberships.append(membership)
         self.setup?.credentials = nil
         self.setup?.phase = .done(membership)
@@ -299,9 +310,16 @@ final class Relays {
         declined.insert(tenant.id)
     }
 
-    /// Records the tenants the viewer's accounts publish.
+    /// Records the tenants the viewer's accounts publish. A tenant this Mac joined by a link
+    /// came with no account, so one an organization publishes gets its organization here.
     func found(_ published: [PublishedRelay]) {
         self.published = published
+        for index in memberships.indices where memberships[index].organization == nil {
+            let tenant = memberships[index].tenant
+            if let organization = published.first(where: { $0.tenant == tenant })?.organization {
+                memberships[index].organization = organization
+            }
+        }
     }
 
     /// The published tenants this Mac does not use. Settings lists them, so one the user
@@ -322,9 +340,12 @@ final class Relays {
 
     /// Adds a tenant from a join link or a published file, when this Mac does not have it
     /// yet, and signs in to it. Does nothing for a tenant `refusal(of:)` refuses.
-    func join(_ tenant: RelayTenant) {
+    ///
+    /// - Parameter organization: The organization that publishes the tenant. Nil for a join
+    ///   link, which names no account, and for a personal account.
+    func join(_ tenant: RelayTenant, organization: String? = nil) {
         guard refusal(of: tenant) == nil else { return }
-        let membership = memberships.first { $0.tenant == tenant } ?? RelayMembership(tenant: tenant, app: nil)
+        let membership = memberships.first { $0.tenant == tenant } ?? RelayMembership(tenant: tenant, app: nil, organization: organization)
         if !memberships.contains(membership) { memberships.append(membership) }
         signIn(membership)
     }
@@ -405,7 +426,7 @@ final class Relays {
         let started = Date.now
         startedAt[id] = started
         states[id] = .connecting
-        let connection = RelayConnection(tenant: membership.tenant, refreshToken: token)
+        let connection = RelayConnection(tenant: membership.tenant, refreshToken: token, organization: membership.organization)
         connections[id] = connection
         // One task reads the connection in order. The relay can send a session and close in
         // the same instant, and the session's token has to be stored before the ending

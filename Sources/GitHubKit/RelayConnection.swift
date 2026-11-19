@@ -114,11 +114,16 @@ public final class RelayConnection: Sendable {
         return components.url!
     }
 
-    /// The connection's first frame: `{"type":"hello","refreshToken":"…"}`. The token goes
-    /// here and not in a header of the connection request, because the relay's operator can
-    /// see a request's address and headers but not a WebSocket's messages.
-    static func hello(refreshToken: String) -> String {
-        let frame = try? JSONEncoder().encode(["type": "hello", "refreshToken": refreshToken])
+    /// The connection's first frame: `{"type":"hello","refreshToken":"…","organization":"acme"}`.
+    /// The token goes here and not in a header of the connection request, because the
+    /// relay's operator can see a request's address and headers but not a WebSocket's messages.
+    ///
+    /// `organization` is left out when Hermes knows none. The relay names it to GitHub only
+    /// when the member can see no repository, to ask whether they belong to it.
+    static func hello(refreshToken: String, organization: String?) -> String {
+        var fields = ["type": "hello", "refreshToken": refreshToken]
+        fields["organization"] = organization
+        let frame = try? JSONEncoder().encode(fields)
         return String(decoding: frame ?? Data(), as: UTF8.self)
     }
 
@@ -127,14 +132,15 @@ public final class RelayConnection: Sendable {
     /// - Parameters:
     ///   - refreshToken: The member's token for this tenant. The relay replaces it in the
     ///     `RelaySession` it answers the hello with.
-    public init(tenant: RelayTenant, refreshToken: String, session: URLSession = .shared) {
+    ///   - organization: The login of the organization the tenant belongs to, when known.
+    public init(tenant: RelayTenant, refreshToken: String, organization: String? = nil, session: URLSession = .shared) {
         let task = session.webSocketTask(with: Self.url(for: tenant))
         self.task = task
         task.resume()
         // URLSession holds the frame until the socket is open. A hello that can't be sent
         // ends the connection as a failure, which keeps the token: left open, the relay
         // would close it as unauthorized after its 60 seconds.
-        task.send(.string(Self.hello(refreshToken: refreshToken))) { error in if error != nil { task.cancel() } }
+        task.send(.string(Self.hello(refreshToken: refreshToken, organization: organization))) { error in if error != nil { task.cancel() } }
 
         let (events, continuation) = AsyncStream.makeStream(of: Event.self)
         self.events = events

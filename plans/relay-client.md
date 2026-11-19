@@ -297,11 +297,27 @@ connection request carries no token. As soon as the socket is open, Hermes
 sends the hello, one text frame with the member's refresh token:
 
 ```json
-{"type": "hello", "refreshToken": "<refresh token>"}
+{"type": "hello", "refreshToken": "<refresh token>", "organization": "acme"}
 ```
 
 The relay's operator can see a request's address and headers but not a
 WebSocket's messages, so the token goes in a message.
+
+`organization` is the login of the organization the tenant belongs to, and is
+left out when Hermes knows none. The relay keeps no record of a tenant's
+account. When a member can see no repository, it names this organization to
+GitHub to ask whether the member belongs to it: a member whose access is still
+being granted keeps the connection, and someone outside the organization is
+closed with `4003`. [relay.md](relay.md) has the relay's side.
+
+`RelayMembership.organization` holds it. Hermes knows it from three places:
+
+| How this Mac got the tenant | Organization |
+|---|---|
+| Setup, for an organization | That organization. |
+| Setup, for the user's own account | None. A personal account has no members to ask about. |
+| Found in an organization's `.github-private` | That organization. |
+| A join link | None at first, because a link names no account. It is filled in when Hermes finds the tenant published by an organization, which it checks after the join and at each launch. |
 
 ```mermaid
 sequenceDiagram
@@ -339,7 +355,7 @@ why:
 | The relay sent | Ending | What it means |
 |---|---|---|
 | Close code `4001` | `recheck` | The relay checks access again after 8 hours and after a membership change. Connect again at once. |
-| Close code `4003` | `unauthorized` | GitHub refused the refresh token, or the relay got no hello within 60 seconds. The member signs in again. |
+| Close code `4003` | `unauthorized` | GitHub refused the refresh token, GitHub said the member is outside the organization the hello named, or the relay got no hello within 60 seconds. The member signs in again. |
 | Close code `4004`, or `404` to the connection request | `gone` | The tenant's App was uninstalled. |
 | Close code `1011` | `failed` | The relay could not reach GitHub. It did not use the refresh token, so Hermes keeps it. Connect again after a wait. |
 | Anything else | `failed` | The network dropped or the relay failed. Connect again after a wait. |

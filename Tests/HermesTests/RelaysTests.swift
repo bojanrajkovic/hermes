@@ -50,6 +50,35 @@ struct RelaysTests {
         #expect(relays.available == [PublishedRelay(account: "octo", tenant: published)])
     }
 
+    @Test func aTenantRecordsTheOrganizationThatPublishesIt() throws {
+        let suite = "relays-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let server = try #require(URL(string: "https://relay.example.invalid"))
+        let fromAnOrganization = try #require(RelayTenant(server: server))
+        let fromAPerson = try #require(RelayTenant(server: server))
+        let byLink = try #require(RelayTenant(server: server))
+        let relays = Relays(defaults: defaults, open: { _ in })
+
+        relays.join(fromAnOrganization, organization: "acme")
+        relays.join(fromAPerson)
+        relays.join(byLink)
+        func organization(of tenant: RelayTenant) -> String? { relays.memberships.first { $0.tenant == tenant }?.organization }
+        #expect(organization(of: fromAnOrganization) == "acme")
+        #expect(organization(of: fromAPerson) == nil)
+        #expect(organization(of: byLink) == nil)
+
+        // A link names no account. The tenant gets its organization once one publishes it,
+        // and a person's account never gives it one.
+        relays.found([
+            PublishedRelay(account: "octo-org", isOrganization: true, tenant: byLink),
+            PublishedRelay(account: "bojan", tenant: fromAPerson),
+        ])
+        #expect(organization(of: byLink) == "octo-org")
+        #expect(organization(of: fromAPerson) == nil)
+        #expect(Relays(defaults: defaults, open: { _ in }).memberships.first { $0.tenant == byLink }?.organization == "octo-org")
+    }
+
     @Test func aBurstOfEventsLoadsAPullRequestOnceAndThenOnceMore() {
         var bursts = EventBursts()
         let key = ItemKey(repository: airway, number: 7)

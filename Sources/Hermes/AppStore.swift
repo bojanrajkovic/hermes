@@ -354,7 +354,7 @@ final class AppStore {
         for published in await loadPublishedRelays() where relays.shouldOffer(published.tenant) {
             let name = account(published.account)?.name ?? published.account
             if offersRelay(published.tenant, question: "\(name) has a relay. Connect?", accept: "Connect", decline: "Not Now") {
-                relays.join(published.tenant)
+                relays.join(published.tenant, organization: published.organization)
             } else {
                 relays.decline(published.tenant)
             }
@@ -369,7 +369,7 @@ final class AppStore {
         for account in viewer?.accounts ?? [] {
             // An account with no file, and one that can't be read, publishes no relay.
             if let tenant = try? await client.publishedRelay(of: account.login) {
-                published.append(PublishedRelay(account: account.login, tenant: tenant))
+                published.append(PublishedRelay(account: account.login, isOrganization: account.kind == .organization, tenant: tenant))
             }
         }
         relays.found(published)
