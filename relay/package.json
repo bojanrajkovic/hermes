@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.8.2",
-    "@stylistic/eslint-plugin": "5.10.0",
+    "@stylistic/eslint-plugin": "6.0.1",
     "@tsconfig/strictest": "2.0.9",
     "@types/node": "26.6.6",
     "oxfmt": "0.78.0",
