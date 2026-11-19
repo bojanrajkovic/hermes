@@ -1,0 +1,30 @@
+{
+  "action": "edited",
+  "number": 53,
+  "changes": { "title": { "from": "Rendered Markdown repro" } },
+  "pull_request": {
+    "node_id": "PR_kwDOVqHLzs8AAAABOhgLtg",
+    "number": 53,
+    "title": "Rendered Markdown repro (capture test)",
+    "body": "Two Markdown files, for reproducing a layout bug in Hermes' rendered view.",
+    "state": "open",
+    "merged": false,
+    "draft": false,
+    "labels": [],
+    "head": { "sha": "a1ced9bde73d65baa594b25a466a2acb508d7a68", "ref": "md-repro" },
+    "base": { "sha": "0000000000000000000000000000000000000000", "ref": "md-repro-base" },
+    "additions": 3,
+    "deletions": 1,
+    "changed_files": 2,
+    "updated_at": "2026-11-15T22:12:54Z",
+    "auto_merge": null,
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "user": {
+      "login": "bojanrajkovic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/110747?v=4",
+      "type": "User"
+    }
+  },
+  "repository": { "name": "hermes-playground", "owner": { "login": "bojanrajkovic" } }
+}
