@@ -112,6 +112,7 @@ export class Tenant extends DurableObject<Env> {
     const action = classifyDelivery(delivery.event, delivery.body);
     switch (action.action) {
       case "forward":
+        this.forward(delivery, action.repository);
         break;
       case "recheck":
         this.closeEverySocket(closeCode.recheck, "recheck");
@@ -125,6 +126,38 @@ export class Tenant extends DurableObject<Env> {
     }
 
     return "accepted";
+  }
+
+  /** Sends a delivery to the sockets whose user can see its repository. */
+  private forward(delivery: Delivery, repository: number): void {
+    if (!this.hasSessionTable) {
+      return;
+    }
+
+    const sessions = new Set(
+      this.ctx.storage.sql
+        .exec<{ session: string }>(
+          "SELECT session FROM session_repository WHERE repository = ?",
+          repository,
+        )
+        .toArray()
+        .map((row) => row.session),
+    );
+    if (sessions.size === 0) {
+      return;
+    }
+
+    // The body goes in as GitHub sent it, so the client gets the payload byte for byte.
+    const message =
+      `{"type":"event","event":${JSON.stringify(delivery.event)},` +
+      `"delivery":${JSON.stringify(delivery.id)},"payload":${delivery.body}}`;
+
+    for (const socket of this.ctx.getWebSockets()) {
+      const session = sessionOf(socket);
+      if (sessions.has(session.id)) {
+        send(socket, message);
+      }
+    }
   }
 
   /**

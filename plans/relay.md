@@ -13,7 +13,8 @@ graph LR
 ```
 
 The Worker takes each request and hands it to the Durable Object of the tenant
-the address names. That object checks the delivery.
+the address names. That object checks the delivery and sends it down the open
+sockets of the members who can see its repository.
 
 ## Tenants
 
@@ -99,10 +100,25 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 |---|---|
 | `installation` with action `deleted` (the App was uninstalled) | Close every socket with code `4004` and delete everything the tenant stored. Its ID is unknown afterwards. |
 | `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. Close every socket with code `4001`, so each client reconnects and is checked again. |
-| Any other event that names a repository | Nothing. The relay drops it. |
+| Any other event that names a repository | Send it to the sockets whose user can see that repository. |
 | Anything else | Ignored. |
 
-The relay stores nothing from a delivery.
+A forwarded delivery is one text message:
+
+```json
+{
+  "type": "event",
+  "event": "pull_request",
+  "delivery": "<the X-GitHub-Delivery header>",
+  "payload": { "…": "GitHub's payload" }
+}
+```
+
+The payload is the request body, byte for byte. The relay does not re-encode
+it and knows nothing of its shape beyond `action` and `repository.id`.
+
+The relay stores nothing from a delivery. A delivery that arrives while a
+user's socket is closed never reaches that user.
 
 ### Signing in
 
