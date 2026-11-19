@@ -180,6 +180,20 @@ struct WebhookDetailTests {
 
     // MARK: Counting
 
+    @Test func aBurstOfDeliveriesThatCannotBeAppliedLoadsOnceAndThenOnceMore() {
+        var burst = LoadBurst()
+
+        // The first delivery loads. The next two wait for that load.
+        let loads = [burst.shouldLoad(), burst.shouldLoad(), burst.shouldLoad()]
+        #expect(loads == [true, false, false])
+
+        // One more load covers both. None came during it, so the burst ends and the next delivery loads at once.
+        let again = [burst.loaded(), burst.loaded()]
+        #expect(again == [true, false])
+        let next = burst.shouldLoad()
+        #expect(next)
+    }
+
     @Test func oneChangeSinceTheLastLookIsAppliedAndMoreThanOneIsNot() {
         var changes = WebhookChanges()
         let first = WebhookChange.comment(comment("IC_1"), deleted: false)
