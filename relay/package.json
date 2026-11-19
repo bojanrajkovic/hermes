@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "typecheck": "tsc --noEmit && tsc --noEmit --project src && tsc --noEmit --project tests/lint",
+    "typecheck": "tsc --noEmit && tsc --noEmit --project src && tsc --noEmit --project tests && tsc --noEmit --project tests/lint",
     "lint": "oxlint --ignore-pattern tests/lint/fixtures/",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
