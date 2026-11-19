@@ -484,6 +484,58 @@ actor TokenCounter {
 
         #expect(try await client.jobLogs(repository: repository, jobID: 7) == "2026-01-01T00:00:00Z line")
     }
+
+    // MARK: Relay discovery
+
+    private var relayTenant: RelayTenant {
+        RelayTenant(server: URL(string: "https://relay.example.com")!, id: String(repeating: "0a", count: 16))!
+    }
+
+    @Test func anAccountsPublishedRelayIsReadFromItsDotGitHubRepository() async throws {
+        let file = String(decoding: RelayDiscovery.file(for: relayTenant), as: UTF8.self)
+        let client = client { _ in .init(body: file) }
+
+        #expect(try await client.publishedRelay(of: "acme") == relayTenant)
+        #expect(StubProtocol.requests.withLock { $0.map(\.path) } == ["/repos/acme/.github-private/contents/hermes-relay.json"])
+    }
+
+    @Test func anAccountWithNoFilePublishesNoRelay() async throws {
+        let missing = client { _ in .init(status: 404, body: #"{"message": "Not Found"}"#) }
+        #expect(try await missing.publishedRelay(of: "acme") == nil)
+
+        // A file that names a tenant Hermes refuses is no relay either: anyone who can write there wrote it.
+        let unsafe = client { _ in .init(body: #"{"server": "http://relay.example.com", "tenant": "\#(String(repeating: "0a", count: 16))"}"#) }
+        #expect(try await unsafe.publishedRelay(of: "acme") == nil)
+    }
+
+    @Test func publishingCommitsTheFileAndReplacesAnOlderOne() async throws {
+        let client = client { request in
+            switch (request.method, request.path) {
+            case ("GET", "/repos/acme/.github-private"): .init(body: "{}")
+            case ("GET", _): .init(body: #"{"sha": "old-sha"}"#)
+            default: .init(status: 200, body: "{}")
+            }
+        }
+
+        #expect(try await client.publishRelay(relayTenant, for: "acme") == .published)
+
+        let sent = StubProtocol.requests.withLock { $0 }
+        #expect(sent.map { "\($0.method) \($0.path)" } == [
+            "GET /repos/acme/.github-private", "GET /repos/acme/.github-private/contents/hermes-relay.json",
+            "PUT /repos/acme/.github-private/contents/hermes-relay.json",
+        ])
+        let body = try #require(try JSONSerialization.jsonObject(with: Data(sent[2].body.utf8)) as? [String: String])
+        #expect(body["sha"] == "old-sha")
+        let content = try #require(body["content"].flatMap { Data(base64Encoded: $0) })
+        #expect(RelayDiscovery.tenant(in: content) == relayTenant)
+    }
+
+    @Test func publishingWithoutADotGitHubRepositoryCommitsNothing() async throws {
+        let client = client { _ in .init(status: 404, body: #"{"message": "Not Found"}"#) }
+
+        #expect(try await client.publishRelay(relayTenant, for: "acme") == .noRepository)
+        #expect(StubProtocol.requests.withLock { $0.map(\.method) } == ["GET"])
+    }
 }
 
 @Suite struct SubprocessTests {

@@ -71,6 +71,22 @@ public actor GitHubClient {
         return try await send(request).data
     }
 
+    /// Sends a REST `PUT` with a JSON body and returns the response body.
+    ///
+    /// - Throws: As `get(_:accept:)`.
+    @discardableResult
+    public func put(_ path: String, body: some Encodable & Sendable) async throws -> Data {
+        guard let url = URL(string: path, relativeTo: Self.api) else {
+            throw GitHubError.http(status: 400, message: "Invalid path: \(path)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await send(request).data
+    }
+
     // MARK: GraphQL
 
     /// Runs a GraphQL query or mutation and decodes its `data` object.
