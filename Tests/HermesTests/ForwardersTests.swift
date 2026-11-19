@@ -29,6 +29,20 @@ struct ForwardersTests {
             == [.repository(repairScripts)])
     }
 
+    @Test func repositoriesARelayCoversGetNoForwarder() {
+        let web = RepositoryRef(owner: "acme", name: "web")
+        func targets(covered: Set<RepositoryRef>) -> [Forwarders.Target] {
+            Forwarders.targets(
+                watched: [airway, repairScripts, theirs, web], viewer: "bojan", organizations: ["acme"], waiting: [], covered: covered
+            )
+        }
+
+        #expect(targets(covered: [airway]) == [.organization("acme"), .repository(repairScripts)])
+        // An organization keeps its forwarder while one watched repository of it is not covered.
+        #expect(targets(covered: [theirs]) == [.organization("acme"), .repository(airway), .repository(repairScripts)])
+        #expect(targets(covered: [theirs, web]) == [.repository(airway), .repository(repairScripts)])
+    }
+
     @Test func theRetryDelayDoublesFromHalfAMinuteToHalfAnHour() {
         #expect([1, 2, 3, 7, 30].map(Forwarders.retryDelay) == [30, 60, 120, 1800, 1800])
     }

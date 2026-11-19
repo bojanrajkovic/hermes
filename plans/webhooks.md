@@ -6,7 +6,8 @@ down a WebSocket, and Hermes applies each delivery's payload or reloads what
 it names.
 
 The forwarder is `gh webhook forward`, from the `cli/gh-webhook` extension of
-the GitHub CLI. Only GitHub sees the deliveries. There is no Hermes server.
+the GitHub CLI. Only GitHub sees a forwarder's deliveries: no server sits
+between it and Hermes.
 
 ```mermaid
 sequenceDiagram
@@ -142,6 +143,9 @@ in the list on screen.
   covers every repository of the organization.
 - **Repositories the signed-in user owns** that have a watched pull request, at
   most 20. Each forwarder is a process and a webhook.
+- **None that a relay covers.** A connected relay tenant lists the repositories
+  it sends events for. Those are left out before the two rules above, so an
+  organization whose watched repositories are all covered gets no forwarder.
 - **Nothing else.** A repository of an organization gets no forwarder of its
   own. The webhook is named `cli` and says nothing of who made it, which the
   other admins of a shared repository would have to puzzle over. An

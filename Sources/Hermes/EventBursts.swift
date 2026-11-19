@@ -10,6 +10,16 @@ struct EventCounts: Equatable {
     var detail = WebhookChanges()
     var threads = WebhookChanges()
     var checks = WebhookChanges()
+
+    /// The count an event raises, by GitHub's name for the event. Nil for an event that
+    /// changes neither part.
+    static func part(ofEvent name: String) -> Part? {
+        switch name {
+        case "pull_request_review_comment", "pull_request_review_thread": \.threads
+        case "check_run", "check_suite", "status": \.checks
+        default: nil
+        }
+    }
 }
 
 extension WebhookEvent {
