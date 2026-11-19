@@ -313,18 +313,44 @@ extension GitHubClient {
         return nodes
     }
 
-    /// Loads a pull request's head commit and last update time. This is the
-    /// cheap call for polling whether an open pull request changed.
+    /// Loads a pull request's head commit, last update time, and the files the
+    /// viewer marked viewed. This is the call for polling an open pull request.
+    /// A pull request with more than 100 files takes one request per 100.
     ///
     /// - Throws: `GitHubError.graphQL` with type `NOT_FOUND` when the
     ///   repository or pull request does not exist or is not visible.
     public func pullRequestRevision(repository: RepositoryRef, number: Int) async throws -> PullRequestRevision {
         let query = """
             query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid updatedAt } }
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                  headRefOid updatedAt
+                  files(first: 100) { pageInfo { hasNextPage endCursor } nodes { \(ChangedFile.fields) } }
+                }
+              }
             }
             """
-        return try await pullRequestField(query, repository: repository, number: number)
+        let first: PullRequestRevisionPage = try await pullRequestField(query, repository: repository, number: number)
+        var revision = first.revision
+        let rest: [ChangedFile] = try await remainingPages(
+            of: "files", fields: ChangedFile.fields, after: first.files?.nextCursor, repository: repository, number: number
+        )
+        revision.viewedPaths.formUnion(ChangedFile.viewed(rest))
+        return revision
+    }
+
+    /// Marks a file viewed or unviewed for the viewer, as the checkbox on
+    /// GitHub's Files tab does.
+    ///
+    /// - Parameter path: The file's path in the pull request: the new path,
+    ///   or the old path of a deleted file.
+    /// - Throws: `GitHubError.graphQL` with GitHub's reason when it refuses.
+    public func setFileViewed(pullRequestID: String, path: String, viewed: Bool) async throws {
+        let query = viewed
+            ? "mutation($input: MarkFileAsViewedInput!) { markFileAsViewed(input: $input) { clientMutationId } }"
+            : "mutation($input: UnmarkFileAsViewedInput!) { unmarkFileAsViewed(input: $input) { clientMutationId } }"
+        let input: [String: JSONValue] = ["pullRequestId": .string(pullRequestID), "path": .string(path)]
+        _ = try await graphQL(query, variables: ["input": .object(input)], as: Ignored.self)
     }
 
     private func pullRequestField<T: Decodable & Sendable>(

@@ -192,19 +192,44 @@ extension PullRequestDetail: Decodable {
     }
 }
 
-/// What changes when someone pushes to or edits a pull request.
-public struct PullRequestRevision: Sendable, Hashable, Decodable {
+/// What changes when someone pushes to or edits a pull request, and which
+/// files the viewer marked viewed.
+public struct PullRequestRevision: Sendable, Hashable {
     /// The head commit's SHA.
     public let headOID: String
+    /// When GitHub last recorded activity. Marking a file viewed does not change it.
     public let updatedAt: Date
+    /// The paths the viewer marked viewed on GitHub. GitHub unmarks a file
+    /// when a push changes it, so a missing path is unviewed.
+    public var viewedPaths: Set<String>
 
-    public init(headOID: String, updatedAt: Date) {
+    public init(headOID: String, updatedAt: Date, viewedPaths: Set<String> = []) {
         self.headOID = headOID
         self.updatedAt = updatedAt
+        self.viewedPaths = viewedPaths
     }
+}
 
-    private enum CodingKeys: String, CodingKey {
-        case headOID = "headRefOid"
-        case updatedAt
+/// The first page of a `pullRequestRevision` query.
+struct PullRequestRevisionPage: Decodable, Sendable {
+    let headRefOid: String
+    let updatedAt: Date
+    let files: Connection<ChangedFile>?
+
+    var revision: PullRequestRevision {
+        PullRequestRevision(headOID: headRefOid, updatedAt: updatedAt, viewedPaths: ChangedFile.viewed(files?.nodes ?? []))
+    }
+}
+
+/// A file in a pull request and whether the viewer marked it viewed.
+struct ChangedFile: Decodable, Sendable {
+    let path: String
+    /// `VIEWED`, `UNVIEWED`, or `DISMISSED`, which means the file changed after it was viewed.
+    let viewerViewedState: String
+
+    static let fields = "path viewerViewedState"
+
+    static func viewed(_ files: [ChangedFile]) -> Set<String> {
+        Set(files.filter { $0.viewerViewedState == "VIEWED" }.map(\.path))
     }
 }

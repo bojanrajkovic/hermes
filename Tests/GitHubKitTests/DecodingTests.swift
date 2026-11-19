@@ -118,6 +118,17 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(detail.comments.isEmpty)
     }
 
+    @Test func revisionCountsOnlyViewedFilesAsViewed() throws {
+        let page = try graphQLFixture(
+            "pull_request_revision", as: RepositoryData<PullRequestField<PullRequestRevisionPage>>.self
+        ).repository.pullRequest
+
+        #expect(page.revision.headOID == "4f2c9a1e0b7d3c58e6a9f1b2d4c7e8a0b3f5d6c9")
+        // DISMISSED means the file changed after it was viewed, so it counts as unviewed.
+        #expect(page.revision.viewedPaths == ["Sources/App/Viewed.swift"])
+        #expect(page.files?.nextCursor == "Mw")
+    }
+
     @Test func pullRequestDetailDecodesReviewsCommitsAndThreads() throws {
         let detail = try graphQLFixture(
             "pull_request_detail", as: RepositoryData<PullRequestField<PullRequestDetail>>.self

@@ -64,6 +64,23 @@ final class ReviewModel {
         }
     }
 
+    /// The path of the file the composer is in. `nil` when there is no
+    /// composer, or its thread or draft is gone.
+    var composerPath: String? {
+        func threadPath(_ id: String) -> String? { threads.first { $0.id == id }?.path }
+        switch composer?.target {
+        case .thread(_, _, let anchor): return anchor.path
+        case .reply(let threadID): return threadPath(threadID)
+        case .edit(let id):
+            switch pending.comments.first(where: { $0.id == id })?.target {
+            case .line(let path, _, _): return path
+            case .reply(let threadID): return threadPath(threadID)
+            case nil: return nil
+            }
+        case nil: return nil
+        }
+    }
+
     /// What waits for the user to confirm discarding the text in `composer`.
     enum Discard: Equatable {
         case close

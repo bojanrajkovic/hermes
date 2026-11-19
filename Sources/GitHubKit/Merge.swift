@@ -245,4 +245,4 @@ extension GitHubClient {
 }
 
 /// A mutation's answer when only its success matters.
-private struct Ignored: Decodable, Sendable {}
+struct Ignored: Decodable, Sendable {}

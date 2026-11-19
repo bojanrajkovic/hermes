@@ -1,0 +1,18 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "headRefOid": "4f2c9a1e0b7d3c58e6a9f1b2d4c7e8a0b3f5d6c9",
+        "updatedAt": "2026-11-19T15:04:05Z",
+        "files": {
+          "pageInfo": { "hasNextPage": true, "endCursor": "Mw" },
+          "nodes": [
+            { "path": "Sources/App/Viewed.swift", "viewerViewedState": "VIEWED" },
+            { "path": "Sources/App/Unviewed.swift", "viewerViewedState": "UNVIEWED" },
+            { "path": "Sources/App/ChangedSince.swift", "viewerViewedState": "DISMISSED" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -52,7 +52,8 @@ What is built and works, and what is known not to work or is unverified.
 **Diff viewer**
 
 - Unified and side-by-side layouts, a file tree with a filter, sticky file
-  headers, and collapsing files by marking them viewed.
+  headers, and collapsing files by marking them viewed. A pull request's viewed
+  marks sync with GitHub both ways.
 - Syntax highlighting for 16 languages and intraline change emphasis.
 - Context expansion around hunks.
 - Rendered Markdown diffs with Mermaid.
@@ -150,7 +151,6 @@ What is built and works, and what is known not to work or is unverified.
 
 - Hermes reads, reviews, and merges. It cannot close, resolve threads, edit or
   delete posted comments, or comment on the conversation.
-- Viewed marks are kept in memory and are not sent to GitHub.
 - Only github.com is supported, not GitHub Enterprise Server.
 - Lists are capped at what one query returns: 1,000 open pull requests per
   account, 100 review requests, and per pull request 100 comments, 100
