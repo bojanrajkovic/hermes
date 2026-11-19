@@ -13,7 +13,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(url: "https://github.com/tree-sitter/swift-tree-sitter", from: "0.25.0"),
-        .package(url: "https://github.com/Lakr233/libghostty-spm.git", exact: "2.2.2026111302"),
+        .package(url: "https://github.com/Lakr233/libghostty-spm.git", exact: "2.2.2026111501"),
         // The plain release tags omit the generated parser. These tags include it.
         .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", exact: "0.7.4-with-generated-files"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
