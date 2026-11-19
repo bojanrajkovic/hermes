@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { verify } from "@octokit/webhooks-methods";
 import { classifyDelivery } from "./delivery";
+import { refreshTokenForCode } from "./github";
 import { invites } from "./invites";
 import { decideRegistration, type Registration } from "./registration";
 
@@ -19,6 +20,11 @@ export type Delivery = {
 export type RegistrationOutcome = "accepted" | "invalid" | "inviteRefused" | "alreadyRegistered";
 
 export type DeliveryOutcome = "accepted" | "unknownTenant" | "badSignature";
+
+export type SignIn =
+  | { outcome: "signedIn"; refreshToken: string }
+  | { outcome: "unknownTenant" }
+  | { outcome: "refused" };
 
 /** Whether GitHub signed this delivery with the tenant's webhook secret. */
 async function signed(delivery: Delivery, secret: string): Promise<boolean> {
@@ -81,6 +87,25 @@ export class Tenant extends DurableObject<Env> {
     }
 
     return "accepted";
+  }
+
+  /** The tenant App's client ID, which GitHub's sign-in page needs. */
+  async clientID(): Promise<string | undefined> {
+    return (await this.registration())?.clientID;
+  }
+
+  /** Finishes a browser sign-in: trades GitHub's code for the user's refresh token. */
+  async signIn(code: string, verifier: string, redirectURL: string): Promise<SignIn> {
+    const registration = await this.registration();
+    if (registration === undefined) {
+      return { outcome: "unknownTenant" };
+    }
+
+    const refreshToken = await refreshTokenForCode(registration, code, verifier, redirectURL);
+
+    return refreshToken === undefined || refreshToken === ""
+      ? { outcome: "refused" }
+      : { outcome: "signedIn", refreshToken };
   }
 
   private async registration(): Promise<Registration | undefined> {

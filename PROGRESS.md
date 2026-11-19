@@ -121,7 +121,8 @@ What is built and works, and what is known not to work or is unverified.
   sends an invite code and their GitHub App's credentials, and the relay stores
   them in that tenant's Durable Object. An invite code registers one tenant,
   and the operator makes each one with `POST /invites`. It checks the signature of the App's
-  webhook deliveries and deletes a tenant when its App is uninstalled.
+  webhook deliveries and deletes a tenant when its App is uninstalled. A user
+  can sign in through the tenant's App in the browser.
   See [plans/relay.md](plans/relay.md).
 
 **Build and tests**

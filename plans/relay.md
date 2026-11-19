@@ -32,9 +32,13 @@ list of tenants. A tenant's Durable Object stores one thing:
 | `POST /invites` | Makes an invite code, for the operator. See [Invite codes](#invite-codes). |
 | `PUT /tenants/<tenant>` | Registers a tenant. See below. |
 | `POST /hook/<tenant>` | Takes a webhook delivery from GitHub. See below. |
+| `GET /t/<tenant>/login?state=<s>&code_challenge=<c>` | Redirects the browser to GitHub's sign-in page for the tenant's App. |
+| `GET /t/<tenant>/callback` | Where GitHub sends the browser after sign-in. Redirects to a `hermes://relay.session` link. |
+| `POST /t/<tenant>/session` | Trades a sign-in grant for the user's refresh token. See below. |
 
 A path with a malformed tenant ID answers `404`. A request the relay fails to
-handle answers `500` with no body. The relay prints nothing about it.
+handle, such as one that needs GitHub while GitHub is down, answers `500` with
+no body. The relay prints nothing about it.
 
 ### Registering a tenant
 
@@ -88,6 +92,62 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 | Anything else | Ignored. |
 
 The relay stores nothing from a delivery.
+
+### Signing in
+
+A user signs in through the tenant's own GitHub App, so the token GitHub issues
+can read only what both the App and the user can.
+
+```mermaid
+sequenceDiagram
+    participant H as Hermes
+    participant B as Browser
+    participant R as Relay
+    participant GH as GitHub
+    Note over H: Make a verifier. Its SHA-256 is the challenge.
+    H->>B: open /t/#lt;tenant#gt;/login?state=s&code_challenge=c
+    B->>R: GET /t/#lt;tenant#gt;/login?state=s&code_challenge=c
+    R-->>B: 302 to GitHub's authorize page, with the challenge
+    B->>GH: sign in and authorize the App
+    GH-->>B: 302 /t/#lt;tenant#gt;/callback?code=g&state=s
+    B->>R: GET /t/#lt;tenant#gt;/callback?code=g&state=s
+    R-->>B: 302 hermes://relay.session?tenant=…&grant=g&state=s
+    B->>H: open the link
+    H->>R: POST /t/#lt;tenant#gt;/session with the grant and the verifier
+    R->>GH: exchange the code, with the client secret and the verifier
+    GH-->>R: access token, refresh token
+    R-->>H: {"refreshToken": "…"}
+```
+
+The grant is GitHub's own code, passed through unchanged, so the relay holds
+nothing between the browser's sign-in and the client's request. GitHub accepts
+a code once, for ten minutes. The relay returns the refresh token and discards
+the access token.
+
+The sign-in uses PKCE. Hermes makes a random verifier and sends only its
+SHA-256, the challenge, with the sign-in. GitHub issues a token for the code
+only to a request that also carries the verifier. The code passes through the
+relay's address, where Cloudflare can show it to the relay's operator. The
+verifier travels only in the body of the session request, which Cloudflare
+does not show, so the code alone is worth nothing.
+
+`GET /t/<tenant>/login` answers `400` without a `code_challenge` of 43
+base64url characters.
+
+`POST /t/<tenant>/session` takes `{"grant": "<code>", "verifier": "<verifier>"}`:
+
+| Status | Meaning |
+|---|---|
+| `200` | `{"refreshToken": "<token>"}` |
+| `400` | The body has no grant, or no verifier of 43 to 128 characters. |
+| `403` | GitHub refused the code or the verifier, or the App's user tokens don't expire. |
+| `404` | No tenant with this ID is registered. |
+| `500` | GitHub could not be reached. The code may still be good. |
+
+The App must have "Expire user authorization tokens" on, which is GitHub's
+default. With it off GitHub issues no refresh token. Octokit's
+`exchangeWebFlowCode` takes no verifier, so the exchange is one call with
+[`@octokit/request`](https://github.com/octokit/request.js).
 
 ## Invite codes
 
@@ -152,7 +212,8 @@ relay/
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
-│   └── json.ts           parses JSON text without throwing
+│   ├── json.ts           parses JSON text without throwing
+│   └── github.ts         the calls to GitHub
 ├── tests/                Vitest tests, run inside the Workers runtime
 │   └── lint/             the lint fixture test and its fixture, run by Node
 ├── wrangler.jsonc        the Worker's name, bindings, and settings
