@@ -1,0 +1,19 @@
+# Setting this turns on strict mode: a version younger than a day fails the install instead of
+# being skipped silently. Most malicious releases are caught and pulled within that day.
+minimumReleaseAge: 1440
+# Fails on a version published with weaker trust evidence (provenance, trusted publishing) than an
+# earlier version of the same package, the usual sign of a stolen publish token.
+trustPolicy: no-downgrade
+
+# `pnpm add` writes exact versions, so package.json and the lockfile say the same thing.
+savePrefix: ""
+
+permissions:
+  # Wrangler's bundler. Its postinstall only checks the platform binary, which pnpm installs as an
+  # optional dependency.
+  esbuild:
+    build: false
+  # The Workers runtime that `wrangler dev` and the tests run in. Its postinstall does the same
+  # check for its own platform binary.
+  workerd:
+    build: false

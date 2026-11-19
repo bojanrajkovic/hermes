@@ -1,0 +1,46 @@
+name: Relay check
+
+on:
+  pull_request:
+    paths:
+      - "relay/**"
+      - "mise.toml"
+      - ".github/workflows/relay-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "relay/**"
+      - "mise.toml"
+      - ".github/workflows/relay-check.yml"
+
+permissions:
+  contents: read # check out the repository
+
+# A newer push to the same pull request replaces the run in progress. Runs on main all finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    name: Lint, test, and bundle
+    runs-on: ubuntu-26.04
+    # Stops a stalled step from holding the runner for GitHub's 6-hour default.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs the Node and pnpm that mise.toml pins. Only a push to main saves the cache. A pull
+      # request restores main's cache and saves none.
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+      - run: pnpm install --frozen-lockfile
+      # Fails if a package's registry signature doesn't verify.
+      - run: pnpm audit signatures
+      - run: pnpm check
+      - run: pnpm build

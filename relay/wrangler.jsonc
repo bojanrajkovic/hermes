@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hermes-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // The relay is reached only at hermes-relay.services.coderinserepeat.com. That hostname is a
+  // Cloudflare for SaaS custom hostname, set up in the homelab Terraform, not here.
+  "workers_dev": false,
+  "preview_urls": false,
+  // Off so Cloudflare keeps no record of the requests the relay receives.
+  "observability": { "enabled": false },
+  // The deploy sets COMMIT to the commit it builds.
+  "vars": { "COMMIT": "dev" },
+}

@@ -115,8 +115,14 @@ What is built and works, and what is known not to work or is unverified.
 - A session started from an issue links to the pull request opened from its
   branch.
 
+**Relay**
+
+- A Cloudflare Worker in `relay/` that answers `GET /version`.
+  See [plans/relay.md](plans/relay.md).
+
 **Build and tests**
 
+- `make relay-check` type-checks, lints, checks the formatting of, tests, and bundles the relay.
 - `make build` produces a signed `build/Hermes.app`. `make test` runs the unit
   tests of every target.
 - Tests that need the network, a real terminal, or a person to look at a PNG

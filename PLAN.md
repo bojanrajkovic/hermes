@@ -17,7 +17,8 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 - [plans/deep-links.md](plans/deep-links.md): the `hermes://` links and what each opens.
 - [plans/sessions.md](plans/sessions.md): launching Claude Code sessions, worktrees, and the embedded terminal.
 - [plans/design-system.md](plans/design-system.md): the type scale, layout metrics, and shared views in `HermesUI`.
-- [plans/build-system.md](plans/build-system.md): how `make` and `build.sh` turn the package into a signed app, the Xcode version `.xcode-version` pins, which dependency updates Renovate opens and merges, and the test switches.
+- [plans/build-system.md](plans/build-system.md): how `make` and `build.sh` turn the package into a signed app, the tool versions `mise.toml` and `.xcode-version` pin, which dependency updates Renovate opens and merges, and the test switches.
+- [plans/relay.md](plans/relay.md): the relay Worker in `relay/`, the requests it answers, its packages, lint rules, and layout, and how to check a change to it.
 
 ## Decisions
 

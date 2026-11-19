@@ -64,7 +64,7 @@ NOTES_FILE       ?=
 
 .PHONY: all deps build check test release run clean install uninstall register help \
         icon check-version notary-setup sign zip-notary notarize staple zip-release \
-        checksum verify-release dist github-release print-version packages
+        checksum verify-release dist github-release print-version relay-check packages
 
 all: build
 
@@ -74,6 +74,7 @@ help:
 	@echo "  check             Compile only (swift build) — no bundle/sign; CI/agent gate"
 	@echo "  test              Run the SwiftPM test suite"
 	@echo "  packages          After a version change in Package.swift: resolve the packages and re-copy the grammar scanners"
+	@echo "  relay-check       Type-check, lint, test, and bundle the relay Worker in ./relay (needs mise)"
 	@echo "  release           Build release into ./$(APP)"
 	@echo "  run               Build and launch $(APP_NAME)"
 	@echo "  icon              Regenerate build/AppIcon.icns from scripts/make-icon.swift"
@@ -168,6 +169,12 @@ packages: deps
 	done
 	@cp .build/checkouts/tree-sitter-yaml/src/schema.*.c Sources/TreeSitterScanners/
 	@echo "✓ Package.resolved and the copied scanners match Package.swift"
+
+# Type-check, lint, and test the relay Worker, and bundle it without deploying. `mise x` runs each
+# command with the Node and pnpm that mise.toml pins, and installs them first when missing.
+relay-check:
+	cd relay && mise x -- pnpm install --frozen-lockfile && mise x -- pnpm check && mise x -- pnpm build
+	@echo "✓ relay checks"
 
 print-version:
 	@echo "VERSION=$(VERSION)"
