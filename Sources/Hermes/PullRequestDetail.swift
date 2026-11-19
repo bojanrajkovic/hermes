@@ -21,9 +21,29 @@ final class Loader<Value: Sendable> {
         attempt += 1
     }
 
+    /// Replaces the loaded value with what `change` makes of it.
+    ///
+    /// - Returns: False when nothing is loaded yet, or `change` returns nil.
+    func apply(_ change: (Value) -> Value?) -> Bool {
+        guard let value, let changed = change(value) else { return false }
+        self.value = changed
+        applied += 1
+        return true
+    }
+
+    /// How many changes `apply` has made.
+    @ObservationIgnored private var applied = 0
+
     func load(_ operation: () async throws -> Value) async {
         do {
-            value = try await operation()
+            while true {
+                let before = applied
+                let loaded = try await operation()
+                // A change applied while this ran is newer than its answer, so it runs once more.
+                guard applied == before else { continue }
+                value = loaded
+                break
+            }
             error = nil
         } catch is CancellationError {
         } catch let error as URLError where error.code == .cancelled {
@@ -38,6 +58,12 @@ final class Loader<Value: Sendable> {
 struct LoadID: Hashable {
     let updatedAt: Date
     let attempt: Int
+}
+
+/// How many deliveries have changed one pull request's description, conversation, or reviews.
+private struct DetailChanges: Equatable {
+    let key: ItemKey
+    let count: Int
 }
 
 /// One entry in a pull request's activity: a comment or a submitted review.
@@ -101,6 +127,15 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: current, initial: true) { opened.insert(current) }
+        .onChange(of: DetailChanges(key: pullRequest.key, count: model.store.eventCounts[pullRequest.key]?.detail.count ?? 0)) { seen, now in
+            // Another pull request's count is not a change to this one.
+            guard seen.key == now.key else { return }
+            // A delivery said the description, a comment, or a review changed. Its payload is
+            // applied when it can be, and the detail loads again when it can't.
+            let change = model.store.eventCounts[pullRequest.key]?.detail.only(since: seen.count)
+            if let change, detail.apply({ $0.applying(change) }) { return }
+            detail.retry()
+        }
         .task(id: LoadID(updatedAt: pullRequest.updatedAt, attempt: detail.attempt)) {
             await detail.load {
                 try await model.client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
@@ -117,13 +152,14 @@ struct PullRequestDetailView: View {
             DiffScreen(
                 source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
+                threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? WebhookChanges(),
                 // The review changes the reason the pull request is in the inbox, and its review decision.
                 onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
-                initiallySelected: model.checkToOpen
+                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
             )
         case .sessions:
             ScrollView {
@@ -527,7 +563,8 @@ struct ConversationView: View {
 
                 PaneSection("Checks") {
                     ChecksSummary(
-                        repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client
+                        repository: pullRequest.repository, commitOID: pullRequest.headOID, client: model.client,
+                        changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
                     ) { check in
                         model.checkToOpen = check
                         model.pullRequestTab = .checks

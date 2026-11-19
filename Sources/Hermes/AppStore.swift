@@ -196,17 +196,79 @@ final class AppStore {
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
 
-    /// Loads what a webhook says changed: the pull request when Hermes holds it, and
-    /// otherwise the account, which is how a new pull request joins the lists.
-    private func reload(_ event: WebhookEvent) {
+    /// What deliveries have said about each pull request's description and conversation,
+    /// review threads, and checks. The screens that show those apply the latest change, or
+    /// reload, when a count rises.
+    private(set) var eventCounts: [ItemKey: EventCounts] = [:]
+
+    private func note(_ change: WebhookChange?, in part: EventCounts.Part, of key: ItemKey) {
+        eventCounts[key, default: EventCounts()][keyPath: part].note(change)
+    }
+
+    /// Takes in what a webhook says changed. For a pull request Hermes holds, it applies the
+    /// fields the payload carries, and loads the pull request when the event changed more
+    /// than that. Otherwise it loads the account, which is how a new pull request joins the lists.
+    ///
+    /// - Parameter part: The count to raise for the pull request, when the event's name says
+    ///   which part of it changed. A forwarder's deliveries carry no name.
+    private func reload(_ event: WebhookEvent, part: EventCounts.Part? = nil) {
         let data = data(for: event.repository.owner)
-        let key = event.pullRequest.map { ItemKey(repository: event.repository, number: $0) }
-        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(event.pullRequest ?? 0)")
+        let held = event.pullRequest(among: data.heldPullRequests)
+        Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(held?.number ?? 0)")
+
+        guard let held else {
+            // The account's own load finds a new pull request, and one whose new head Hermes has
+            // not heard of yet. A busy repository sends many such events, so they share loads.
+            return load(ItemKey(repository: RepositoryRef(owner: data.login, name: ""), number: 0), part: nil) {
+                await data.refresh()
+            }
+        }
+        let key = held.key
+        switch event.change {
+        case .pullRequest(let fields, let reloads):
+            // Deliveries can arrive out of order. A payload older than the row's last changes nothing.
+            if data.apply(fields, to: key) { note(event.change, in: \.detail, of: key) }
+            guard reloads else { return }
+        case .comment:
+            // A comment changes nothing a row shows.
+            return note(event.change, in: \.detail, of: key)
+        case .review:
+            // The row's review decision is GitHub's to work out.
+            note(event.change, in: \.detail, of: key)
+        case .reply, .threadResolved, .threads:
+            // The diff applies the change to its threads, or loads them. A row shows none of it.
+            return note(event.change, in: \.threads, of: key)
+        case .status, .checkRun, .checks:
+            // The checks screens show the head commit's checks. A check on an older commit of
+            // the pull request is not among them. The row's rollup is GitHub's to work out.
+            if event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
+            return load(key, part: nil) { await data.refetch(key) }
+        case nil:
+            break
+        }
+        load(key, part: part) { await data.refetch(key) }
+    }
+
+    /// Runs `operation` for the first event of a burst about `key`, and once more, a few
+    /// seconds later, for the events that came while it ran.
+    private func load(_ key: ItemKey, part: EventCounts.Part?, _ operation: @escaping () async -> Void) {
+        guard bursts.shouldLoad(key, part: part) else { return }
+        if let part { note(nil, in: part, of: key) }
 
         Task {
-            if let key, data.pullRequest(key) != nil { await data.refetch(key) } else { await data.refresh() }
+            while true {
+                await operation()
+                try? await Task.sleep(for: Self.eventSpacing)
+                guard let parts = bursts.loaded(key) else { break }
+                for part in parts { note(nil, in: part, of: key) }
+            }
         }
     }
+
+    /// How long after loading a pull request for an event Hermes waits before loading it
+    /// again for the events that came meanwhile.
+    static let eventSpacing: Duration = .seconds(5)
+    @ObservationIgnored private var bursts = EventBursts()
 
     /// Opens a link in the frontmost window, or in a new window when it ends in `?window=new`
     /// or no window is up. A link Hermes can't read is reported in the frontmost window.
