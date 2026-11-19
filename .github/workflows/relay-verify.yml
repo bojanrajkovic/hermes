@@ -6,8 +6,12 @@ name: Relay verify
 on:
   schedule:
     - cron: "17 * * * *"
-  # Relay deploy calls this after each deploy.
+  # Relay deploy calls this after each deploy. A called workflow sees only the secrets its caller
+  # passes, even ones in its own environment, and a missing one is an empty string.
   workflow_call:
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
   workflow_dispatch:
 
 permissions: {}
