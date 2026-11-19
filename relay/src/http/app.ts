@@ -147,4 +147,17 @@ app.post("/t/:tenant/session", async (c) => {
   }
 });
 
+app.get("/t/:tenant/connect", async (c) => {
+  const stub = tenant(c);
+  if (stub === undefined) {
+    return await c.notFound();
+  }
+
+  if (c.req.header("upgrade") !== "websocket") {
+    return c.body(null, 426);
+  }
+
+  return await stub.fetch(c.req.raw);
+});
+
 export default app;
