@@ -19,15 +19,18 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
 
 ## Pull requests
 
-* You may push PRs, but you MUST NOT ever merge them yourself to main.
+* You may push branches, open PRs, and merge a PR when the user says to merge it.
 
-## GitHub writes
+* This repository is public. Screenshots, fixtures, and docs must not show the user's private
+  repositories or organizations. Black out private sidebar rows and Inbox filter counts.
 
-* The only repository you may write to is `bojanrajkovic/hermes-playground`. That covers
-  `gh api` with POST, PATCH, PUT, or DELETE, reviews, comments, pushes, and any test that
-  submits a review.
+## Testing against GitHub
 
-* Every other repository is read-only, including the ones Hermes shows while you test it.
+* When you exercise Hermes, the only repository it may write to is
+  `bojanrajkovic/hermes-playground`. That covers `gh api` with POST, PATCH, PUT, or DELETE,
+  reviews, comments, pushes, and any test that submits a review.
+
+* Every other repository Hermes shows while you test it is read-only.
 
 ## Target layout
 
