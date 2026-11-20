@@ -484,21 +484,24 @@ extension GitHubClient {
 
     /// Loads an issue's description and its first 100 comments.
     ///
+    /// - Returns: The detail, and how many comments the issue has in all, which can be more
+    ///   than the detail holds.
     /// - Throws: `GitHubError.graphQL` with type `NOT_FOUND` when the
     ///   repository or issue does not exist or is not visible.
-    public func issueDetail(repository: RepositoryRef, number: Int) async throws -> IssueDetail {
+    public func issueDetail(repository: RepositoryRef, number: Int) async throws -> (detail: IssueDetail, commentCount: Int) {
         let query = """
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
-                issue(number: $number) { body comments(first: 100) { nodes { \(commentFields) } } }
+                issue(number: $number) { body comments(first: 100) { totalCount nodes { \(commentFields) } } }
               }
             }
             """
-        return try await graphQL(
+        let field = try await graphQL(
             query,
             variables: ["owner": .string(repository.owner), "name": .string(repository.name), "number": .int(number)],
             as: RepositoryData<IssueField>.self
-        ).repository.issue
+        ).repository
+        return (field.issue, field.commentCount)
     }
 }
 
@@ -766,6 +769,20 @@ struct IssuesField: Decodable, Sendable {
 
 struct IssueField: Decodable, Sendable {
     let issue: IssueDetail
+    /// Every comment, not only the ones loaded.
+    let commentCount: Int
+
+    private enum CodingKeys: String, CodingKey { case issue }
+    private struct Counted: Decodable {
+        struct Count: Decodable { let totalCount: Int }
+        let comments: Count
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        issue = try container.decode(IssueDetail.self, forKey: .issue)
+        commentCount = try container.decode(Counted.self, forKey: .issue).comments.totalCount
+    }
 }
 
 struct ChecksField: Decodable, Sendable {

@@ -37,7 +37,7 @@ public struct Issue: Sendable, Hashable, Identifiable {
     /// Nil when the author's account was deleted.
     public let author: User?
     public let labels: [GitHubLabel]
-    public let commentCount: Int
+    public var commentCount: Int
     public let createdAt: Date
     public let updatedAt: Date
     public let assignees: [User]
