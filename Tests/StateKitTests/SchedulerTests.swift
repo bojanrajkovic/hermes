@@ -15,7 +15,7 @@ struct SchedulerTests {
 
     @Test func twoScreensShowingOneInterestShareOnePoll() async {
         let polls = Polls()
-        let scheduler = Scheduler(tick: .milliseconds(10)) { _ in polls.count += 1 }
+        let scheduler = Scheduler(tick: { _ in .milliseconds(10) }) { _ in polls.count += 1 }
 
         let first = Task { await scheduler.showing(.account("bojan")) }
         let second = Task { await scheduler.showing(.account("bojan")) }
@@ -37,7 +37,7 @@ struct SchedulerTests {
     }
 
     @Test func eachInterestGetsItsOwnPoll() async {
-        let scheduler = Scheduler(tick: .seconds(60)) { _ in }
+        let scheduler = Scheduler(tick: { _ in .seconds(60) }) { _ in }
 
         let mine = Task { await scheduler.showing(.account("bojan")) }
         let theirs = Task { await scheduler.showing(.account("hermes-org")) }

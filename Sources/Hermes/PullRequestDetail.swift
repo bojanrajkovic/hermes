@@ -5,6 +5,7 @@ import GitHubKit
 import HermesUI
 import MarkdownUI
 import SessionsUI
+import StateKit
 import SwiftUI
 
 /// Loads one value for a detail pane and keeps the last good one while it reloads.
@@ -103,7 +104,6 @@ func timeline(of detail: PullRequestDetail) -> [TimelineEntry] {
 struct PullRequestDetailView: View {
     let pullRequest: PullRequest
     @Environment(WindowModel.self) private var model
-    @State private var detail = Loader<PullRequestDetail>()
     /// Tabs stay mounted once opened, so the diff keeps its scroll position
     /// while the user looks at the checks.
     @State private var opened: Set<PullRequestTab> = []
@@ -133,24 +133,20 @@ struct PullRequestDetailView: View {
             // A delivery said the description, a comment, or a review changed. Its payload is
             // applied when it can be, and the detail loads again when it can't.
             let change = model.store.eventCounts[pullRequest.key]?.detail.only(since: seen.count)
-            if let change, detail.apply({ $0.applying(change) }) { return }
-            detail.retry()
+            if let change, model.github.applyToDetail(change, for: pullRequest.key) { return }
+            Task { await model.github.loadDetail(pullRequest.key) }
         }
-        .task(id: LoadID(updatedAt: pullRequest.updatedAt, attempt: detail.attempt)) {
-            await detail.load {
-                try await model.client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
-            }
-        }
+        .showing(.pullRequest(pullRequest.key), in: model.github)
     }
 
     @ViewBuilder
     private func content(_ tab: PullRequestTab, sessions: [ClaudeSession]) -> some View {
         switch tab {
         case .conversation:
-            ConversationView(pullRequest: pullRequest, detail: detail)
+            ConversationView(pullRequest: pullRequest)
         case .files:
             DiffScreen(
-                source: .pullRequest(pullRequest), client: model.client, repoCache: model.repoCache,
+                source: .pullRequest(pullRequest), store: model.github, client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
                 threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? WebhookChanges(),
                 // The review changes the reason the pull request is in the inbox, and its review decision.
@@ -316,7 +312,6 @@ struct BranchChips: View {
 struct MergeButton: View {
     let pullRequest: PullRequest
     @Environment(WindowModel.self) private var model
-    @State private var readiness: MergeReadiness?
     /// The merge waiting for the user's confirmation.
     @State private var pending: PendingMerge?
     @State private var isMerging = false
@@ -335,9 +330,6 @@ struct MergeButton: View {
                 .fixedSize()
                 .disabled(!(readiness?.canMerge == true || canBypass || canEnableAutoMerge || canDisableAutoMerge) || isMerging)
                 .help(help)
-                .task(id: MergeInput(head: pullRequest.headOID, updatedAt: pullRequest.updatedAt, checks: pullRequest.checkState)) {
-                    readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
-                }
                 .confirmationDialog(
                     title, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), presenting: pending
                 ) { pending in
@@ -354,6 +346,10 @@ struct MergeButton: View {
                 }
         }
     }
+
+    /// Loaded by the store while the pull request is on screen, and again when a push, a review,
+    /// or a finished check could change it.
+    private var readiness: MergeReadiness? { model.github.readiness[pullRequest.key] }
 
     /// GitHub would let the viewer merge past what blocks it. Not for a stacked pull request:
     /// `gh stack merge` cannot bypass.
@@ -410,13 +406,6 @@ struct MergeButton: View {
         }
     }
 
-    /// What the readiness depends on: a push, a review, or a finished check changes it.
-    private struct MergeInput: Hashable {
-        let head: String
-        let updatedAt: Date
-        let checks: ChecksRollup?
-    }
-
     private var help: String {
         guard let readiness else { return "Checking whether this can merge…" }
         if let blocker = readiness.blocker {
@@ -457,7 +446,7 @@ struct MergeButton: View {
             } catch {
                 failure = describe(error)
             }
-            readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
+            await model.github.loadReadiness(pullRequest.key)
         }
     }
 
@@ -469,7 +458,7 @@ struct MergeButton: View {
                 try await model.merge(pullRequest, method: method)
             } catch {
                 failure = describe(error)
-                readiness = try? await model.client.mergeReadiness(repository: pullRequest.repository, number: pullRequest.number)
+                await model.github.loadReadiness(pullRequest.key)
             }
         }
     }
@@ -534,25 +523,25 @@ struct StackSwitcher: View {
 
 struct ConversationView: View {
     let pullRequest: PullRequest
-    let detail: Loader<PullRequestDetail>
     @Environment(WindowModel.self) private var model
 
     var body: some View {
+        let detail = model.github.details[pullRequest.key]
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.readingSectionSpacing) {
-                if let value = detail.value {
+                if let value = detail {
                     CommentCard(
                         author: pullRequest.author, verb: "opened this pull request", date: pullRequest.createdAt,
                         markdown: value.body, baseURL: pullRequest.url
                     )
                     if !value.requestedReviewers.isEmpty { reviewers(value.requestedReviewers) }
-                } else if let error = detail.error {
+                } else if let error = model.github.detailErrors[pullRequest.key] {
                     ContentUnavailableView {
                         Label("Could Not Load the Conversation", systemImage: "exclamationmark.bubble")
                     } description: {
                         Text(error)
                     } actions: {
-                        Button("Try Again") { detail.retry() }
+                        Button("Try Again") { Task { await model.github.loadDetail(pullRequest.key) } }
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -592,7 +581,7 @@ struct ConversationView: View {
                     }
                 }
 
-                if let value = detail.value {
+                if let value = detail {
                     let entries = timeline(of: value)
                     PaneSection("Activity") {
                         if entries.isEmpty {
@@ -623,7 +612,7 @@ struct ConversationView: View {
             .frame(maxWidth: Theme.conversationMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .modifier(ScrollsToLinkedComment(comments: detail.value?.comments))
+        .modifier(ScrollsToLinkedComment(comments: detail?.comments))
     }
 
     private func reviewers(_ reviewers: [RequestedReviewer]) -> some View {

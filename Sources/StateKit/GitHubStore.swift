@@ -15,15 +15,42 @@ import GitHubKit
 public final class GitHubStore {
     public static let issuePageSize = 30
     /// How often a poll loop wakes up. Each tick refreshes only what is due.
-    public static let tick: Duration = .seconds(15)
+    nonisolated public static let tick: Duration = .seconds(15)
 
-    let client: GitHubClient
+    public let client: GitHubClient
 
     public internal(set) var pullRequests: [ItemKey: PullRequest] = [:]
     public internal(set) var issues: [ItemKey: Issue] = [:]
     public internal(set) var repositories: [RepositoryRef: Stamped<Repository>] = [:]
     public internal(set) var accounts: [String: AccountLists] = [:]
     public internal(set) var issueLists: [RepositoryRef: IssueList] = [:]
+
+    /// The signed-in user's login. Nil until sign-in finishes.
+    public var viewer: String?
+
+    /// Each open pull request's description, conversation, reviews, commits, and review threads.
+    public internal(set) var details: [ItemKey: PullRequestDetail] = [:]
+    /// Why a pull request's detail could not load. Cleared by the next load that works.
+    public internal(set) var detailErrors: [ItemKey: String] = [:]
+    /// Whether each open pull request can merge, and how.
+    public internal(set) var readiness: [ItemKey: MergeReadiness] = [:]
+    /// Each open pull request's head commit, update time, and viewed files, as the last
+    /// revision fetch or viewed mark left them.
+    public internal(set) var revisions: [ItemKey: Stamped<PullRequestRevision>] = [:]
+
+    /// How many detail loads have started for each pull request. A load that a later one
+    /// overtakes drops its answer.
+    @ObservationIgnored var detailLoads: [ItemKey: Int] = [:]
+    /// How many webhook changes each detail took. A load that ran meanwhile runs again.
+    @ObservationIgnored var detailWrites: [ItemKey: Int] = [:]
+    /// The update time each loaded detail matches.
+    @ObservationIgnored var detailLoadedFor: [ItemKey: Date] = [:]
+    @ObservationIgnored var readinessInputs: [ItemKey: ReadinessInput] = [:]
+    /// How many viewed marks were sent for each file, and the last send, so marks go out in order.
+    @ObservationIgnored var viewedSends: [ViewedFile: Int] = [:]
+    @ObservationIgnored var viewedTasks: [ViewedFile: Task<Void, Never>] = [:]
+    /// Marks sent to GitHub that it hasn't confirmed. Every revision taken keeps them.
+    @ObservationIgnored var viewedInFlight: [ViewedFile: Bool] = [:]
 
     /// The webhook payloads put into rows. A load reads it before and after asking GitHub,
     /// to tell whether a row took a payload meanwhile.
@@ -39,9 +66,9 @@ public final class GitHubStore {
 
     @ObservationIgnored private var scheduler: Scheduler?
 
-    public init(client: GitHubClient, tick: Duration = GitHubStore.tick) {
+    public init(client: GitHubClient) {
         self.client = client
-        scheduler = Scheduler(tick: tick) { [weak self] interest in await self?.poll(interest) }
+        scheduler = Scheduler(tick: \.interval) { [weak self] interest in await self?.poll(interest) }
     }
 
     // MARK: Interests
@@ -63,6 +90,8 @@ public final class GitHubStore {
                 backgroundInterval: backgroundInterval, now: .now
             ) else { return }
             await refresh(login)
+        case .pullRequest(let key):
+            await pollPullRequest(key)
         }
     }
 

@@ -16,7 +16,7 @@ Three targets make it up:
 
 | Source | Diff comes from | Stays current by | Comments |
 |--------|-----------------|------------------|----------|
-| `.pullRequest` | GitHub, or the bare clone when GitHub refuses a large diff | Polling the head commit every 10 seconds | Yes |
+| `.pullRequest` | GitHub, or the bare clone when GitHub refuses a large diff | The store's revision, which it polls every 10 seconds | Yes |
 | `.workingTree` | `git diff` of a worktree against the merge base of a ref, plus untracked files | Watching the worktree's files | No |
 | `.localBranch` | `git diff parent...branch` in a checkout | Nothing. It loads once | No |
 
@@ -185,11 +185,15 @@ table's coordinator has them:
 
 ## Staying current
 
-For a pull request, `DiffModel.run` asks GitHub for the head commit and update
-time every 10 seconds while the screen is visible:
+For a pull request, the store polls the head commit, update time, and viewed
+files every 10 seconds while any of the pull request's screens shows (see
+[store.md](store.md)). `DiffModel.run` follows the store's revision and
+threads:
 
 - A new head commit reloads the diff.
-- A new update time with the same head reloads only the review threads.
+- A new update time makes the store load the pull request's detail, which
+  carries the review threads. `ReviewModel` reads the threads from the store
+  and matches them against the diff.
 
 GitHub serves the previous diff for a few seconds after a push. When the head
 is new but the text is unchanged, the model keeps the old head so the next
@@ -348,17 +352,22 @@ its Files tab. Working-tree and branch diffs keep their marks in memory.
 sequenceDiagram
     participant U as User
     participant M as DiffModel
+    participant S as GitHubStore
     participant G as GitHub
     U->>M: toggle viewed
     M->>M: update the file now
-    M->>G: markFileAsViewed / unmarkFileAsViewed
-    G-->>M: refused
-    M->>M: put the mark back, show "Couldn't mark as viewed" for 3 s
+    M->>S: setViewed
+    S->>S: update the viewed paths now
+    S->>G: markFileAsViewed / unmarkFileAsViewed
+    G-->>S: refused
+    S->>S: take the mark back
+    S-->>M: throws, show "Couldn't mark as viewed" for 3 s
     loop every 10 seconds
-        M->>G: pullRequestRevision (head, update time, files' viewed state)
-        G-->>M: viewed paths
-        M->>M: viewedUpdates(), then keep the rows on screen in place
+        S->>G: pullRequestRevision (head, update time, files' viewed state)
+        G-->>S: viewed paths
     end
+    S-->>M: viewed paths changed
+    M->>M: viewedUpdates(), then keep the rows on screen in place
 ```
 
 - **Reading.** `pullRequestRevision` reads each file's `viewerViewedState`,
@@ -369,18 +378,21 @@ sequenceDiagram
 - **Polling.** The poll reads the marks every 10 seconds even when the head is
   unchanged, because marking a file viewed changes neither the head nor the
   update time. Marks made in a browser show up within one poll.
-- **Writing.** A toggle updates the file at once and then sends the mutation.
-  A path's mutations go one at a time, so a quick mark and unmark reach GitHub
-  in that order. When GitHub refuses, the mark goes back, unless the user toggled it again
-  since, and the summary bar shows "Couldn't mark as viewed" for 3 seconds.
-  "Couldn't refresh" takes its place while a reload is failing.
-- **Marks GitHub may not have seen.** A poll skips paths whose mutation is
-  still being sent or was sent after the poll's request started. Otherwise a
-  poll that left before a click would undo it.
+- **Writing.** A toggle updates the file at once, and `GitHubStore.setViewed`
+  updates the store's viewed paths and sends the mutation. A path's mutations
+  go one at a time, so a quick mark and unmark reach GitHub in that order. When
+  GitHub refuses, the store takes the mark back, unless the user toggled it
+  again since, and the summary bar shows "Couldn't mark as viewed" for 3
+  seconds. "Couldn't refresh" takes its place while a reload is failing.
+- **Marks GitHub may not have seen.** The store keeps the revision with the
+  start time of the fetch or mark that wrote it. A poll that asked GitHub
+  before a click answers with older marks, and the store drops that answer.
+  A poll that asks while the mutation is still on its way gets the mark laid
+  over its answer, until GitHub confirms or refuses it.
 - **The file the user is in.** A browser mark on the file being read, or on
   the file with the comment box, ticks the checkbox but leaves the file open.
   It collapses once the user scrolls to another file. Collapses above the
   visible rows keep those rows in place.
 
-`viewedUpdates(files:remote:skipping:held:)` makes the decision and is tested
+`viewedUpdates(files:remote:held:)` makes the decision and is tested
 without a view.

@@ -1,5 +1,6 @@
 import GitHubKit
 import RepoKit
+import StateKit
 import SwiftUI
 
 /// What a ``DiffScreen`` shows.
@@ -21,6 +22,7 @@ public enum DiffSource: Hashable, Sendable {
 /// commands come from ``DiffCommands``, which the app adds to its scene.
 public struct DiffScreen: View {
     private let source: DiffSource
+    private let store: GitHubStore?
     private let client: GitHubClient
     private let repoCache: RepoCache
     /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
@@ -32,17 +34,22 @@ public struct DiffScreen: View {
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
-    /// - Parameter threadChanges: What webhook deliveries have said about the pull request's
-    ///   review threads. When its count rises, the screen applies the latest change, or
-    ///   reloads the threads when it can't, ahead of its own polling.
+    /// - Parameters:
+    ///   - store: The app's store, which holds a pull request's revision, viewed files, and
+    ///     threads. Local sources pass none.
+    ///   - threadChanges: What webhook deliveries have said about the pull request's
+    ///     review threads. When its count rises, the screen applies the latest change, or
+    ///     reloads the threads when it can't, ahead of the store's polling.
     public init(
-        source: DiffSource, client: GitHubClient, repoCache: RepoCache, target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
+        source: DiffSource, store: GitHubStore? = nil, client: GitHubClient, repoCache: RepoCache,
+        target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
         threadChanges: WebhookChanges = WebhookChanges(), onReviewSubmitted: @escaping @MainActor () -> Void = {}
     ) {
         _target = target
         self.threadChanges = threadChanges
         self.onReviewSubmitted = onReviewSubmitted
         self.source = source
+        self.store = store
         self.client = client
         self.repoCache = repoCache
     }
@@ -84,7 +91,7 @@ public struct DiffScreen: View {
         // polling. Coming back reuses the model, so the diff reloads in place.
         .task(id: source.key) {
             if model?.source.key != source.key {
-                model = DiffModel(source: source, client: client, repoCache: repoCache, layout: layout)
+                model = DiffModel(source: source, store: store, client: client, repoCache: repoCache, layout: layout)
                 model?.review?.onSubmitted = onReviewSubmitted
             }
             takeTarget()

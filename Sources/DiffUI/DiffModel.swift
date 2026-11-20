@@ -3,6 +3,7 @@ import Foundation
 import GitHubKit
 import Observation
 import RepoKit
+import StateKit
 
 /// One file of the diff and its view state.
 ///
@@ -261,11 +262,11 @@ final class DiffModel {
     }
 
     @ObservationIgnored private let client: GitHubClient
+    /// Where a pull request's revision, viewed files, and threads live.
+    @ObservationIgnored private let store: GitHubStore
     @ObservationIgnored private let repoCache: RepoCache
     @ObservationIgnored private var loadedText: String?
     @ObservationIgnored private var diff = Diff(parsing: "")
-    /// When GitHub last recorded activity on the pull request.
-    @ObservationIgnored private var revisionDate: Date?
     @ObservationIgnored private var head: String?
     /// How many reloads in a row returned the old diff for a new head.
     @ObservationIgnored private var staleFetches = 0
@@ -274,25 +275,23 @@ final class DiffModel {
     /// Whether the source tree could not be read after the last load, so the next reload tries again.
     @ObservationIgnored private var treeFailed = false
     @ObservationIgnored private var fileOrder: [FileDiff.ID: Int] = [:]
-    /// Counts viewed marks sent to GitHub. A poll notes it before its request,
-    /// so it can tell which marks it may not have seen.
-    @ObservationIgnored private var viewedWrites = 0
-    /// The last viewed mark sent for each path.
-    @ObservationIgnored private var viewedSends: [String: ViewedSend] = [:]
     @ObservationIgnored private var viewedErrorExpiry: Task<Void, Never>?
     /// Highlighting and file reads that follow a load. Tests await it.
     @ObservationIgnored private(set) var background: Task<Void, Never>?
 
+    /// - Parameter store: The app's store. Nil makes one of the model's own, for local sources and tests.
     init(
-        source: DiffSource, client: GitHubClient, repoCache: RepoCache, layout: DiffLayout = .unified,
+        source: DiffSource, store: GitHubStore? = nil, client: GitHubClient, repoCache: RepoCache, layout: DiffLayout = .unified,
         draftsRoot: URL = PendingReview.defaultRoot
     ) {
+        let store = store ?? GitHubStore(client: client)
         self.source = source
+        self.store = store
         self.client = client
         self.repoCache = repoCache
         self.layout = layout
         if case .pullRequest(let pullRequest) = source {
-            review = ReviewModel(pullRequest: pullRequest, client: client, draftsRoot: draftsRoot)
+            review = ReviewModel(pullRequest: pullRequest, store: store, draftsRoot: draftsRoot)
         } else {
             review = nil
         }
@@ -327,31 +326,22 @@ final class DiffModel {
     // MARK: Loading
 
     /// Loads the diff, then reloads it as the source changes: a pull request
-    /// is polled every 10 seconds for a new head commit, a working tree is
-    /// watched for file changes, and a local branch for commits. Runs until
-    /// its task is cancelled.
+    /// follows the store's revision, which the store polls while the pull request
+    /// is on screen, a working tree is watched for file changes, and a local
+    /// branch for commits. Runs until its task is cancelled.
     func run() async {
         await reload()
         switch source {
         case .pullRequest(let pullRequest):
-            // The sleep throws when the screen goes away, which ends the polling.
-            while (try? await Task.sleep(for: .seconds(10))) != nil {
-                let writesBefore = viewedWrites
-                let revision = try? await client.pullRequestRevision(
-                    repository: pullRequest.repository, number: pullRequest.number
-                )
-                guard let revision else { continue }
-                if revision.headOID != head || treeFailed {
-                    await reload()
-                    continue
+            let key = pullRequest.key
+            await withTaskGroup(of: Void.self) { group in
+                if let review {
+                    group.addTask { await review.followThreads { [weak self] in self?.goToPendingTarget() } }
                 }
-                // Marking a file viewed changes neither the head nor the update time.
-                applyViewed(revision.viewedPaths, writesBefore: writesBefore)
-                if revision.updatedAt != revisionDate {
-                    // A comment or a review, with no new commit.
-                    // A failed read keeps the old date, so the next poll asks again.
-                    if await review?.reloadThreads() != false { revisionDate = revision.updatedAt }
-                    goToPendingTarget()
+                group.addTask { [weak self, store] in
+                    for await revision in Observations({ @MainActor in store.revisions[key]?.value }) {
+                        await self?.follow(revision)
+                    }
                 }
             }
         case .workingTree(let directory, _):
@@ -362,13 +352,27 @@ final class DiffModel {
         }
     }
 
+    /// Reloads the diff for a new head commit, and otherwise makes the viewed marks match GitHub's.
+    private func follow(_ revision: PullRequestRevision?) async {
+        guard let revision else { return }
+        if revision.headOID != head || treeFailed { return await reload() }
+        applyViewed(revision.viewedPaths)
+    }
+
     /// Fetches the diff and updates the files in place. Content already on
     /// screen stays there while this runs, and when it fails.
     func reload() async {
         if case .failed = phase { phase = .loading }
-        let writesBefore = viewedWrites
+        let started = Date.now
         do {
             let fetched = try await DiffLoader.fetch(source, client: client, repoCache: repoCache)
+            // The first load gives the store its revision. After that only the store's poll writes
+            // it: each write wakes `follow(_:)`, and a reload that wrote would retry a stale diff at once.
+            if case .pullRequest(let pullRequest) = source, store.revisions[pullRequest.key] == nil,
+               let head = fetched.head, let updatedAt = fetched.updatedAt {
+                let revision = PullRequestRevision(headOID: head, updatedAt: updatedAt, viewedPaths: fetched.viewedPaths ?? [])
+                store.take(revision, for: pullRequest.key, startedAt: started)
+            }
             refreshError = nil
             // For a few seconds after a push, GitHub serves the previous diff.
             // Keeping the old head makes the next poll ask again. A commit that
@@ -379,12 +383,10 @@ final class DiffModel {
             }
             staleFetches = 0
             head = fetched.head
-            await show(text: fetched.text, viewedPaths: fetched.viewedPaths, writesBefore: writesBefore)
-            let threadsLoaded = await review?.refresh(diff: diff, head: head) != false
+            await show(text: fetched.text, viewedPaths: storedViewedPaths)
+            // The store loads the threads with the pull request's detail. They are matched against this diff.
+            review?.show(diff: diff, head: head)
             goToPendingTarget()
-            // The threads were read after this revision, so the next poll need not read them again.
-            // When reading them failed, no date matches and the next poll reads them.
-            revisionDate = threadsLoaded ? fetched.updatedAt : nil
         } catch is CancellationError {
         } catch {
             let message = DiffLoader.message(for: error)
@@ -398,10 +400,9 @@ final class DiffModel {
     /// - Parameters:
     ///   - viewedPaths: The files GitHub has as viewed, applied before the
     ///     files appear so they open already collapsed. `nil` keeps the marks as they are.
-    ///   - writesBefore: `viewedWrites` before `viewedPaths` was read.
-    func show(text: String, viewedPaths: Set<String>? = nil, writesBefore: Int = 0) async {
+    func show(text: String, viewedPaths: Set<String>? = nil) async {
         guard text != loadedText else {
-            if let viewedPaths { applyViewed(viewedPaths, writesBefore: writesBefore) }
+            if let viewedPaths { applyViewed(viewedPaths) }
             phase = .loaded
             if treeFailed { startBackgroundWork() }
             return
@@ -413,7 +414,7 @@ final class DiffModel {
         let anchors = visibleLineRows()
         let movesContent = changesContent(aboveOrIn: scroll.currentFile, diff)
         apply(diff)
-        if let viewedPaths { applyViewed(viewedPaths, writesBefore: writesBefore) }
+        if let viewedPaths { applyViewed(viewedPaths) }
         phase = .loaded
         if isUpdate {
             updatedAt = .now
@@ -559,40 +560,25 @@ final class DiffModel {
 
     // MARK: Viewed marks on GitHub
 
-    /// A viewed mark on its way to GitHub, or the last one sent for its path.
-    private struct ViewedSend {
-        /// The value of `viewedWrites` when it was sent.
-        let write: Int
-        let task: Task<Void, Never>
-        var isDone = false
+    /// The viewed files the store holds for a pull request. Nil for local sources, whose marks stay in memory.
+    private var storedViewedPaths: Set<String>? {
+        guard case .pullRequest(let pullRequest) = source else { return nil }
+        return store.viewedPaths(of: pullRequest.key)
     }
 
-    /// Sends a pull request file's mark to GitHub, after the path's previous
-    /// mark, so a quick mark and unmark land in order. When GitHub refuses,
-    /// the mark goes back to what it was, unless the user changed it again since.
+    /// Sends a pull request file's mark to GitHub through the store, which keeps marks for a
+    /// path in order and takes one back when GitHub refuses it. The store's change reaches
+    /// the file through `follow(_:)`.
     private func sendViewed(_ viewed: Bool, for file: FileModel) {
         guard case .pullRequest(let pullRequest) = source else { return }
         let path = file.diff.path
-        viewedWrites += 1
-        let write = viewedWrites
-        let previous = viewedSends[path]?.task
-        let task = Task { [weak self, client] in
-            await previous?.value
-            let failure: (any Error)?
+        Task { [weak self, store] in
             do {
-                try await client.setFileViewed(pullRequestID: pullRequest.id, path: path, viewed: viewed)
-                failure = nil
+                try await store.setViewed(viewed, path: path, of: pullRequest)
             } catch {
-                failure = error
+                self?.showViewedError(DiffLoader.message(for: error))
             }
-            guard let self else { return }
-            let isLatest = viewedSends[path]?.write == write
-            if isLatest { viewedSends[path]?.isDone = true }
-            guard let failure else { return }
-            if isLatest { keepingRowsOnScreen(resizing: [file.id]) { file.setViewed(!viewed) } }
-            showViewedError(DiffLoader.message(for: failure))
         }
-        viewedSends[path] = ViewedSend(write: write, task: task)
     }
 
     private func showViewedError(_ message: String) {
@@ -604,14 +590,11 @@ final class DiffModel {
         }
     }
 
-    /// Makes the marks match GitHub's, keeping the rows on screen in place.
-    ///
-    /// - Parameter writesBefore: `viewedWrites` before `remote` was read.
-    ///   Paths sent after that, or still being sent, keep their mark.
-    private func applyViewed(_ remote: Set<String>, writesBefore: Int) {
-        let skipping = Set(viewedSends.filter { !$0.value.isDone || $0.value.write > writesBefore }.keys)
+    /// Makes the marks match the store's, keeping the rows on screen in place. The store
+    /// already holds marks on their way to GitHub, so none is skipped.
+    private func applyViewed(_ remote: Set<String>) {
         let updates = viewedUpdates(
-            files: files.map { ($0.id, $0.diff.path, $0.isViewed) }, remote: remote, skipping: skipping, held: heldFiles
+            files: files.map { ($0.id, $0.diff.path, $0.isViewed) }, remote: remote, held: heldFiles
         )
         guard !updates.isEmpty else { return }
         let models = Dictionary(files.map { ($0.id, $0) }) { first, _ in first }
@@ -798,16 +781,14 @@ enum ViewedUpdate: Equatable {
 ///
 /// - Parameters:
 ///   - files: Each file's ID, its path on GitHub, and whether it is marked viewed.
-///   - remote: The paths GitHub has as viewed.
-///   - skipping: Paths with a mark GitHub may not have seen yet. Their marks stay.
+///   - remote: The paths the store has as viewed, marks on their way to GitHub included.
 ///   - held: The files the user is in. A file marked viewed there stays open.
 func viewedUpdates(
-    files: [(id: FileDiff.ID, path: String, isViewed: Bool)], remote: Set<String>, skipping: Set<String>,
-    held: Set<FileDiff.ID>
+    files: [(id: FileDiff.ID, path: String, isViewed: Bool)], remote: Set<String>, held: Set<FileDiff.ID>
 ) -> [ViewedUpdate] {
     files.compactMap { file in
         let isViewed = remote.contains(file.path)
-        guard isViewed != file.isViewed, !skipping.contains(file.path) else { return nil }
+        guard isViewed != file.isViewed else { return nil }
         if !isViewed { return .unmark(file.id) }
         return held.contains(file.id) ? .markKeepingOpen(file.id) : .mark(file.id)
     }

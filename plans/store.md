@@ -34,6 +34,10 @@ graph TD
 | `repositories` | Each repository's URL, visibility, and open issue count. | The account's repository load and every issue page. |
 | `accounts[login]` | The account's open pull requests and repositories, as keys, plus its review signals and load state. | The account's refresh. |
 | `issueLists[repo]` | The loaded part of a repository's open issues, as keys, and its cursor. | Issue pages. |
+| `details[key]` | A pull request's description, conversation, reviews, commits, and review threads. The conversation tab and the diff's review threads read it. | The pull request's poll, webhook changes, and a submitted review. |
+| `readiness[key]` | Whether a pull request can merge, and how. | The pull request's poll, when its head, update time, or checks change, and after a merge or an auto-merge change. |
+| `revisions[key]` | A pull request's head commit, update time, and viewed files. | The pull request's poll, the diff's own load, and viewed marks. |
+| `viewer` | The signed-in user's login. | Sign-in. |
 
 Records stay until the app quits. A screen that shows one again makes the
 store load it again, so a kept record doesn't stay stale on screen.
@@ -48,6 +52,13 @@ fetch that started earlier.
 For example, the repository list loads every 10 minutes, and each issue page
 also reports the open issue count. Both write the repository record. If the
 repository load started first but answered last, its older count is dropped.
+A viewed mark writes the pull request's revision with the time of the click,
+so a poll that asked GitHub before the click can't undo the mark. Until GitHub
+confirms the mark, every revision the store takes keeps it.
+
+A pull request's detail uses a counter instead: a webhook change applied while
+a load runs makes the load ask again, and a load that a later one overtakes
+drops its answer.
 
 Webhook payloads use `AppliedPayloads`. A payload older than the last one a
 pull request took is dropped, and a load that ran while a payload arrived
@@ -70,6 +81,11 @@ RootView()
 | Interest | Refreshes | How often |
 |---|---|---|
 | `.account(login)` | The account's open pull requests, its repositories (every 10 minutes), and its opened issue lists. | Every 15 seconds while Hermes is the active app. In the background, every `refreshInterval` from Settings (60 seconds by default). |
+| `.pullRequest(key)` | The pull request's revision. When the head or update time moved, its record and detail. When the head, update time, or checks moved, its merge readiness. | Every 10 seconds. The pull request pane shows it, so every tab gets it. |
 
-A loop wakes every 15 seconds and asks `shouldRefresh` whether this tick
-loads. Activation, ⌘R, and a window's first load refresh at once.
+A loop polls as soon as a screen shows its interest, then once per interval.
+An account's loop asks `shouldRefresh` whether a tick loads, so in the
+background it waits for `refreshInterval`. Activation and ⌘R refresh at once.
+
+A poll runs in its own task. When the last screen goes away the loop stops,
+and a poll already running finishes.

@@ -79,7 +79,7 @@ let package = Package(
         // The diff viewer: review comments, go-to-definition.
         .target(
             name: "DiffUI",
-            dependencies: ["HermesUI", "MarkdownUI", "GitHubKit", "RepoKit", "DiffKit", "SyntaxKit"],
+            dependencies: ["HermesUI", "MarkdownUI", "GitHubKit", "StateKit", "RepoKit", "DiffKit", "SyntaxKit"],
             swiftSettings: swift6
         ),
         // CI check lists and the log viewer.
@@ -108,7 +108,7 @@ let package = Package(
         .testTarget(name: "DiffKitTests", dependencies: ["DiffKit"], resources: [.copy("Fixtures")]),
         .testTarget(name: "SyntaxKitTests", dependencies: ["SyntaxKit"]),
         .testTarget(name: "MarkdownUITests", dependencies: ["MarkdownUI"]),
-        .testTarget(name: "DiffUITests", dependencies: ["DiffUI"]),
+        .testTarget(name: "DiffUITests", dependencies: ["DiffUI", "StateKit"]),
         .testTarget(name: "ChecksUITests", dependencies: ["ChecksUI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "SessionsUITests", dependencies: ["SessionsUI"]),
         .testTarget(name: "HermesTests", dependencies: ["Hermes", "HermesUI", "GitHubKit", "StateKit", "TestSupport"]),
