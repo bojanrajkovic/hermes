@@ -12,25 +12,16 @@ public struct ChecksScreen: View {
     private let commit: CommitKey
     private let store: GitHubStore
     private let initiallySelected: Check.ID?
-    private let changes: WebhookChanges
 
     @State private var model = ChecksModel()
 
-    /// - Parameters:
-    ///   - initiallySelected: The check to show first, such as the one
-    ///     clicked in a ``ChecksSummary``. Passing a different check later
-    ///     selects it. With `nil`, the first failed check is selected.
-    ///   - changes: What webhook deliveries have said about the commit's checks. When its
-    ///     count rises, the screen applies the latest change, or reloads the checks when it
-    ///     can't, ahead of the store's polling.
-    public init(
-        repository: RepositoryRef, commitOID: String, store: GitHubStore, initiallySelected: Check.ID? = nil,
-        changes: WebhookChanges = WebhookChanges()
-    ) {
+    /// - Parameter initiallySelected: The check to show first, such as the one clicked in a
+    ///   ``ChecksSummary``. Passing a different check later selects it. With `nil`, the first
+    ///   failed check is selected.
+    public init(repository: RepositoryRef, commitOID: String, store: GitHubStore, initiallySelected: Check.ID? = nil) {
         commit = CommitKey(repository: repository, oid: commitOID)
         self.store = store
         self.initiallySelected = initiallySelected
-        self.changes = changes
     }
 
     public var body: some View {
@@ -70,7 +61,6 @@ public struct ChecksScreen: View {
         .onChange(of: checks, initial: true) {
             if model.selectedCheck(in: checks) == nil { model.selection = CheckList.defaultSelection(checks) }
         }
-        .applying(changes, to: commit, in: store, model: model)
         .onChange(of: initiallySelected) { _, selected in
             if let selected { model.selection = selected }
         }
@@ -112,18 +102,10 @@ public struct ChecksSummary: View {
     private let commit: CommitKey
     private let store: GitHubStore
     private let onSelect: (Check) -> Void
-    private let changes: WebhookChanges
 
-    @State private var model = ChecksModel()
-
-    /// - Parameter changes: As for ``ChecksScreen``.
-    public init(
-        repository: RepositoryRef, commitOID: String, store: GitHubStore, changes: WebhookChanges = WebhookChanges(),
-        onSelect: @escaping (Check) -> Void
-    ) {
+    public init(repository: RepositoryRef, commitOID: String, store: GitHubStore, onSelect: @escaping (Check) -> Void) {
         commit = CommitKey(repository: repository, oid: commitOID)
         self.store = store
-        self.changes = changes
         self.onSelect = onSelect
     }
 
@@ -141,31 +123,6 @@ public struct ChecksSummary: View {
             }
         }
         .showing(.checks(commit), in: store)
-        .applying(changes, to: commit, in: store, model: model)
-    }
-}
-
-/// How many deliveries have changed one commit's checks.
-private struct CheckChanges: Equatable {
-    let commit: CommitKey
-    let count: Int
-}
-
-extension View {
-    /// Applies the latest of `changes` to the store's checks when their count rises, and
-    /// loads them when the change can't be applied.
-    ///
-    /// A new workflow run sends one check run per job, and none can be applied until a load
-    /// knows the run. Such a burst loads at once and once more after, not once per delivery.
-    fileprivate func applying(
-        _ changes: WebhookChanges, to commit: CommitKey, in store: GitHubStore, model: ChecksModel
-    ) -> some View {
-        onChange(of: CheckChanges(commit: commit, count: changes.count)) { seen, now in
-            // Another commit's count is not a change to this one.
-            guard seen.commit == now.commit else { return }
-            if let change = changes.only(since: seen.count), store.applyToChecks(change, for: commit) { return }
-            model.changeLoads.load { await store.loadChecks(commit) }
-        }
     }
 }
 

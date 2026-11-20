@@ -116,7 +116,6 @@ final class ReviewModel {
     /// The pull request's node ID, which a review needs. Nil until the threads load.
     private var pullRequestID: String? { store.details[pullRequest.key]?.id }
     @ObservationIgnored private var saving: Task<Void, Never>?
-    @ObservationIgnored private let changeLoads = BurstLoader()
 
     init(pullRequest: PullRequest, store: GitHubStore, draftsRoot: URL = PendingReview.defaultRoot) {
         self.pullRequest = pullRequest
@@ -202,22 +201,6 @@ final class ReviewModel {
         }
         self.composer = nil
         selection = nil
-    }
-
-    /// Applies what a webhook delivery says changed to the threads.
-    ///
-    /// - Returns: False when the threads have to load instead.
-    func apply(_ change: WebhookChange) -> Bool {
-        guard store.applyToThreads(change, for: pullRequest.key) else { return false }
-        threadsChanged()
-        return true
-    }
-
-    /// Loads the threads for a delivery that can't be applied. A review with ten line
-    /// comments sends ten, and such a burst loads at once and once more after, not once
-    /// per delivery.
-    func loadThreadsForChange() {
-        changeLoads.load { [weak self] in _ = await self?.reloadThreads() }
     }
 
     /// Loads the threads into the store. The store drops an answer that a webhook change or a

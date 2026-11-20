@@ -6,6 +6,9 @@ public struct WebhookEvent: Sendable, Hashable {
     public let repository: RepositoryRef
     /// The pull request the event is about. Nil when it names none, such as a commit status.
     public let pullRequest: Int?
+    /// The plain issue the event is about: an `issues` event, or a comment on an issue that
+    /// isn't a pull request.
+    public let issue: Int?
     /// The commit a status or a check is on. A check names its pull requests only some of
     /// the time, and a status never does, so the commit is how either finds its pull request.
     public let commit: String?
@@ -13,9 +16,12 @@ public struct WebhookEvent: Sendable, Hashable {
     /// what the event names instead.
     public let change: WebhookChange?
 
-    public init(repository: RepositoryRef, pullRequest: Int?, commit: String? = nil, change: WebhookChange? = nil) {
+    public init(
+        repository: RepositoryRef, pullRequest: Int?, issue: Int? = nil, commit: String? = nil, change: WebhookChange? = nil
+    ) {
         self.repository = repository
         self.pullRequest = pullRequest
+        self.issue = issue
         self.commit = commit
         self.change = change
     }
@@ -58,6 +64,7 @@ public struct WebhookEvent: Sendable, Hashable {
             ?? body.issue.flatMap { $0.pull_request == nil ? nil : $0.number }
             ?? body.check_suite?.pull_requests?.first?.number
             ?? body.check_run?.pull_requests?.first?.number
+        issue = body.issue.flatMap { $0.pull_request == nil ? $0.number : nil }
         commit = body.sha ?? body.check_suite?.head_sha ?? body.check_run?.head_sha
     }
 }

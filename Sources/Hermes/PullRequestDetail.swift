@@ -61,12 +61,6 @@ struct LoadID: Hashable {
     let attempt: Int
 }
 
-/// How many deliveries have changed one pull request's description, conversation, or reviews.
-private struct DetailChanges: Equatable {
-    let key: ItemKey
-    let count: Int
-}
-
 /// One entry in a pull request's activity: a comment or a submitted review.
 struct TimelineEntry: Identifiable, Hashable {
     enum Kind: Hashable {
@@ -127,15 +121,6 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: current, initial: true) { opened.insert(current) }
-        .onChange(of: DetailChanges(key: pullRequest.key, count: model.store.eventCounts[pullRequest.key]?.detail.count ?? 0)) { seen, now in
-            // Another pull request's count is not a change to this one.
-            guard seen.key == now.key else { return }
-            // A delivery said the description, a comment, or a review changed. Its payload is
-            // applied when it can be, and the detail loads again when it can't.
-            let change = model.store.eventCounts[pullRequest.key]?.detail.only(since: seen.count)
-            if let change, model.github.applyToDetail(change, for: pullRequest.key) { return }
-            Task { await model.github.loadDetail(pullRequest.key) }
-        }
         .showing(.pullRequest(pullRequest.key), in: model.github)
     }
 
@@ -148,14 +133,13 @@ struct PullRequestDetailView: View {
             DiffScreen(
                 source: .pullRequest(pullRequest), store: model.github, client: model.client, repoCache: model.repoCache,
                 target: Binding { model.diffTarget } set: { model.diffTarget = $0 },
-                threadChanges: model.store.eventCounts[pullRequest.key]?.threads ?? WebhookChanges(),
                 // The review changes the reason the pull request is in the inbox, and its review decision.
                 onReviewSubmitted: { [key = pullRequest.key] in Task { await model.refetch(key) } }
             )
         case .checks:
             ChecksScreen(
                 repository: pullRequest.repository, commitOID: pullRequest.headOID, store: model.github,
-                initiallySelected: model.checkToOpen, changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
+                initiallySelected: model.checkToOpen
             )
         case .sessions:
             ScrollView {
@@ -552,8 +536,7 @@ struct ConversationView: View {
 
                 PaneSection("Checks") {
                     ChecksSummary(
-                        repository: pullRequest.repository, commitOID: pullRequest.headOID, store: model.github,
-                        changes: model.store.eventCounts[pullRequest.key]?.checks ?? WebhookChanges()
+                        repository: pullRequest.repository, commitOID: pullRequest.headOID, store: model.github
                     ) { check in
                         model.checkToOpen = check.id
                         model.pullRequestTab = .checks

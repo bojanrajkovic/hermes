@@ -1,23 +1,30 @@
 import Foundation
 import GitHubKit
+import StateKit
 
-/// What deliveries have said about each part of a pull request. A screen that shows a part
-/// applies or reloads when the part's count rises, ahead of its own polling.
-struct EventCounts: Equatable {
-    typealias Part = WritableKeyPath<EventCounts, WebhookChanges>
+/// What one webhook event makes Hermes load. Events share a load when they name the same one.
+enum EventLoad: Hashable {
+    /// An account's lists, for a pull request Hermes doesn't hold yet.
+    case account(String)
+    /// One pull request's or issue's record.
+    case record(ItemKey)
+    /// A pull request's detail: its conversation, reviews, and review threads.
+    case detail(ItemKey)
+    case checks(CommitKey)
+    /// A repository's loaded issue list.
+    case issues(RepositoryRef)
+}
 
-    /// The description, the conversation, and the reviews.
-    var detail = WebhookChanges()
-    var threads = WebhookChanges()
-    var checks = WebhookChanges()
+/// Which part of a pull request an event changed, by GitHub's name for the event, for a
+/// payload Hermes can't apply. A forwarder's deliveries carry no name.
+enum EventPart {
+    case threads, checks
 
-    /// The count an event raises, by GitHub's name for the event. Nil for an event that
-    /// changes neither part.
-    static func part(ofEvent name: String) -> Part? {
+    init?(event name: String?) {
         switch name {
-        case "pull_request_review_comment", "pull_request_review_thread": \.threads
-        case "check_run", "check_suite", "status": \.checks
-        default: nil
+        case "pull_request_review_comment", "pull_request_review_thread": self = .threads
+        case "check_run", "check_suite", "status": self = .checks
+        default: return nil
         }
     }
 }
@@ -28,8 +35,8 @@ extension WebhookEvent {
     /// push makes true until the pull request is loaded again.
     ///
     /// A status names only a commit, and a check often does, so those find the pull request
-    /// by its head. `held` has one copy of each pull request, the one its row shows, so a
-    /// status on an older commit finds none.
+    /// by its head. `held` has one copy of each pull request, open ones first, so a status
+    /// on a commit that a closed and an open pull request share finds the open one.
     func pullRequest(among held: [PullRequest]) -> PullRequest? {
         held.first { candidate in
             guard candidate.repository == repository else { return false }
@@ -39,40 +46,36 @@ extension WebhookEvent {
     }
 }
 
-/// Keeps a burst of events about one pull request from loading it once per event. A CI run
-/// sends two events per job, and a relay sends them for every pull request in an account.
+/// Keeps a burst of events from loading the same thing once per event. A CI run sends two
+/// events per job, and a relay sends them for every pull request in an account.
 ///
 /// The first event loads at once. Events that arrive while that load runs, and for a few
 /// seconds after, become one more load.
 struct EventBursts {
-    /// The pull requests with a load running, whether an event came since it started, and
-    /// the parts those events named.
-    private var running: [ItemKey: (again: Bool, parts: Set<EventCounts.Part>)] = [:]
+    /// The loads running, and whether an event came since each started.
+    private var running: [EventLoad: Bool] = [:]
 
     /// Records an event.
     ///
-    /// - Returns: Whether to load the pull request now. False when a load is running, which
-    ///   then runs once more.
-    mutating func shouldLoad(_ key: ItemKey, part: EventCounts.Part?) -> Bool {
-        guard running[key] != nil else {
-            running[key] = (false, [])
+    /// - Returns: Whether to load now. False when the load is running, which then runs once more.
+    mutating func shouldLoad(_ load: EventLoad) -> Bool {
+        guard running[load] != nil else {
+            running[load] = false
             return true
         }
-        running[key]?.again = true
-        if let part { running[key]?.parts.insert(part) }
+        running[load] = true
         return false
     }
 
     /// Records that a load finished.
     ///
-    /// - Returns: The parts named by the events that came during it, when the pull request
-    ///   should load again. Nil when none came, which ends the burst.
-    mutating func loaded(_ key: ItemKey) -> Set<EventCounts.Part>? {
-        guard let state = running[key], state.again else {
-            running[key] = nil
-            return nil
+    /// - Returns: Whether to load again, for the events that came during it. False ends the burst.
+    mutating func loaded(_ load: EventLoad) -> Bool {
+        guard running[load] == true else {
+            running[load] = nil
+            return false
         }
-        running[key] = (false, [])
-        return state.parts
+        running[load] = false
+        return true
     }
 }

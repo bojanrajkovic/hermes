@@ -162,7 +162,7 @@ final class AppStore {
         github.watched = { [weak self] login in self?.watched(in: login) ?? [] }
         relays.onEvent = { [weak self] event in
             guard let webhook = WebhookEvent(payload: event.payload) else { return }
-            self?.reload(webhook, part: EventCounts.part(ofEvent: event.name))
+            self?.reload(webhook, part: EventPart(event: event.name))
         }
     }
 
@@ -202,75 +202,100 @@ final class AppStore {
         await forwarders.sync(to: wanted) { [weak self] event in self?.reload(event) }
     }
 
-    /// What deliveries have said about each pull request's description and conversation,
-    /// review threads, and checks. The screens that show those apply the latest change, or
-    /// reload, when a count rises.
-    private(set) var eventCounts: [ItemKey: EventCounts] = [:]
-
-    private func note(_ change: WebhookChange?, in part: EventCounts.Part, of key: ItemKey) {
-        eventCounts[key, default: EventCounts()][keyPath: part].note(change)
-    }
-
-    /// Takes in what a webhook says changed. For a pull request Hermes holds, it applies the
-    /// fields the payload carries, and loads the pull request when the event changed more
-    /// than that. Otherwise it loads the account, which is how a new pull request joins the lists.
+    /// Takes in what a webhook says changed and puts it in the store. For a pull request
+    /// Hermes holds, the change goes into its record, detail, or checks. What the payload
+    /// can't carry loads instead, but only while a screen shows it. A pull request Hermes doesn't
+    /// hold loads the account, which is how a new pull request joins the lists.
     ///
-    /// - Parameter part: The count to raise for the pull request, when the event's name says
-    ///   which part of it changed. A forwarder's deliveries carry no name.
-    private func reload(_ event: WebhookEvent, part: EventCounts.Part? = nil) {
+    /// - Parameter part: Which part of the pull request changed, when the event's name says
+    ///   and the payload can't be read.
+    private func reload(_ event: WebhookEvent, part: EventPart? = nil) {
         // A relay sends events for every repository the user can see. One in an account no
         // window shows has nothing to update.
         guard windows.allObjects.contains(where: { $0.account?.login == event.repository.owner }) else { return }
         let login = event.repository.owner
+        if let number = event.issue { return reloadIssue(ItemKey(repository: event.repository, number: number)) }
         let held = event.pullRequest(among: github.heldPullRequests)
         Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(held?.number ?? 0)")
 
         guard let held else {
             // The account's own load finds a new pull request, and one whose new head Hermes has
             // not heard of yet. A busy repository sends many such events, so they share loads.
-            return load(ItemKey(repository: RepositoryRef(owner: login, name: ""), number: 0), part: nil) { [github] in
-                await github.refresh(login)
-            }
+            return load(.account(login)) { [github] in await github.refresh(login) }
         }
         let key = held.key
+        let head = CommitKey(repository: held.repository, oid: held.headOID)
         switch event.change {
-        case .pullRequest(let fields, let reloads):
-            // Deliveries can arrive out of order. A payload older than the row's last changes nothing.
-            if github.apply(fields, to: key) { note(event.change, in: \.detail, of: key) }
-            guard reloads else { return }
-        case .comment:
+        case .pullRequest(let fields, let reloads)?:
+            // Deliveries can arrive out of order. A payload older than the record's last changes nothing.
+            if github.apply(fields, to: key) { applyToDetail(event.change, of: key) }
+            if reloads { load(.record(key)) { [github] in await github.refetch(key) } }
+        case .comment?:
             // A comment changes nothing a row shows.
-            return note(event.change, in: \.detail, of: key)
-        case .review:
+            applyToDetail(event.change, of: key)
+        case .review?:
+            applyToDetail(event.change, of: key)
             // The row's review decision is GitHub's to work out.
-            note(event.change, in: \.detail, of: key)
-        case .reply, .threadResolved, .threads:
-            // The diff applies the change to its threads, or loads them. A row shows none of it.
-            return note(event.change, in: \.threads, of: key)
-        case .status, .checkRun, .checks:
-            // The checks screens show the head commit's checks. A check on an older commit of
-            // the pull request is not among them. The row's rollup is GitHub's to work out.
-            if event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
-            return load(key, part: nil) { [github] in await github.refetch(key) }
+            load(.record(key)) { [github] in await github.refetch(key) }
+        case .reply?, .threadResolved?, .threads?:
+            // A row shows none of it.
+            if let change = event.change, !github.applyToThreads(change, for: key) { loadDetailIfShown(key) }
+        case .status?, .checkRun?, .checks?:
+            // The checks shown are the head commit's. A check on an older commit isn't among them.
+            if let change = event.change, event.commit == held.headOID, !github.applyToChecks(change, for: head) {
+                loadChecksIfShown(head)
+            }
+            // The row's rollup is GitHub's to work out.
+            load(.record(key)) { [github] in await github.refetch(key) }
         case nil:
-            break
+            // A forwarder's delivery has no name. One that names a commit is a status or a check.
+            switch part ?? (event.commit == nil ? nil : .checks) {
+            case .threads?: loadDetailIfShown(key)
+            case .checks?: loadChecksIfShown(head)
+            case nil: loadDetailIfShown(key)
+            }
+            load(.record(key)) { [github] in await github.refetch(key) }
         }
-        load(key, part: part) { [github] in await github.refetch(key) }
     }
 
-    /// Runs `operation` for the first event of a burst about `key`, and once more, a few
-    /// seconds later, for the events that came while it ran.
-    private func load(_ key: ItemKey, part: EventCounts.Part?, _ operation: @escaping () async -> Void) {
-        guard bursts.shouldLoad(key, part: part) else { return }
-        if let part { note(nil, in: part, of: key) }
+    /// Puts a change into the pull request's detail, or loads the detail when the change can't go in.
+    private func applyToDetail(_ change: WebhookChange?, of key: ItemKey) {
+        if let change, github.applyToDetail(change, for: key) { return }
+        loadDetailIfShown(key)
+    }
 
+    /// Loads a pull request's detail while a screen shows the pull request. A closed one
+    /// loads its detail when it opens again, so a change it missed shows then.
+    private func loadDetailIfShown(_ key: ItemKey) {
+        guard github.isShowing(.pullRequest(key)) else { return }
+        load(.detail(key)) { [github] in await github.loadDetail(key) }
+    }
+
+    /// Loads a commit's checks while a screen shows them. A screen that opens later loads them itself.
+    private func loadChecksIfShown(_ commit: CommitKey) {
+        guard github.isShowing(.checks(commit)) else { return }
+        load(.checks(commit)) { [github] in await github.loadChecks(commit) }
+    }
+
+    /// An issue was opened, closed, edited, or commented on. Its record and its repository's
+    /// loaded list load again, when the store holds them. The list's page carries the
+    /// repository's open issue count.
+    private func reloadIssue(_ key: ItemKey) {
+        if github.issue(key) != nil { load(.record(key)) { [github] in await github.refetch(key) } }
+        if github.issueLists[key.repository] != nil {
+            load(.issues(key.repository)) { [github] in await github.reloadIssues(of: key.repository) }
+        }
+    }
+
+    /// Runs `operation` for the first event of a burst that loads `target`, and once more, a
+    /// few seconds later, for the events that came while it ran.
+    private func load(_ target: EventLoad, _ operation: @escaping () async -> Void) {
+        guard bursts.shouldLoad(target) else { return }
         Task {
-            while true {
+            repeat {
                 await operation()
                 try? await Task.sleep(for: Self.eventSpacing)
-                guard let parts = bursts.loaded(key) else { break }
-                for part in parts { note(nil, in: part, of: key) }
-            }
+            } while bursts.loaded(target)
         }
     }
 

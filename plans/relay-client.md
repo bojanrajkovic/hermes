@@ -392,14 +392,14 @@ fields the payload carries, and loads the pull request when the event changed
 more than that.
 
 A relay's event also has GitHub's name for it, which says what part of the
-pull request changed. When the event's payload can't be applied,
-`AppStore.eventCounts` counts it for that part, and the screens showing the
-part reload it when the count rises, ahead of their own 10-second polling:
+pull request changed. When the event's payload can't be applied, Hermes loads
+that part, while a screen shows it, ahead of the store's 10-second polling:
 
 | Events | Reloads |
 |---|---|
-| `pull_request_review_comment`, `pull_request_review_thread` | The diff's review threads |
-| `check_run`, `check_suite`, `status` | The checks list and the checks summary |
+| `pull_request_review_comment`, `pull_request_review_thread` | The pull request's detail, which holds the review threads |
+| `check_run`, `check_suite`, `status` | The head commit's checks |
+| Any other | The pull request's detail |
 
 What Hermes loads, it loads from GitHub with the user's own `gh` token.
 
@@ -407,11 +407,11 @@ Three rules keep a relay's volume from becoming requests:
 
 - **An event in an account no window shows is dropped.** A relay sends events
   for every repository the member can see.
-- **A burst loads a pull request twice, not once per event.** A CI run sends
+- **A burst loads each thing twice, not once per event.** A CI run sends
   two events per job. `EventBursts` loads on the first event, and turns the
   events that arrive during that load and the 5 seconds after into one more.
-  `BurstLoader` does the same for the review threads and the checks on
-  screen, when their events can't be applied.
+  The pull request's record, its detail, and its checks each have their own
+  burst.
 - **Events about nothing Hermes holds share the account's loads the same
   way.** A status or a check on a commit that is no held pull request's head
   loads the account, and a busy branch sends many.

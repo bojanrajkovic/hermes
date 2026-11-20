@@ -28,25 +28,18 @@ public struct DiffScreen: View {
     /// Where a link asked the diff to go. The screen takes it and sets it back to `nil`.
     @Binding private var target: DeepLink.PullRequestTarget?
     private let onReviewSubmitted: @MainActor () -> Void
-    private let threadChanges: WebhookChanges
 
     @State private var model: DiffModel?
     @AppStorage(DiffDefaults.layoutKey) private var layout = DiffLayout.unified
     @AppStorage(DiffDefaults.fontSizeKey) private var fontSize = DiffDefaults.fontSize
 
-    /// - Parameters:
-    ///   - store: The app's store, which holds a pull request's revision, viewed files, and
-    ///     threads. Local sources pass none.
-    ///   - threadChanges: What webhook deliveries have said about the pull request's
-    ///     review threads. When its count rises, the screen applies the latest change, or
-    ///     reloads the threads when it can't, ahead of the store's polling.
+    /// - Parameter store: The app's store, which holds a pull request's revision, viewed files,
+    ///   and threads, and takes webhook changes to them. Local sources pass none.
     public init(
         source: DiffSource, store: GitHubStore? = nil, client: GitHubClient, repoCache: RepoCache,
-        target: Binding<DeepLink.PullRequestTarget?> = .constant(nil),
-        threadChanges: WebhookChanges = WebhookChanges(), onReviewSubmitted: @escaping @MainActor () -> Void = {}
+        target: Binding<DeepLink.PullRequestTarget?> = .constant(nil), onReviewSubmitted: @escaping @MainActor () -> Void = {}
     ) {
         _target = target
-        self.threadChanges = threadChanges
         self.onReviewSubmitted = onReviewSubmitted
         self.source = source
         self.store = store
@@ -81,12 +74,6 @@ public struct DiffScreen: View {
         }
         .onChange(of: layout) { model?.layout = layout }
         .onChange(of: target) { takeTarget() }
-        .onChange(of: ThreadChanges(source: source.key, count: threadChanges.count)) { seen, now in
-            // Another pull request's count is not a change to this one.
-            guard seen.source == now.source, let review = model?.review else { return }
-            if let change = threadChanges.only(since: seen.count), review.apply(change) { return }
-            review.loadThreadsForChange()
-        }
         // The task ends when the screen goes off screen, which stops the
         // polling. Coming back reuses the model, so the diff reloads in place.
         .task(id: source.key) {
@@ -98,12 +85,6 @@ public struct DiffScreen: View {
             await model?.run()
         }
     }
-}
-
-/// How many deliveries have changed the review threads of one diff source.
-private struct ThreadChanges: Equatable {
-    let source: String
-    let count: Int
 }
 
 extension DiffScreen {

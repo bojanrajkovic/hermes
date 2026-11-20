@@ -20,8 +20,6 @@ final class ChecksModel {
         case failedJobs(runs: [Int])
     }
 
-    /// Loads the checks for the deliveries that can't be applied, twice for a burst of them.
-    let changeLoads = BurstLoader()
 
     /// How long after a rerun request the list reloads, so the queued attempt is in it.
     nonisolated static let rerunSettle = Duration.seconds(3)
