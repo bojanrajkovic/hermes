@@ -80,9 +80,20 @@ final class FileModel: Identifiable {
 
     @ObservationIgnored private var lastRevealedLine = 0
 
+    /// Marked viewed on GitHub while the user was reading it or commenting on
+    /// it. It collapses once they move on.
+    private(set) var collapsesWhenLeft = false
+
     func setViewed(_ viewed: Bool) {
         isViewed = viewed
         isCollapsed = viewed
+        collapsesWhenLeft = false
+    }
+
+    /// Ticks the file's checkbox and leaves it open until the user moves on.
+    func setViewedKeepingOpen() {
+        isViewed = true
+        collapsesWhenLeft = true
     }
 
     /// Replaces the file's diff after a reload. Styling and expansion start over,
@@ -91,6 +102,7 @@ final class FileModel: Identifiable {
         self.diff = diff
         isViewed = false
         isCollapsed = false
+        collapsesWhenLeft = false
         expansion = FileExpansion()
         styled = [:]
         hasRegions = false
@@ -225,6 +237,9 @@ final class DiffModel {
     private(set) var updatedAt: Date?
     /// Why the last reload failed while older content stays on screen.
     private(set) var refreshError: String?
+    /// Why GitHub refused the last viewed mark. Cleared after a few seconds,
+    /// because the mark was already put back.
+    private(set) var viewedError: String?
     let scroll = DiffScrollState()
     /// Review comments. `nil` for local sources, which are read-only.
     let review: ReviewModel?
@@ -259,6 +274,12 @@ final class DiffModel {
     /// Whether the source tree could not be read after the last load, so the next reload tries again.
     @ObservationIgnored private var treeFailed = false
     @ObservationIgnored private var fileOrder: [FileDiff.ID: Int] = [:]
+    /// Counts viewed marks sent to GitHub. A poll notes it before its request,
+    /// so it can tell which marks it may not have seen.
+    @ObservationIgnored private var viewedWrites = 0
+    /// The last viewed mark sent for each path.
+    @ObservationIgnored private var viewedSends: [String: ViewedSend] = [:]
+    @ObservationIgnored private var viewedErrorExpiry: Task<Void, Never>?
     /// Highlighting and file reads that follow a load. Tests await it.
     @ObservationIgnored private(set) var background: Task<Void, Never>?
 
@@ -290,6 +311,14 @@ final class DiffModel {
     var deletions: Int { files.reduce(0) { $0 + $1.diff.deletions } }
     var viewedCount: Int { files.count { $0.isViewed } }
 
+    /// The one warning the summary bar shows. A failed reload comes first,
+    /// because it means the diff on screen may be out of date.
+    var warning: (title: String, detail: String)? {
+        if let refreshError { return ("Couldn't refresh", refreshError) }
+        if let viewedError { return ("Couldn't mark as viewed", viewedError) }
+        return nil
+    }
+
     /// The file at the top of the list.
     var currentFile: FileModel? {
         files.first { $0.id == scroll.currentFile } ?? files.first
@@ -307,13 +336,18 @@ final class DiffModel {
         case .pullRequest(let pullRequest):
             // The sleep throws when the screen goes away, which ends the polling.
             while (try? await Task.sleep(for: .seconds(10))) != nil {
+                let writesBefore = viewedWrites
                 let revision = try? await client.pullRequestRevision(
                     repository: pullRequest.repository, number: pullRequest.number
                 )
                 guard let revision else { continue }
                 if revision.headOID != head || treeFailed {
                     await reload()
-                } else if revision.updatedAt != revisionDate {
+                    continue
+                }
+                // Marking a file viewed changes neither the head nor the update time.
+                applyViewed(revision.viewedPaths, writesBefore: writesBefore)
+                if revision.updatedAt != revisionDate {
                     // A comment or a review, with no new commit.
                     // A failed read keeps the old date, so the next poll asks again.
                     if await review?.reloadThreads() != false { revisionDate = revision.updatedAt }
@@ -332,6 +366,7 @@ final class DiffModel {
     /// screen stays there while this runs, and when it fails.
     func reload() async {
         if case .failed = phase { phase = .loading }
+        let writesBefore = viewedWrites
         do {
             let fetched = try await DiffLoader.fetch(source, client: client, repoCache: repoCache)
             refreshError = nil
@@ -344,7 +379,7 @@ final class DiffModel {
             }
             staleFetches = 0
             head = fetched.head
-            await show(text: fetched.text)
+            await show(text: fetched.text, viewedPaths: fetched.viewedPaths, writesBefore: writesBefore)
             let threadsLoaded = await review?.refresh(diff: diff, head: head) != false
             goToPendingTarget()
             // The threads were read after this revision, so the next poll need not read them again.
@@ -359,8 +394,14 @@ final class DiffModel {
 
     /// Parses and shows diff text, then starts the background work for it.
     /// Does nothing when the text is what is already shown.
-    func show(text: String) async {
+    ///
+    /// - Parameters:
+    ///   - viewedPaths: The files GitHub has as viewed, applied before the
+    ///     files appear so they open already collapsed. `nil` keeps the marks as they are.
+    ///   - writesBefore: `viewedWrites` before `viewedPaths` was read.
+    func show(text: String, viewedPaths: Set<String>? = nil, writesBefore: Int = 0) async {
         guard text != loadedText else {
+            if let viewedPaths { applyViewed(viewedPaths, writesBefore: writesBefore) }
             phase = .loaded
             if treeFailed { startBackgroundWork() }
             return
@@ -372,6 +413,7 @@ final class DiffModel {
         let anchors = visibleLineRows()
         let movesContent = changesContent(aboveOrIn: scroll.currentFile, diff)
         apply(diff)
+        if let viewedPaths { applyViewed(viewedPaths, writesBefore: writesBefore) }
         phase = .loaded
         if isUpdate {
             updatedAt = .now
@@ -396,6 +438,7 @@ final class DiffModel {
     /// Called by the list as rows scroll in and out of view.
     func visibleRowsChanged(_ rows: [RowID]) {
         scroll.setVisible(rows, order: fileOrder)
+        collapseFilesLeft()
     }
 
     /// The code lines of the current file that are on screen, top first.
@@ -509,8 +552,107 @@ final class DiffModel {
     func setViewed(_ viewed: Bool, for file: FileModel) {
         let isCurrent = file === currentFile
         file.setViewed(viewed)
+        sendViewed(viewed, for: file)
         guard viewed, isCurrent, let index = files.firstIndex(where: { $0 === file }) else { return }
         scroll.scroll(to: files[min(index + 1, files.count - 1)].id)
+    }
+
+    // MARK: Viewed marks on GitHub
+
+    /// A viewed mark on its way to GitHub, or the last one sent for its path.
+    private struct ViewedSend {
+        /// The value of `viewedWrites` when it was sent.
+        let write: Int
+        let task: Task<Void, Never>
+        var isDone = false
+    }
+
+    /// Sends a pull request file's mark to GitHub, after the path's previous
+    /// mark, so a quick mark and unmark land in order. When GitHub refuses,
+    /// the mark goes back to what it was, unless the user changed it again since.
+    private func sendViewed(_ viewed: Bool, for file: FileModel) {
+        guard case .pullRequest(let pullRequest) = source else { return }
+        let path = file.diff.path
+        viewedWrites += 1
+        let write = viewedWrites
+        let previous = viewedSends[path]?.task
+        let task = Task { [weak self, client] in
+            await previous?.value
+            let failure: (any Error)?
+            do {
+                try await client.setFileViewed(pullRequestID: pullRequest.id, path: path, viewed: viewed)
+                failure = nil
+            } catch {
+                failure = error
+            }
+            guard let self else { return }
+            let isLatest = viewedSends[path]?.write == write
+            if isLatest { viewedSends[path]?.isDone = true }
+            guard let failure else { return }
+            if isLatest { keepingRowsOnScreen(resizing: [file.id]) { file.setViewed(!viewed) } }
+            showViewedError(DiffLoader.message(for: failure))
+        }
+        viewedSends[path] = ViewedSend(write: write, task: task)
+    }
+
+    private func showViewedError(_ message: String) {
+        viewedError = message
+        viewedErrorExpiry?.cancel()
+        viewedErrorExpiry = Task { [weak self] in
+            guard (try? await Task.sleep(for: .seconds(3))) != nil else { return }
+            self?.viewedError = nil
+        }
+    }
+
+    /// Makes the marks match GitHub's, keeping the rows on screen in place.
+    ///
+    /// - Parameter writesBefore: `viewedWrites` before `remote` was read.
+    ///   Paths sent after that, or still being sent, keep their mark.
+    private func applyViewed(_ remote: Set<String>, writesBefore: Int) {
+        let skipping = Set(viewedSends.filter { !$0.value.isDone || $0.value.write > writesBefore }.keys)
+        let updates = viewedUpdates(
+            files: files.map { ($0.id, $0.diff.path, $0.isViewed) }, remote: remote, skipping: skipping, held: heldFiles
+        )
+        guard !updates.isEmpty else { return }
+        let models = Dictionary(files.map { ($0.id, $0) }) { first, _ in first }
+        keepingRowsOnScreen(resizing: updates.map(\.file)) {
+            for update in updates {
+                switch update {
+                case .mark(let id): models[id]?.setViewed(true)
+                case .markKeepingOpen(let id): models[id]?.setViewedKeepingOpen()
+                case .unmark(let id): models[id]?.setViewed(false)
+                }
+            }
+        }
+    }
+
+    /// Runs `change`, which collapses or opens the files `ids`. When one of
+    /// them is above the current file, the rows on screen are put back where they were.
+    private func keepingRowsOnScreen(resizing ids: [FileDiff.ID], _ change: () -> Void) {
+        guard let current = scroll.currentFile.flatMap({ fileOrder[$0] }),
+              ids.contains(where: { fileOrder[$0, default: .max] < current })
+        else { return change() }
+        let anchors = visibleLineRows()
+        change()
+        restoreScroll(to: anchors)
+    }
+
+    /// The files the user is in: the one being read, and the one with the comment box.
+    private var heldFiles: Set<FileDiff.ID> {
+        var held: Set<FileDiff.ID> = []
+        if let current = scroll.currentFile { held.insert(current) }
+        if let path = review?.composerPath, let file = files.first(where: { $0.diff.path == path }) { held.insert(file.id) }
+        return held
+    }
+
+    /// Collapses the files that GitHub marked viewed while the user was in them, once they have moved on.
+    private func collapseFilesLeft() {
+        // Runs on every scroll, so it does nothing more unless a file is waiting.
+        guard files.contains(where: \.collapsesWhenLeft) else { return }
+        let held = heldFiles
+        let left = files.filter { $0.collapsesWhenLeft && !held.contains($0.id) }
+        guard !left.isEmpty else { return }
+        keepingRowsOnScreen(resizing: left.map(\.id)) { left.forEach { $0.setViewed(true) } }
     }
 
     // MARK: Rendered Markdown
@@ -633,6 +775,41 @@ final class DiffModel {
     func gitHubURL(for file: FileDiff) -> URL? {
         guard case .pullRequest(let pullRequest) = source else { return nil }
         return DiffLoader.gitHubURL(pullRequest: pullRequest.url, path: file.path)
+    }
+}
+
+/// A change a poll makes to one file's viewed mark.
+enum ViewedUpdate: Equatable {
+    /// Tick the checkbox and collapse the file.
+    case mark(FileDiff.ID)
+    /// Tick the checkbox, and collapse the file once the user moves on.
+    case markKeepingOpen(FileDiff.ID)
+    /// Untick the checkbox and open the file.
+    case unmark(FileDiff.ID)
+
+    var file: FileDiff.ID {
+        switch self {
+        case .mark(let id), .markKeepingOpen(let id), .unmark(let id): id
+        }
+    }
+}
+
+/// Compares the files' viewed marks with GitHub's.
+///
+/// - Parameters:
+///   - files: Each file's ID, its path on GitHub, and whether it is marked viewed.
+///   - remote: The paths GitHub has as viewed.
+///   - skipping: Paths with a mark GitHub may not have seen yet. Their marks stay.
+///   - held: The files the user is in. A file marked viewed there stays open.
+func viewedUpdates(
+    files: [(id: FileDiff.ID, path: String, isViewed: Bool)], remote: Set<String>, skipping: Set<String>,
+    held: Set<FileDiff.ID>
+) -> [ViewedUpdate] {
+    files.compactMap { file in
+        let isViewed = remote.contains(file.path)
+        guard isViewed != file.isViewed, !skipping.contains(file.path) else { return nil }
+        if !isViewed { return .unmark(file.id) }
+        return held.contains(file.id) ? .markKeepingOpen(file.id) : .mark(file.id)
     }
 }
 

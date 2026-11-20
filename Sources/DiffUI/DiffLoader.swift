@@ -25,6 +25,8 @@ enum DiffLoader {
         let head: String?
         /// When GitHub last recorded activity on the pull request, read before the diff. `nil` for local sources.
         var updatedAt: Date?
+        /// The paths the viewer marked viewed on GitHub. `nil` for local sources, whose marks stay in memory.
+        var viewedPaths: Set<String>?
     }
 
     /// Loads the source's unified diff text.
@@ -39,13 +41,13 @@ enum DiffLoader {
             let head = revision.headOID
             do {
                 let text = try await client.pullRequestDiff(repository: repository, number: pullRequest.number)
-                return Fetched(text: text, head: head, updatedAt: revision.updatedAt)
+                return Fetched(text: text, head: head, updatedAt: revision.updatedAt, viewedPaths: revision.viewedPaths)
             } catch GitHubError.diffTooLarge {
                 let text = try await repoCache.diff(
                     repo: RepoID(owner: repository.owner, name: repository.name), pullRequestNumber: pullRequest.number,
                     baseRef: pullRequest.baseRefName, headOid: head
                 )
-                return Fetched(text: text, head: head, updatedAt: revision.updatedAt)
+                return Fetched(text: text, head: head, updatedAt: revision.updatedAt, viewedPaths: revision.viewedPaths)
             }
         case .workingTree(let directory, let baseRef):
             return Fetched(text: try await WorkingTree(directory: directory).diff(against: baseRef), head: nil)

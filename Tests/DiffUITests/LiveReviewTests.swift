@@ -10,7 +10,7 @@ import Testing
 ///
 ///     DIFFUI_SUBMIT=2 swift test --filter DiffUITests.LiveReviewTests
 @MainActor
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["DIFFUI_SUBMIT"] != nil || ProcessInfo.processInfo.environment["DIFFUI_WATCH"] != nil))
+@Suite(.enabled(if: ["DIFFUI_SUBMIT", "DIFFUI_WATCH", "DIFFUI_VIEWED"].contains { ProcessInfo.processInfo.environment[$0] != nil }))
 struct LiveReviewTests {
     private static let playground = RepositoryRef(owner: "bojanrajkovic", name: "hermes-playground")
 
@@ -84,5 +84,60 @@ struct LiveReviewTests {
         #expect(review.threads.first { $0.id == existing.id }?.comments.count == existing.comments.count + 1)
         await review.flush()
         print("SUBMIT stamp=\(stamp) threads=\(review.threads.count)")
+    }
+
+    /// Marks files viewed both ways on a pull request (`DIFFUI_VIEWED=<number>`, at least two files),
+    /// then unmarks them.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["DIFFUI_VIEWED"] != nil))
+    func viewedMarksSyncWithGitHub() async throws {
+        let number = try #require(ProcessInfo.processInfo.environment["DIFFUI_VIEWED"].flatMap(Int.init))
+        let client = GitHubClient()
+        let pullRequest = try #require(try await client.openPullRequests(owner: Self.playground.owner)
+            .first { $0.repository == Self.playground && $0.number == number })
+        let root = FileManager.default.temporaryDirectory.appending(path: "hermes-live-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        func gitHubViewed() async throws -> Set<String> {
+            try await client.pullRequestRevision(repository: Self.playground, number: number).viewedPaths
+        }
+        let model = DiffModel(source: .pullRequest(pullRequest), client: client, repoCache: RepoCache(), draftsRoot: root)
+        let runner = Task { await model.run() }
+        defer { runner.cancel() }
+        while model.phase != .loaded { try await Task.sleep(for: .milliseconds(200)) }
+        let (first, second) = (model.files[0], model.files[1])
+        // Unmarks both files whatever happens, so the next run starts clean.
+        func cleanUp() async {
+            for path in [first.diff.path, second.diff.path] {
+                try? await client.setFileViewed(pullRequestID: pullRequest.id, path: path, viewed: false)
+            }
+        }
+        do {
+            try await checkViewedSync(model, client, pullRequest, first, second, gitHubViewed)
+        } catch {
+            await cleanUp()
+            throw error
+        }
+        await cleanUp()
+    }
+
+    private func checkViewedSync(
+        _ model: DiffModel, _ client: GitHubClient, _ pullRequest: PullRequest, _ first: FileModel, _ second: FileModel,
+        _ gitHubViewed: () async throws -> Set<String>
+    ) async throws {
+        // Hermes to GitHub.
+        model.setViewed(true, for: first)
+        try await Task.sleep(for: .seconds(2))
+        #expect(try await gitHubViewed().contains(first.diff.path))
+
+        // GitHub to Hermes, within one poll.
+        try await client.setFileViewed(pullRequestID: pullRequest.id, path: second.diff.path, viewed: true)
+        try await Task.sleep(for: .seconds(12))
+        #expect(second.isViewed)
+        #expect(first.isViewed)
+
+        model.setViewed(false, for: first)
+        try await client.setFileViewed(pullRequestID: pullRequest.id, path: second.diff.path, viewed: false)
+        try await Task.sleep(for: .seconds(12))
+        #expect(!first.isViewed && !second.isViewed)
+        #expect(try await gitHubViewed().isEmpty)
     }
 }

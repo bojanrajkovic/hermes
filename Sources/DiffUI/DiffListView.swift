@@ -137,10 +137,10 @@ struct SummaryBar: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            if let error = model.refreshError {
-                Label("Couldn't refresh", systemImage: "exclamationmark.triangle")
+            if let warning = model.warning {
+                Label(warning.title, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
-                    .help(error)
+                    .help(warning.detail)
             }
             UpdatedIndicator(updatedAt: model.updatedAt)
             if let review = model.review { ReviewBar(review: review) }

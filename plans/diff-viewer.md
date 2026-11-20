@@ -57,7 +57,7 @@ flowchart TD
 ```
 
 1. `DiffLoader.fetch` returns the diff text and, for a pull request, the head
-   commit it belongs to.
+   commit it belongs to and the files the viewer marked viewed on GitHub.
 2. `Diff(parsing:)` runs off the main actor.
 3. `DiffModel.apply` keeps the `FileModel` of every file that is still in the
    diff. An unchanged file keeps its rows, its collapsed state, and its viewed
@@ -338,3 +338,49 @@ Marking a file viewed collapses it. When it is the file being read, the
 collapse would pull everything after it up past the top of the list, so
 `DiffModel.setViewed(_:for:)` scrolls to the next file's header instead. A file
 marked viewed elsewhere collapses in place.
+
+### Viewed marks on GitHub
+
+A pull request's viewed marks are GitHub's, the same ones as the checkboxes on
+its Files tab. Working-tree and branch diffs keep their marks in memory.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as DiffModel
+    participant G as GitHub
+    U->>M: toggle viewed
+    M->>M: update the file now
+    M->>G: markFileAsViewed / unmarkFileAsViewed
+    G-->>M: refused
+    M->>M: put the mark back, show "Couldn't mark as viewed" for 3 s
+    loop every 10 seconds
+        M->>G: pullRequestRevision (head, update time, files' viewed state)
+        G-->>M: viewed paths
+        M->>M: viewedUpdates(), then keep the rows on screen in place
+    end
+```
+
+- **Reading.** `pullRequestRevision` reads each file's `viewerViewedState`,
+  100 files per request. Only `VIEWED` counts. GitHub sets `DISMISSED` when a
+  push changes a file after it was viewed, which matches a reload opening a
+  changed file unviewed. The initial load applies the marks before the files
+  appear, so viewed files open collapsed.
+- **Polling.** The poll reads the marks every 10 seconds even when the head is
+  unchanged, because marking a file viewed changes neither the head nor the
+  update time. Marks made in a browser show up within one poll.
+- **Writing.** A toggle updates the file at once and then sends the mutation.
+  A path's mutations go one at a time, so a quick mark and unmark reach GitHub
+  in that order. When GitHub refuses, the mark goes back, unless the user toggled it again
+  since, and the summary bar shows "Couldn't mark as viewed" for 3 seconds.
+  "Couldn't refresh" takes its place while a reload is failing.
+- **Marks GitHub may not have seen.** A poll skips paths whose mutation is
+  still being sent or was sent after the poll's request started. Otherwise a
+  poll that left before a click would undo it.
+- **The file the user is in.** A browser mark on the file being read, or on
+  the file with the comment box, ticks the checkbox but leaves the file open.
+  It collapses once the user scrolls to another file. Collapses above the
+  visible rows keep those rows in place.
+
+`viewedUpdates(files:remote:skipping:held:)` makes the decision and is tested
+without a view.

@@ -221,6 +221,7 @@ Other tests run only when an environment variable is set:
 | `MARKDOWNUI_SNAPSHOT_DIR=<dir>` | Renders every `*.md` file in the directory in light and dark. |
 | `DIFFUI_SUBMIT=<number>` | Submits a real review to that pull request in `bojanrajkovic/hermes-playground`. |
 | `DIFFUI_WATCH=<number>` | Watches that playground pull request's threads for a minute. Reads only. |
+| `DIFFUI_VIEWED=<number>` | Marks two files of that playground pull request viewed, one from Hermes and one through the API, checks each side sees the other's mark, then unmarks both. Takes about 40 seconds. |
 
 The app executable also renders its own screens. Run
 `build/Hermes.app/Contents/MacOS/Hermes` with `HERMES_SNAPSHOT_DIR=<dir>` to
