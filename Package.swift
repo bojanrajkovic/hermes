@@ -69,8 +69,11 @@ let package = Package(
             swiftSettings: swift6
         ),
 
+        // One store of everything Hermes knows about GitHub. Every screen reads from it.
+        .target(name: "StateKit", dependencies: ["GitHubKit"], swiftSettings: swift6),
+
         // Shared type scale, metrics, and small reusable views.
-        .target(name: "HermesUI", swiftSettings: swift6),
+        .target(name: "HermesUI", dependencies: ["StateKit"], swiftSettings: swift6),
         // GitHub-flavored Markdown (with Mermaid) and rendered Markdown diffs, in a web view.
         .target(name: "MarkdownUI", resources: [.copy("Resources")], swiftSettings: swift6),
         // The diff viewer: review comments, go-to-definition.
@@ -93,7 +96,10 @@ let package = Package(
 
         .executableTarget(
             name: "Hermes",
-            dependencies: ["HermesUI", "MarkdownUI", "GitHubKit", "RepoKit", "DiffKit", "SyntaxKit", "DiffUI", "ChecksUI", "SessionsUI"],
+            dependencies: [
+                "HermesUI", "MarkdownUI", "GitHubKit", "StateKit", "RepoKit", "DiffKit", "SyntaxKit", "DiffUI", "ChecksUI",
+                "SessionsUI",
+            ],
             swiftSettings: swift6
         ),
 
@@ -105,6 +111,9 @@ let package = Package(
         .testTarget(name: "DiffUITests", dependencies: ["DiffUI"]),
         .testTarget(name: "ChecksUITests", dependencies: ["ChecksUI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "SessionsUITests", dependencies: ["SessionsUI"]),
-        .testTarget(name: "HermesTests", dependencies: ["Hermes", "HermesUI", "GitHubKit"]),
+        .testTarget(name: "HermesTests", dependencies: ["Hermes", "HermesUI", "GitHubKit", "StateKit", "TestSupport"]),
+        .testTarget(name: "StateKitTests", dependencies: ["StateKit", "GitHubKit", "TestSupport"]),
+        // Helpers the test targets share.
+        .target(name: "TestSupport", dependencies: ["GitHubKit"], path: "Tests/TestSupport", swiftSettings: swift6),
     ]
 )

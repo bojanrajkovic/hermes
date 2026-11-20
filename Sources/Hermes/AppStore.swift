@@ -4,8 +4,9 @@ import GitHubKit
 import HermesUI
 import RepoKit
 import SessionsUI
+import StateKit
 
-/// What every window shares: the signed-in user, each account's data, Claude
+/// What every window shares: the signed-in user, the GitHub store, Claude
 /// sessions, and settings. Each window has its own `WindowModel` on top.
 @Observable
 @MainActor
@@ -17,6 +18,8 @@ final class AppStore {
     }
 
     let client: GitHubClient
+    /// Everything Hermes knows about GitHub, for every account.
+    let github: GitHubStore
     let repoCache: RepoCache
     let sessions: SessionStore
     let localStacks: LocalStacks
@@ -31,8 +34,6 @@ final class AppStore {
     @ObservationIgnored var openWindow: ((WindowState) -> Void)?
     /// Links that arrived before any window was up.
     @ObservationIgnored private var waitingLinks: [URL] = []
-    // Filled in while a view reads it, so it is not observed. The entries are, and an entry is never replaced.
-    @ObservationIgnored private var accounts: [String: AccountData] = [:]
 
     var viewer: ViewerProfile? {
         if case .ready(let viewer) = startup { viewer } else { nil }
@@ -61,7 +62,7 @@ final class AppStore {
 
     /// Every repository Hermes has loaded in any account, for the ignore list's picker.
     var knownRepositories: [RepositoryRef] {
-        Set(accounts.values.flatMap { $0.repositories.map(\.ref) + $0.pullRequests.map(\.repository) })
+        Set(github.repositories.keys).union(github.pullRequests.keys.map(\.repository))
             .sorted { $0.description.localizedStandardCompare($1.description) == .orderedAscending }
     }
 
@@ -77,7 +78,10 @@ final class AppStore {
     }
     /// Seconds between automatic reloads of the lists.
     var refreshInterval: TimeInterval {
-        didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
+        didSet {
+            defaults.set(refreshInterval, forKey: Keys.refreshInterval)
+            github.backgroundInterval = refreshInterval
+        }
     }
 
     /// Whether Hermes runs webhook forwarders. Off until the user asks: each one creates a
@@ -137,6 +141,7 @@ final class AppStore {
         sessions: SessionStore = SessionStore(), defaults: UserDefaults = .standard
     ) {
         self.client = client
+        github = GitHubStore(client: client)
         self.repoCache = repoCache
         self.sessions = sessions
         localStacks = LocalStacks(sessions: sessions)
@@ -152,6 +157,9 @@ final class AppStore {
         forwardedOrganizations = Set(defaults.stringArray(forKey: Keys.forwardedOrganizations) ?? [])
         let interval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = interval > 0 ? interval : 60
+        github.backgroundInterval = refreshInterval
+        github.isActive = { NSApp?.isActive ?? true }
+        github.watched = { [weak self] login in self?.watched(in: login) ?? [] }
         relays.onEvent = { [weak self] event in
             guard let webhook = WebhookEvent(payload: event.payload) else { return }
             self?.reload(webhook, part: EventCounts.part(ofEvent: event.name))
@@ -172,23 +180,10 @@ final class AppStore {
         }
     }
 
-    /// How often the lists refresh while Hermes is the active app.
-    static let activeRefreshInterval: TimeInterval = 15
-
-    /// Refreshes every account a window shows, until its task is cancelled: every 15 seconds
-    /// while Hermes is the active app, and every `refreshInterval` otherwise. One loop for the
-    /// app, so two windows on an account cost one refresh.
-    func keepFresh() async {
-        var refreshedAt = Date.now
-        while (try? await Task.sleep(for: .seconds(Self.activeRefreshInterval))) != nil {
-            await syncForwarders()
-            guard NSApp.isActive || Date.now.timeIntervalSince(refreshedAt) >= refreshInterval else { continue }
-            refreshedAt = .now
-            let logins = Set(windows.allObjects.compactMap { $0.account?.login })
-            await withTaskGroup(of: Void.self) { group in
-                for login in logins { group.addTask { await self.data(for: login).refresh() } }
-            }
-        }
+    /// Keeps the webhook forwarders in step with the settings and the windows, until its task
+    /// is cancelled. The store polls GitHub itself while windows show its accounts.
+    func keepForwardersInSync() async {
+        while (try? await Task.sleep(for: GitHubStore.tick)) != nil { await syncForwarders() }
     }
 
     /// Runs a forwarder for each organization the user picked and each of the viewer's own
@@ -225,22 +220,22 @@ final class AppStore {
         // A relay sends events for every repository the user can see. One in an account no
         // window shows has nothing to update.
         guard windows.allObjects.contains(where: { $0.account?.login == event.repository.owner }) else { return }
-        let data = data(for: event.repository.owner)
-        let held = event.pullRequest(among: data.heldPullRequests)
+        let login = event.repository.owner
+        let held = event.pullRequest(among: github.heldPullRequests)
         Forwarders.log.debug("event for \(event.repository.description, privacy: .public) #\(held?.number ?? 0)")
 
         guard let held else {
             // The account's own load finds a new pull request, and one whose new head Hermes has
             // not heard of yet. A busy repository sends many such events, so they share loads.
-            return load(ItemKey(repository: RepositoryRef(owner: data.login, name: ""), number: 0), part: nil) {
-                await data.refresh()
+            return load(ItemKey(repository: RepositoryRef(owner: login, name: ""), number: 0), part: nil) { [github] in
+                await github.refresh(login)
             }
         }
         let key = held.key
         switch event.change {
         case .pullRequest(let fields, let reloads):
             // Deliveries can arrive out of order. A payload older than the row's last changes nothing.
-            if data.apply(fields, to: key) { note(event.change, in: \.detail, of: key) }
+            if github.apply(fields, to: key) { note(event.change, in: \.detail, of: key) }
             guard reloads else { return }
         case .comment:
             // A comment changes nothing a row shows.
@@ -255,11 +250,11 @@ final class AppStore {
             // The checks screens show the head commit's checks. A check on an older commit of
             // the pull request is not among them. The row's rollup is GitHub's to work out.
             if event.commit == held.headOID { note(event.change, in: \.checks, of: key) }
-            return load(key, part: nil) { await data.refetch(key) }
+            return load(key, part: nil) { [github] in await github.refetch(key) }
         case nil:
             break
         }
-        load(key, part: part) { await data.refetch(key) }
+        load(key, part: part) { [github] in await github.refetch(key) }
     }
 
     /// Runs `operation` for the first event of a burst about `key`, and once more, a few
@@ -388,14 +383,6 @@ final class AppStore {
     /// The account with this login, when the viewer has it.
     func account(_ login: String?) -> Account? {
         viewer?.accounts.first { $0.login.caseInsensitiveCompare(login ?? "") == .orderedSame }
-    }
-
-    /// One account's data, made on first use. An empty login is the data of a window with no account yet.
-    func data(for login: String) -> AccountData {
-        if let data = accounts[login] { return data }
-        let data = AccountData(login: login, client: client) { [weak self] in self?.watched(in: login) ?? [] }
-        accounts[login] = data
-        return data
     }
 
     /// The pull requests an account's windows show, most important first: the open ones,

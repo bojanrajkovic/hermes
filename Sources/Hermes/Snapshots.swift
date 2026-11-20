@@ -1,5 +1,6 @@
 import AppKit
 import GitHubKit
+import StateKit
 import HermesUI
 import SwiftUI
 import WebKit
@@ -157,13 +158,13 @@ enum Snapshots {
 
         model.show(.repository(busiest.ref), list: .issues)
         try await scene("org-issues", settle: .seconds(6), MainView(), model: model)
-        print("\(model.issueList(of: busiest.ref).items.count) issues loaded of \(busiest.openIssueCount)")
+        print("\(model.listedIssues(of: busiest.ref).count) issues loaded of \(busiest.openIssueCount)")
 
         model.show(.filter(.all))
         try await scene("org-inbox-all", MainView(), model: model)
 
         // An issue with labels and, when there is one, a linked pull request.
-        let issues = model.issueList(of: busiest.ref).items
+        let issues = model.listedIssues(of: busiest.ref)
         if let issue = issues.first(where: { !$0.linkedPullRequests.isEmpty && !$0.labels.isEmpty }) ?? issues.first {
             model.show(.repository(busiest.ref), list: .issues)
             model.navigate(to: .issue(ItemKey(repository: busiest.ref, number: issue.number)))

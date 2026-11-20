@@ -1,5 +1,6 @@
 import AppKit
 import GitHubKit
+import StateKit
 import HermesUI
 import SessionsUI
 import SwiftUI
@@ -180,7 +181,7 @@ struct RepositoryColumn: View {
     var body: some View {
         @Bindable var model = model
         let section = model.sections.first { $0.ref == repository }
-        let issueList = model.issueList(of: repository)
+        let openIssueCount = model.openIssueCount(of: repository)
 
         List(selection: model.selection) {
             switch model.repositoryList {
@@ -199,7 +200,7 @@ struct RepositoryColumn: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             Picker("List", selection: $model.repositoryList) {
                 Text("Pull Requests (\(section?.shownPullRequestCount ?? 0))").tag(RepositoryList.pullRequests)
-                Text("Issues (\(issueList.totalCount ?? section?.openIssueCount ?? 0))").tag(RepositoryList.issues)
+                Text("Issues (\(openIssueCount ?? 0))").tag(RepositoryList.issues)
                 if let local = model.localStacks.entry(repository) {
                     Text("Local (\(local.stacks.flatMap(\.branches).count))").tag(RepositoryList.localStacks)
                 }
@@ -217,7 +218,7 @@ struct RepositoryColumn: View {
                     "No Open Pull Requests", systemImage: "arrow.triangle.pull",
                     description: Text("\(repository.name) has no open pull requests.")
                 )
-            } else if model.repositoryList == .issues, issueList.totalCount == 0 {
+            } else if model.repositoryList == .issues, openIssueCount == 0 {
                 ContentUnavailableView(
                     "No Open Issues", systemImage: "smallcircle.filled.circle",
                     description: Text("\(repository.name) has no open issues.")

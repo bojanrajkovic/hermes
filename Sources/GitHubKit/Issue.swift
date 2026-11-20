@@ -96,14 +96,14 @@ public struct IssuePage: Sendable, Hashable {
     /// Pass this as `after` to load the next page. Nil when the page is empty.
     public let endCursor: String?
     public let hasNextPage: Bool
-    /// How many open issues the repository has across all pages.
-    public let totalCount: Int
+    /// The repository as the page found it, with its open issue count across all pages.
+    public let repository: Repository
 
-    public init(items: [Issue], endCursor: String?, hasNextPage: Bool, totalCount: Int) {
+    public init(items: [Issue], endCursor: String?, hasNextPage: Bool, repository: Repository) {
         self.items = items
         self.endCursor = endCursor
         self.hasNextPage = hasNextPage
-        self.totalCount = totalCount
+        self.repository = repository
     }
 }
 

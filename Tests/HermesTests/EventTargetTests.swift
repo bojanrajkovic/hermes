@@ -1,5 +1,6 @@
 import Foundation
 import GitHubKit
+import TestSupport
 import Testing
 @testable import Hermes
 
@@ -25,29 +26,6 @@ struct EventTargetTests {
         #expect(status(on: "aaa").pullRequest(among: held)?.key == ItemKey(repository: airway, number: 7))
         // The same commit ID in another repository is another commit.
         #expect(status(on: "bbb").pullRequest(among: held) == nil)
-    }
-
-    @Test func aStatusFindsAPullRequestHeldOnlyByNumber() {
-        // Opened by its number, or in a repository the viewer can only read: not in the open list.
-        let data = AccountData(login: "bojan", client: GitHubClient(token: { "" }))
-        let opened = pullRequest(7, head: "aaa")
-        data.store(.pullRequest(opened), for: opened.key)
-        #expect(data.pullRequests.isEmpty)
-
-        #expect(status(on: "aaa").pullRequest(among: data.heldPullRequests) == opened)
-    }
-
-    @Test func aStatusOnAnOldCommitDoesNotFindACopyTheOpenListReplaced() {
-        // Opened by its number at commit `aaa`, the pull request then joined the open list,
-        // which shows the push to `bbb`. The copy loaded by number still has `aaa`.
-        let stale = pullRequest(7, head: "aaa")
-        let listed = pullRequest(7, head: "bbb")
-        let closed = pullRequest(8, head: "ccc")
-        let held = PullRequestChanges.held(listed: [listed], fetched: [stale.key: stale, closed.key: closed])
-
-        #expect(held == [listed, closed])
-        #expect(status(on: "aaa").pullRequest(among: held) == nil)
-        #expect(status(on: "bbb").pullRequest(among: held) == listed)
     }
 
     @Test func aStatusOnACommitNoHeldPullRequestHeadsFindsNone() {

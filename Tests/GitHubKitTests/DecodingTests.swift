@@ -94,8 +94,11 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     }
 
     @Test func issuesDecodePageAndLinkedPullRequests() throws {
-        let page = try graphQLFixture("issues", as: RepositoryData<IssuesField>.self).repository.issues
+        let field = try graphQLFixture("issues", as: RepositoryData<IssuesField>.self).repository
+        let page = field.issues
 
+        // The repository's count comes from the same `issues` connection as the page.
+        #expect(field.repository.openIssueCount == 59)
         #expect(page.totalCount == 59)
         #expect(page.pageInfo?.hasNextPage == true)
         #expect(page.pageInfo?.endCursor != nil)

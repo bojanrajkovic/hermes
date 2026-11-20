@@ -1,5 +1,7 @@
 import Foundation
 import GitHubKit
+import StateKit
+import TestSupport
 import Testing
 @testable import Hermes
 
