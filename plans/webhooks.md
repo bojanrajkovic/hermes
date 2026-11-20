@@ -90,7 +90,7 @@ The diff screen does the same for the review threads: it applies a change with
 when that returns false. A change to a thread that is not loaded can't be applied.
 
 The checks screen and the checks summary do the same with
-`ChecksModel.apply`. A check run that is a job of a GitHub Actions workflow
+`GitHubStore.applyToChecks`. A check run that is a job of a GitHub Actions workflow
 names its workflow run in its link, `…/actions/runs/<run>/job/<job>`. A check
 Hermes already holds keeps its workflow. A new job takes the workflow of a
 loaded check of the same run, and replaces an earlier attempt of the same job.
@@ -124,7 +124,7 @@ may have asked GitHub before the change, and its answer would undo it:
 | One pull request, `GitHubStore.refetch` | It drops the answer and asks again. |
 | The account's lists, `GitHubStore.refresh` | It loads the rows that took a payload again when it ends. |
 | The detail and its review threads, `GitHubStore.loadDetail` | It drops the answer and asks again. |
-| The checks, `ChecksModel.run` | It drops the answer and asks again, without waiting ten seconds. |
+| The checks, `GitHubStore.loadChecks` | It drops the answer and asks again, without waiting ten seconds. |
 
 Two loads of a pull request's detail can run at once: the store's polling and
 a delivery. The one that started first drops its answer.

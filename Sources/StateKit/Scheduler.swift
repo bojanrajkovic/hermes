@@ -8,12 +8,15 @@ public enum Interest: Hashable, Sendable {
     /// One pull request's screens: its head commit and viewed files, its conversation and
     /// review threads, and whether it can merge.
     case pullRequest(ItemKey)
+    /// One commit's checks.
+    case checks(CommitKey)
 
     /// How long a poll loop waits between polls.
     var interval: Duration {
         switch self {
         case .account: GitHubStore.tick
         case .pullRequest: .seconds(10)
+        case .checks: checksInterval
         }
     }
 }

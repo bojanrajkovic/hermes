@@ -37,6 +37,7 @@ graph TD
 | `details[key]` | A pull request's description, conversation, reviews, commits, and review threads. The conversation tab and the diff's review threads read it. | The pull request's poll, webhook changes, and a submitted review. |
 | `readiness[key]` | Whether a pull request can merge, and how. | The pull request's poll, when its head, update time, or checks change, and after a merge or an auto-merge change. |
 | `revisions[key]` | A pull request's head commit, update time, and viewed files. | The pull request's poll, the diff's own load, and viewed marks. |
+| `checks[commit]` | A commit's checks, keyed by repository and commit SHA, so a pull request's checks are its head commit's. The checks tab and the conversation's summary read the same list. | The commit's poll, webhook changes, retries, and reruns. |
 | `viewer` | The signed-in user's login. | Sign-in. |
 
 Records stay until the app quits. A screen that shows one again makes the
@@ -81,6 +82,7 @@ RootView()
 | Interest | Refreshes | How often |
 |---|---|---|
 | `.account(login)` | The account's open pull requests, its repositories (every 10 minutes), and its opened issue lists. | Every 15 seconds while Hermes is the active app. In the background, every `refreshInterval` from Settings (60 seconds by default). |
+| `.checks(commit)` | The commit's checks: once when a screen starts showing them, then while one is queued or running, or for 2 minutes while the list is empty. A failed refresh tries again after 10 seconds, or once a used-up rate limit resets. A failed first load waits for Retry. | Every 10 seconds. |
 | `.pullRequest(key)` | The pull request's revision. When the head or update time moved, its record and detail. When the head, update time, or checks moved, its merge readiness. | Every 10 seconds. The pull request pane shows it, so every tab gets it. |
 
 A loop polls as soon as a screen shows its interest, then once per interval.

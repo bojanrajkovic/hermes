@@ -38,6 +38,18 @@ public final class GitHubStore {
     /// revision fetch or viewed mark left them.
     public internal(set) var revisions: [ItemKey: Stamped<PullRequestRevision>] = [:]
 
+    /// Each shown commit's checks.
+    public internal(set) var checks: [CommitKey: CommitChecks] = [:]
+
+    /// How many webhook changes each commit's checks took. A load that ran meanwhile runs again.
+    @ObservationIgnored var checkWrites: [CommitKey: Int] = [:]
+    /// When a screen first showed each commit's checks, for how long an empty list keeps loading.
+    @ObservationIgnored var checksShownAt: [CommitKey: Date] = [:]
+    /// How many check loads have started for each commit. A load that a later one overtakes drops its answer.
+    @ObservationIgnored var checkLoads: [CommitKey: Int] = [:]
+    /// When a commit's checks may load again after a failed load.
+    @ObservationIgnored var checksWaitUntil: [CommitKey: Date] = [:]
+
     /// How many detail loads have started for each pull request. A load that a later one
     /// overtakes drops its answer.
     @ObservationIgnored var detailLoads: [ItemKey: Int] = [:]
@@ -77,6 +89,7 @@ public final class GitHubStore {
     /// same interest share one poll.
     public func showing(_ interest: Interest) async {
         await scheduler?.showing(interest)
+        if case .checks(let commit) = interest, !polling.contains(interest) { stoppedShowing(commit) }
     }
 
     /// The interests being polled now.
@@ -92,6 +105,8 @@ public final class GitHubStore {
             await refresh(login)
         case .pullRequest(let key):
             await pollPullRequest(key)
+        case .checks(let commit):
+            await pollChecks(commit)
         }
     }
 

@@ -83,7 +83,7 @@ let package = Package(
             swiftSettings: swift6
         ),
         // CI check lists and the log viewer.
-        .target(name: "ChecksUI", dependencies: ["HermesUI", "MarkdownUI", "GitHubKit"], swiftSettings: swift6),
+        .target(name: "ChecksUI", dependencies: ["HermesUI", "MarkdownUI", "GitHubKit", "StateKit"], swiftSettings: swift6),
         // Embedded terminal and Claude Code session launching.
         .target(
             name: "SessionsUI",
