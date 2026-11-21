@@ -65,6 +65,17 @@ Webhook payloads use `AppliedPayloads`. A payload older than the last one a
 pull request took is dropped, and a load that ran while a payload arrived
 loads that pull request once more. [webhooks.md](webhooks.md) has the details.
 
+## Webhooks
+
+`AppStore.reload` puts each webhook or relay delivery into the store: a pull
+request's fields into its record, a comment or review into its detail, a
+thread change into its threads, a check into its commit's checks. What a
+payload can't carry loads, but only while a screen shows it (`isShowing`).
+Screens see the change because they read the store. A delivery that arrives
+while a tab is closed and can be applied shows when it opens. One that can't
+be applied is caught by the tab's first poll when it opens. [webhooks.md](webhooks.md) has the table of
+deliveries.
+
 ## Polling
 
 Screens say what they show with the `.showing(_:in:)` view modifier from

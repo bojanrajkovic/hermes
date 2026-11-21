@@ -95,6 +95,9 @@ public final class GitHubStore {
     /// The interests being polled now.
     var polling: Set<Interest> { scheduler?.polling ?? [] }
 
+    /// Whether a screen shows `interest` now.
+    public func isShowing(_ interest: Interest) -> Bool { polling.contains(interest) }
+
     private func poll(_ interest: Interest) async {
         switch interest {
         case .account(let login):

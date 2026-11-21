@@ -16,9 +16,11 @@ struct WebhookForwarderTests {
             == WebhookEvent(repository: airway, pullRequest: 7))
     }
 
-    @Test func aCommentCountsOnlyOnAPullRequest() {
-        #expect(event(#""issue": {"number": 7, "pull_request": {"url": "u"}}, "comment": {}, \#(repository)"#)?.pullRequest == 7)
-        #expect(event(#""issue": {"number": 8}, "comment": {}, \#(repository)"#) == WebhookEvent(repository: airway, pullRequest: nil))
+    @Test func aCommentNamesAPullRequestOrAPlainIssue() {
+        let onPullRequest = event(#""issue": {"number": 7, "pull_request": {"url": "u"}}, "comment": {}, \#(repository)"#)
+        #expect(onPullRequest?.pullRequest == 7)
+        #expect(onPullRequest?.issue == nil)
+        #expect(event(#""issue": {"number": 8}, "comment": {}, \#(repository)"#) == WebhookEvent(repository: airway, pullRequest: nil, issue: 8))
     }
 
     @Test func aCheckSuiteNamesItsFirstPullRequest() {

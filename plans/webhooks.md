@@ -32,11 +32,15 @@ sequenceDiagram
 Hermes reads the repository and the pull request number from a delivery. A
 commit status names no pull request, and a check often names none, so Hermes
 finds theirs by the commit: the held pull request whose head it is. Held means
-in the open list, or loaded by number. A pull request that is both is matched
-as the open list has it, because that is the copy its row shows.
+the store has its record. When a closed and an open pull request share a head
+commit, the open one is matched.
 
 A delivery about a held pull request is applied or loads that pull request.
 [Applying a payload](#applying-a-payload) says which.
+
+A delivery about a plain issue, or a comment on one, loads that issue's record
+and its repository's issue list, when the store holds them. The list's page
+also carries the repository's open issue count.
 
 A delivery about anything else loads the account. That covers a newly opened
 pull request, and a commit that is no held pull request's head, which a push
@@ -79,18 +83,13 @@ that is older than the last one its row took. A dropped payload whose event
 needs a load still loads the pull request.
 
 The description, the requested reviewers, the conversation, the reviews, and
-the review threads live in the store's `details`. `AppStore.eventCounts` keeps, for each
-pull request and each part of it, a `WebhookChanges`: how many deliveries came
-and the latest one's change. The pane watches the count. When it rises by one,
-the pane applies that change with `GitHubStore.applyToDetail`. When it rises
-by more, the earlier changes are gone, so the pane loads the detail again.
+the review threads live in the store's `details`. `AppStore.reload` applies a
+change there with `GitHubStore.applyToDetail` or `GitHubStore.applyToThreads`,
+and loads the detail when that returns false. Screens show the change because
+they read the store. A change that can't be applied loads only while a screen
+shows the pull request. A closed one loads when it opens again.
 
-The diff screen does the same for the review threads: it applies a change with
-`GitHubStore.applyToThreads`, through `ReviewModel.apply`, and loads the detail
-when that returns false. A change to a thread that is not loaded can't be applied.
-
-The checks screen and the checks summary do the same with
-`GitHubStore.applyToChecks`. A check run that is a job of a GitHub Actions workflow
+Checks work the same way with `GitHubStore.applyToChecks`. A check run that is a job of a GitHub Actions workflow
 names its workflow run in its link, `…/actions/runs/<run>/job/<job>`. A check
 Hermes already holds keeps its workflow. A new job takes the workflow of a
 loaded check of the same run, and replaces an earlier attempt of the same job.
@@ -101,13 +100,15 @@ because the screens show the head commit's checks.
 
 Changes that can't be applied come in bursts. A review with ten line comments
 sends ten, and a new workflow run sends one check run per job, none of which
-can be applied until a load knows the run. `BurstLoader` in
-`WebhookChange.swift` loads the threads or the checks on the first, and once
-more five seconds after that load for the ones that came meanwhile.
+can be applied until a load knows the run. `EventBursts` in
+`Sources/Hermes/EventBursts.swift` loads the detail or the checks on the
+first, and once more five seconds after that load for the ones that came
+meanwhile.
 
 The checks list stops reloading once no check is queued or running. A
-delivery that puts a check back in one of those states starts the reloading
-again, so a check whose last delivery never arrives does not stay "running".
+delivery that puts a check back in one of those states makes the store's next
+poll reload it, so a check whose last delivery never arrives does not stay
+"running".
 
 The pull request's update time is not applied. The pane loads the detail
 again when it changes, which is at the next refresh, and that load settles

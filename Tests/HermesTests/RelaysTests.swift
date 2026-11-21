@@ -80,36 +80,34 @@ struct RelaysTests {
         #expect(Relays(defaults: defaults, open: { _ in }).memberships.first { $0.tenant == byLink }?.organization == "octo-org")
     }
 
-    @Test func aBurstOfEventsLoadsAPullRequestOnceAndThenOnceMore() {
+    @Test func aBurstOfEventsLoadsOnceAndThenOnceMore() {
         var bursts = EventBursts()
         let key = ItemKey(repository: airway, number: 7)
-        let other = ItemKey(repository: airway, number: 8)
 
-        // The first event loads. The next three wait for that load, and another pull request is not held up.
+        // The first event loads. The next two wait for that load, and another load is not held up.
         let loads = [
-            bursts.shouldLoad(key, part: \.checks), bursts.shouldLoad(key, part: \.checks),
-            bursts.shouldLoad(key, part: \.threads), bursts.shouldLoad(key, part: nil), bursts.shouldLoad(other, part: nil),
+            bursts.shouldLoad(.record(key)), bursts.shouldLoad(.record(key)), bursts.shouldLoad(.record(key)),
+            bursts.shouldLoad(.detail(key)),
         ]
-        #expect(loads == [true, false, false, false, true])
+        #expect(loads == [true, false, false, true])
 
-        // One more load covers all three, and names both parts once.
-        let again = bursts.loaded(key)
-        #expect(again == [\.checks, \.threads])
+        // One more load covers both.
+        let again = bursts.loaded(.record(key))
+        #expect(again)
         // No event came during the second load, so the burst is over and the next event loads at once.
-        let over = bursts.loaded(key)
-        #expect(over == nil)
-        let next = bursts.shouldLoad(key, part: nil)
+        let over = bursts.loaded(.record(key))
+        #expect(!over)
+        let next = bursts.shouldLoad(.record(key))
         #expect(next)
     }
 
-    /// The fields of a `pull_request` payload that GitHub last changed `updated` seconds in.
     @Test func eventsNameThePartOfAPullRequestTheyChange() {
-        #expect(EventCounts.part(ofEvent: "pull_request_review_comment") == \.threads)
-        #expect(EventCounts.part(ofEvent: "pull_request_review_thread") == \.threads)
+        #expect(EventPart(event: "pull_request_review_comment") == .threads)
+        #expect(EventPart(event: "pull_request_review_thread") == .threads)
         for name in ["check_run", "check_suite", "status"] {
-            #expect(EventCounts.part(ofEvent: name) == \.checks)
+            #expect(EventPart(event: name) == .checks)
         }
-        #expect(EventCounts.part(ofEvent: "pull_request") == nil)
-        #expect(EventCounts.part(ofEvent: "issue_comment") == nil)
+        #expect(EventPart(event: "pull_request") == nil)
+        #expect(EventPart(event: "issue_comment") == nil)
     }
 }

@@ -306,14 +306,20 @@ struct ReviewModelTests {
     private var file: FileDiff { diff.files[0] }
     private var lines: [DiffLine] { file.hunks[0].lines }
 
+    private let key = ItemKey(repository: RepositoryRef(owner: "acme", name: "app"), number: 7)
+
     private func makeModel(client: GitHubClient = GitHubClient(), showing shown: Diff? = nil) -> ReviewModel {
+        makeModel(store: GitHubStore(client: client), showing: shown)
+    }
+
+    private func makeModel(store: GitHubStore, showing shown: Diff? = nil) -> ReviewModel {
         let pullRequest = PullRequest(
             id: "PR", number: 7, title: "Guide", url: URL(string: "https://github.com/acme/app/pull/7")!,
             repository: RepositoryRef(owner: "acme", name: "app"), author: nil, isDraft: false, createdAt: .now, updatedAt: .now,
             headRefName: "guide", baseRefName: "main", headOID: "abc", reviewDecision: nil, additions: 2, deletions: 2,
             changedFileCount: 1, mergeable: .mergeable, labels: [], checkState: nil, stack: nil, closingIssueNumbers: []
         )
-        let model = ReviewModel(pullRequest: pullRequest, store: GitHubStore(client: client), draftsRoot: root)
+        let model = ReviewModel(pullRequest: pullRequest, store: store, draftsRoot: root)
         model.show(diff: shown ?? diff, head: "abc")
         return model
     }
@@ -331,31 +337,33 @@ struct ReviewModelTests {
     }
 
     @Test func aDeliverysChangeIsAppliedToTheLoadedThreads() async {
-        let model = makeModel(client: GitHubStub.client(token: "threads"))
+        let store = GitHubStore(client: GitHubStub.client(token: "threads"))
+        let model = makeModel(store: store)
         let reply = GitHubKit.Comment(id: "C11", databaseID: 11, author: nil, body: "A reply", createdAt: .now)
         // Nothing is loaded yet, so the reply has no thread to join and the caller loads.
-        #expect(!model.apply(.reply(reply, to: 10)))
+        #expect(!store.applyToThreads(.reply(reply, to: 10), for: key))
 
         await model.reloadThreads()
-        #expect(model.apply(.reply(reply, to: 10)))
+        #expect(store.applyToThreads(.reply(reply, to: 10), for: key))
         #expect(model.threads.first?.comments.map(\.body) == ["First", "A reply"])
-        #expect(model.apply(.threadResolved(id: "T1", resolved: true)))
+        #expect(store.applyToThreads(.threadResolved(id: "T1", resolved: true), for: key))
         #expect(model.threads.map(\.isResolved) == [true])
 
         // A new thread's ID is not in a payload, so the threads load.
-        #expect(!model.apply(.threads))
+        #expect(!store.applyToThreads(.threads, for: key))
         #expect(model.threads.count == 1)
     }
 
     @Test func aChangeAppliedWhileTheThreadsLoadMakesThemLoadAgain() async {
-        let model = makeModel(client: GitHubStub.client(token: "applied"))
+        let store = GitHubStore(client: GitHubStub.client(token: "applied"))
+        let model = makeModel(store: store)
         GitHubStub.answer("applied")
         await model.reloadThreads()
         let load = Task { await model.reloadThreads() }
         await GitHubStub.loads(of: "applied", reach: 2)
 
         // GitHub was asked before this change, so its answer is the older one, and the threads load a third time.
-        #expect(model.apply(.threadResolved(id: "T1", resolved: true)))
+        #expect(store.applyToThreads(.threadResolved(id: "T1", resolved: true), for: key))
         GitHubStub.answer("applied", count: 2)
         #expect(await load.value)
         #expect(GitHubStub.loads(of: "applied") == 3)
