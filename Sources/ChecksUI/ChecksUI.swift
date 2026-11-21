@@ -1,21 +1,20 @@
 import GitHubKit
 import HermesUI
+import StateKit
 import SwiftUI
 
 /// The CI checks of one commit: a list of checks grouped by workflow, and the
 /// selected check's log, steps, or summary beside it.
 ///
-/// The list reloads every ten seconds while a check is queued or running, and
+/// The store reloads the list every ten seconds while a check is queued or running, and
 /// for the first two minutes while the commit has no checks yet.
 public struct ChecksScreen: View {
-    private let repository: RepositoryRef
-    private let commitOID: String
-    private let client: GitHubClient
+    private let commit: CommitKey
+    private let store: GitHubStore
     private let initiallySelected: Check.ID?
     private let changes: WebhookChanges
 
     @State private var model = ChecksModel()
-    @State private var refreshCount = 0
 
     /// - Parameters:
     ///   - initiallySelected: The check to show first, such as the one
@@ -23,35 +22,37 @@ public struct ChecksScreen: View {
     ///     selects it. With `nil`, the first failed check is selected.
     ///   - changes: What webhook deliveries have said about the commit's checks. When its
     ///     count rises, the screen applies the latest change, or reloads the checks when it
-    ///     can't, ahead of its own polling.
+    ///     can't, ahead of the store's polling.
     public init(
-        repository: RepositoryRef, commitOID: String, client: GitHubClient, initiallySelected: Check? = nil, changes: WebhookChanges = WebhookChanges()
+        repository: RepositoryRef, commitOID: String, store: GitHubStore, initiallySelected: Check.ID? = nil,
+        changes: WebhookChanges = WebhookChanges()
     ) {
-        self.repository = repository
-        self.commitOID = commitOID
-        self.client = client
-        self.initiallySelected = initiallySelected?.id
+        commit = CommitKey(repository: repository, oid: commitOID)
+        self.store = store
+        self.initiallySelected = initiallySelected
         self.changes = changes
     }
 
     public var body: some View {
+        let state = store.checks[commit]
+        let checks = state?.checks ?? []
         HSplitView {
-            ChecksLoadingView(model: model, retry: { refreshCount += 1 }) {
-                CheckListView(groups: CheckList.grouped(model.checks), selection: $model.selection, rerun: rerun)
+            ChecksLoadingView(state: state, retry: reload) {
+                CheckListView(groups: CheckList.grouped(checks), selection: $model.selection, rerun: rerun)
             }
             // Under every state, so the list can be refreshed when it is empty or failed to load.
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CheckListFooter(
-                    rollup: model.isLoaded ? CheckList.rollup(model.checks) : "", refreshError: model.refreshError,
-                    rerunFailed: rerunFailed, isRerunning: model.isRerunning
-                ) { refreshCount += 1 }
+                    rollup: state?.isLoaded == true ? CheckList.rollup(checks) : "", refreshError: state?.refreshError,
+                    rerunFailed: rerunFailed(checks), isRerunning: model.isRerunning, refresh: reload
+                )
             }
             .frame(minWidth: Metrics.listMinWidth, idealWidth: Metrics.listIdealWidth, maxWidth: Metrics.listMaxWidth)
 
             Group {
-                if let check = model.selectedCheck {
+                if let check = model.selectedCheck(in: checks) {
                     CheckDetailView(
-                        check: check, repository: repository, client: client, isRerunning: model.isRerunning,
+                        check: check, repository: commit.repository, client: store.client, isRerunning: model.isRerunning,
                         rerun: check.jobID.flatMap { id in check.canRerun ? { rerun(.job(id)) } : nil }
                     )
                 } else {
@@ -63,12 +64,13 @@ public struct ChecksScreen: View {
             }
             .frame(minWidth: Metrics.detailMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount)) {
-            await model.run(
-                repository: repository, commitOID: commitOID, client: client, preferredSelection: initiallySelected
-            )
+        .showing(.checks(commit), in: store)
+        // A new commit starts from the check asked for, or from the first failed one.
+        .onChange(of: commit.oid, initial: true) { model.selection = initiallySelected }
+        .onChange(of: checks, initial: true) {
+            if model.selectedCheck(in: checks) == nil { model.selection = CheckList.defaultSelection(checks) }
         }
-        .applying(changes, commitOID: commitOID, to: model) { refreshCount += 1 }
+        .applying(changes, to: commit, in: store, model: model)
         .onChange(of: initiallySelected) { _, selected in
             if let selected { model.selection = selected }
         }
@@ -82,18 +84,22 @@ public struct ChecksScreen: View {
         }
     }
 
+    private func reload() {
+        Task { await store.loadChecks(commit) }
+    }
+
     /// Runs the failed jobs of every workflow run again. `nil` when no job can run again.
-    private var rerunFailed: (() -> Void)? {
-        let runs = CheckList.rerunnableRuns(model.checks)
+    private func rerunFailed(_ checks: [Check]) -> (() -> Void)? {
+        let runs = CheckList.rerunnableRuns(checks)
         return runs.isEmpty ? nil : { rerun(.failedJobs(runs: runs)) }
     }
 
     private func rerun(_ request: ChecksModel.Rerun) {
         Task {
-            guard await model.rerun(request, repository: repository, client: client) else { return }
+            guard await model.rerun(request, repository: commit.repository, client: store.client) else { return }
             // GitHub queues the new attempt a moment after it answers. The reload then follows it.
             try? await Task.sleep(for: ChecksModel.rerunSettle)
-            refreshCount += 1
+            await store.loadChecks(commit)
         }
     }
 }
@@ -103,73 +109,62 @@ public struct ChecksScreen: View {
 /// scroll. Calls `onSelect` when a check is clicked, so the host can switch to
 /// a ``ChecksScreen`` created with that check as `initiallySelected`.
 public struct ChecksSummary: View {
-    private let repository: RepositoryRef
-    private let commitOID: String
-    private let client: GitHubClient
+    private let commit: CommitKey
+    private let store: GitHubStore
     private let onSelect: (Check) -> Void
     private let changes: WebhookChanges
 
     @State private var model = ChecksModel()
-    @State private var refreshCount = 0
 
     /// - Parameter changes: As for ``ChecksScreen``.
     public init(
-        repository: RepositoryRef, commitOID: String, client: GitHubClient, changes: WebhookChanges = WebhookChanges(), onSelect: @escaping (Check) -> Void
+        repository: RepositoryRef, commitOID: String, store: GitHubStore, changes: WebhookChanges = WebhookChanges(),
+        onSelect: @escaping (Check) -> Void
     ) {
-        self.repository = repository
-        self.commitOID = commitOID
-        self.client = client
+        commit = CommitKey(repository: repository, oid: commitOID)
+        self.store = store
         self.changes = changes
         self.onSelect = onSelect
     }
 
     public var body: some View {
+        let state = store.checks[commit]
         VStack(alignment: .leading, spacing: 2) {
-            ChecksLoadingView(model: model, isCompact: true, retry: { refreshCount += 1 }) {
-                CheckSummaryList(checks: model.checks, onSelect: onSelect)
+            ChecksLoadingView(state: state, isCompact: true, retry: { Task { await store.loadChecks(commit) } }) {
+                CheckSummaryList(checks: state?.checks ?? [], onSelect: onSelect)
             }
-            if let refreshError = model.refreshError {
+            if let refreshError = state?.refreshError {
                 RefreshErrorLabel(message: refreshError)
                     .font(Theme.Fonts.meta)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
         }
-        .task(id: LoadKey(repository: repository, commitOID: commitOID, refreshCount: refreshCount)) {
-            await model.run(repository: repository, commitOID: commitOID, client: client)
-        }
-        .applying(changes, commitOID: commitOID, to: model) { refreshCount += 1 }
+        .showing(.checks(commit), in: store)
+        .applying(changes, to: commit, in: store, model: model)
     }
-}
-
-private struct LoadKey: Hashable {
-    let repository: RepositoryRef
-    let commitOID: String
-    let refreshCount: Int
 }
 
 /// How many deliveries have changed one commit's checks.
 private struct CheckChanges: Equatable {
-    let commitOID: String
+    let commit: CommitKey
     let count: Int
 }
 
 extension View {
-    /// Applies the latest of `changes` to `model` when their count rises, and calls `reload`
-    /// when the checks have to load: the change can't be applied, or a check is now queued
-    /// or running and nothing is reloading the list.
+    /// Applies the latest of `changes` to the store's checks when their count rises, and
+    /// loads them when the change can't be applied.
     ///
     /// A new workflow run sends one check run per job, and none can be applied until a load
-    /// knows the run. Such a burst calls `reload` at once and once more after, not once per
-    /// delivery, so the load it started is not started over by each.
+    /// knows the run. Such a burst loads at once and once more after, not once per delivery.
     fileprivate func applying(
-        _ changes: WebhookChanges, commitOID: String, to model: ChecksModel, reload: @escaping @MainActor () -> Void
+        _ changes: WebhookChanges, to commit: CommitKey, in store: GitHubStore, model: ChecksModel
     ) -> some View {
-        onChange(of: CheckChanges(commitOID: commitOID, count: changes.count)) { seen, now in
+        onChange(of: CheckChanges(commit: commit, count: changes.count)) { seen, now in
             // Another commit's count is not a change to this one.
-            guard seen.commitOID == now.commitOID else { return }
-            if let change = changes.only(since: seen.count), model.apply(change), !model.needsPolling { return }
-            model.changeLoads.load(reload)
+            guard seen.commit == now.commit else { return }
+            if let change = changes.only(since: seen.count), store.applyToChecks(change, for: commit) { return }
+            model.changeLoads.load { await store.loadChecks(commit) }
         }
     }
 }
@@ -177,13 +172,13 @@ extension View {
 /// Shows `content` once the checks have loaded and there are some; otherwise
 /// a loading, error, or empty state.
 private struct ChecksLoadingView<Content: View>: View {
-    let model: ChecksModel
+    let state: CommitChecks?
     var isCompact = false
     let retry: () -> Void
     @ViewBuilder let content: Content
 
     var body: some View {
-        if let message = model.errorMessage {
+        if let message = state?.errorMessage {
             if isCompact {
                 HStack(spacing: Metrics.rowSpacing) {
                     Label(message, systemImage: "exclamationmark.triangle")
@@ -201,7 +196,7 @@ private struct ChecksLoadingView<Content: View>: View {
                     Button("Retry", action: retry)
                 }
             }
-        } else if !model.isLoaded {
+        } else if state?.isLoaded != true {
             if isCompact {
                 HStack(spacing: Metrics.rowSpacing) {
                     ProgressView().controlSize(.small)
@@ -211,7 +206,7 @@ private struct ChecksLoadingView<Content: View>: View {
                 ProgressView("Loading checks…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        } else if model.checks.isEmpty {
+        } else if state?.checks.isEmpty ?? true {
             if isCompact {
                 Label("No checks ran on this commit", systemImage: "checklist")
                     .font(Theme.Fonts.meta)

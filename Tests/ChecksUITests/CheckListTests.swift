@@ -73,24 +73,6 @@ func run(
         #expect(CheckList.defaultSelection([checks[0], checks[1]]) == checks[0].id)
     }
 
-    @Test func pollsWhilePendingOrNewlyEmpty() {
-        #expect(ChecksModel.keepsPolling([run("a"), run("b", .queued, nil)], elapsed: .seconds(3600)))
-        #expect(!ChecksModel.keepsPolling([run("a")], elapsed: .zero))
-        // Right after a push GitHub has not created the checks yet.
-        #expect(ChecksModel.keepsPolling([], elapsed: .seconds(5)))
-        #expect(!ChecksModel.keepsPolling([], elapsed: ChecksModel.emptyListPolling))
-    }
-
-    @Test func waitsForARateLimitToReset() {
-        let now = Date(timeIntervalSince1970: 1000)
-        #expect(ChecksModel.reloadDelay(after: nil, now: now) == ChecksModel.refreshInterval)
-        #expect(ChecksModel.reloadDelay(after: URLError(.timedOut), now: now) == ChecksModel.refreshInterval)
-        let limited = GitHubError.rateLimited(resetAt: now.addingTimeInterval(300))
-        #expect(ChecksModel.reloadDelay(after: limited, now: now) == .seconds(300))
-        // A reset time already passed does not make the loop spin.
-        #expect(ChecksModel.reloadDelay(after: limited, now: now.addingTimeInterval(600)) == ChecksModel.refreshInterval)
-    }
-
     @Test func durations() {
         let start = Date(timeIntervalSince1970: 0)
         #expect(CheckList.duration(from: start, to: start.addingTimeInterval(130)) == "2m 10s")

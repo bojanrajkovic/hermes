@@ -1,5 +1,6 @@
 import AppKit
 import GitHubKit
+import StateKit
 import SwiftUI
 import Testing
 import WebKit
@@ -157,18 +158,19 @@ func snapshot(
 
     @Test func liveFailingAndPassing() async throws {
         let client = GitHubClient()
+        let store = GitHubStore(client: client)
         // PR 3: "tests" fails.
         let commit = "aa3e376b7c00cbc6cce94635c30ae16a647ec7ba"
         try await snapshot("screen-failing", size: CGSize(width: 1100, height: 640), settle: .seconds(5)) {
-            ChecksScreen(repository: playground, commitOID: commit, client: client)
+            ChecksScreen(repository: playground, commitOID: commit, store: store)
         }
         // Looked up by name: a re-run gives the check a new ID.
         let build = try #require(try await client.checks(repository: playground, commitOID: commit).first { $0.name == "build" })
         try await snapshot("screen-passing", size: CGSize(width: 1100, height: 640), settle: .seconds(5)) {
-            ChecksScreen(repository: playground, commitOID: commit, client: client, initiallySelected: build)
+            ChecksScreen(repository: playground, commitOID: commit, store: store, initiallySelected: build.id)
         }
         try await snapshot("summary-live", size: CGSize(width: 360, height: 140), settle: .seconds(4)) {
-            ChecksSummary(repository: playground, commitOID: commit, client: client, onSelect: { _ in }).padding()
+            ChecksSummary(repository: playground, commitOID: commit, store: store, onSelect: { _ in }).padding()
         }
     }
 
@@ -228,7 +230,7 @@ func snapshot(
         try await snapshot("screen-commit", size: CGSize(width: 1100, height: 640), settle: .seconds(settle)) {
             ChecksScreen(
                 repository: RepositoryRef(owner: parts[0], name: parts[1]), commitOID: parts[2],
-                client: GitHubClient(), initiallySelected: selected
+                store: GitHubStore(client: GitHubClient()), initiallySelected: selected?.id
             )
         }
     }

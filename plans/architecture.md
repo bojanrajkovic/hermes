@@ -132,7 +132,7 @@ sequenceDiagram
   is up. When the head changes, the diff reloads in place and keeps the scroll
   position. When the update time changes, its conversation and threads reload.
 - A commit's checks reload every 10 seconds while any check is queued or
-  running.
+  running. The checks tab and the conversation's summary share one load.
 - A webhook forwarder or a relay tenant reports a change within seconds.
   Hermes applies what its payload carries to the pull request's row, and to
   the conversation, review threads, and checks on screen, and loads from

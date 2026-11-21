@@ -126,6 +126,14 @@ public enum Check: Sendable, Hashable, Identifiable {
     case run(CheckRun)
     case status(StatusContext)
 
+    /// Queued or running: a later load can find it finished.
+    public var isPending: Bool {
+        switch self {
+        case .run(let run): run.status != .completed || run.conclusion == nil
+        case .status(let status): status.state == .pending || status.state == .expected
+        }
+    }
+
     /// The outcome of a check, reduced to what a list shows.
     public enum Outcome: Sendable, Hashable {
         /// Queued or running.

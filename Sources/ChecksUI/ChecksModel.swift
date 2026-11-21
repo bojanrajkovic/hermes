@@ -2,17 +2,10 @@ import Foundation
 import GitHubKit
 import Observation
 
-/// The checks of one commit, kept fresh while any of them is still running.
+/// One checks screen's own state: the selected check and reruns. The checks themselves are
+/// the store's, which keeps them fresh while any screen shows the commit.
 @Observable @MainActor
 final class ChecksModel {
-    private(set) var checks: [Check] = []
-    /// False until the first load for the current commit succeeds.
-    private(set) var isLoaded = false
-    /// Why the first load failed. A failed refresh keeps the checks it had.
-    private(set) var errorMessage: String?
-    /// Why the latest refresh failed. Nil once a load succeeds, so the checks
-    /// shown are current whenever this is nil.
-    private(set) var refreshError: String?
     var selection: Check.ID?
     /// A rerun request is on its way to GitHub.
     private(set) var isRerunning = false
@@ -27,100 +20,17 @@ final class ChecksModel {
         case failedJobs(runs: [Int])
     }
 
-    @ObservationIgnored private var loadedCommit: String?
-    /// How many calls of `run` are loading or waiting to load again. A new call starts before
-    /// the cancelled one before it returns, so this can be two for a moment.
-    @ObservationIgnored private var running = 0
-    /// How many changes `apply` has made.
-    @ObservationIgnored private var applied = 0
     /// Loads the checks for the deliveries that can't be applied, twice for a burst of them.
     let changeLoads = BurstLoader()
 
-    /// Whether a check is queued or running while nothing is reloading the list. An applied
-    /// delivery can leave it so, and the caller then starts `run` again, so a check whose
-    /// next delivery never comes is not shown as running for good.
-    var needsPolling: Bool { running == 0 && checks.contains(where: \.state.isPending) }
-
-    /// Applies what a webhook delivery says changed to the checks.
-    ///
-    /// - Returns: False when the checks have to load instead.
-    func apply(_ change: WebhookChange) -> Bool {
-        guard isLoaded, let changed = Check.applying(change, to: checks) else { return false }
-        checks = changed
-        applied += 1
-        if selectedCheck == nil { selection = CheckList.defaultSelection(checks) }
-        return true
-    }
-
-    nonisolated static let refreshInterval = Duration.seconds(10)
     /// How long after a rerun request the list reloads, so the queued attempt is in it.
     nonisolated static let rerunSettle = Duration.seconds(3)
 
-    /// How long an empty list keeps reloading. GitHub creates a commit's
-    /// checks a few seconds after the push, so an empty list right after one
-    /// is not final. A commit nothing reports on stays empty, so this ends.
-    nonisolated static let emptyListPolling = Duration.seconds(120)
-
-    var selectedCheck: Check? { checks.first { $0.id == selection } }
-
-    /// Whether to reload: a check is queued or running, or the list is still
-    /// empty `elapsed` after loading started.
-    nonisolated static func keepsPolling(_ checks: [Check], elapsed: Duration) -> Bool {
-        checks.contains(where: \.state.isPending) || (checks.isEmpty && elapsed < emptyListPolling)
+    /// The selected check among `checks`.
+    func selectedCheck(in checks: [Check]) -> Check? {
+        checks.first { $0.id == selection }
     }
 
-    /// How long to wait before loading again after `error`, or after a
-    /// successful load when it is nil. A used-up rate limit rejects every
-    /// request until it resets, so wait for that.
-    nonisolated static func reloadDelay(after error: (any Error)?, now: Date) -> Duration {
-        guard case GitHubError.rateLimited(let resetAt)? = error else { return refreshInterval }
-        return max(refreshInterval, .seconds(resetAt.timeIntervalSince(now)))
-    }
-
-    /// Loads the commit's checks, then reloads every ten seconds while
-    /// `keepsPolling` says to. Returns after that or when the task is cancelled.
-    func run(repository: RepositoryRef, commitOID: String, client: GitHubClient, preferredSelection: Check.ID? = nil) async {
-        if loadedCommit != commitOID {
-            loadedCommit = commitOID
-            (checks, isLoaded, selection, refreshError) = ([], false, preferredSelection, nil)
-        }
-        errorMessage = nil
-        let start = ContinuousClock.now
-        running += 1
-        defer { running -= 1 }
-
-        while !Task.isCancelled {
-            var delay = Self.refreshInterval
-            do {
-                let before = applied
-                let loaded = try await client.checks(repository: repository, commitOID: commitOID)
-                // A response that arrives after cancellation belongs to a commit no longer shown.
-                guard !Task.isCancelled else { return }
-                // A change applied while GitHub answered is newer than the answer, so the checks load once more.
-                guard applied == before else { continue }
-                checks = loaded
-                isLoaded = true
-                (errorMessage, refreshError) = (nil, nil)
-                if selectedCheck == nil { selection = CheckList.defaultSelection(checks) }
-                guard Self.keepsPolling(checks, elapsed: .now - start) else { return }
-            } catch is CancellationError {
-                return
-            } catch {
-                // A cancelled request throws URLError, not CancellationError.
-                guard !Task.isCancelled else { return }
-                guard isLoaded else {
-                    errorMessage = ChecksError.message(for: error)
-                    return
-                }
-                refreshError = ChecksError.message(for: error)
-                delay = Self.reloadDelay(after: error, now: .now)
-            }
-            try? await Task.sleep(for: delay)
-        }
-    }
-}
-
-extension ChecksModel {
     /// Asks GitHub to run jobs again.
     ///
     /// - Returns: Whether GitHub took every request. On failure `rerunError` says why.

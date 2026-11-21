@@ -81,7 +81,7 @@ final class WindowModel {
         didSet { if pullRequestTab != .checks { checkToOpen = nil } }
     }
     /// The check picked in a checks summary, shown first on the Checks tab.
-    var checkToOpen: Check?
+    var checkToOpen: Check.ID?
     /// Where a link asked the open pull request's diff to go. The Files tab takes it.
     var diffTarget: DeepLink.PullRequestTarget?
     /// The comment a link asked the open conversation to scroll to, by its REST ID. The conversation takes it.
