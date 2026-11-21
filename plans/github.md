@@ -65,9 +65,10 @@ sequenceDiagram
     App->>C: repositories(owner) on ⌘R or 10 minutes after the last try
 
     Note over App,API: When a pull request opens
-    App->>C: pullRequestDetail, pullRequestDiff, checks
-    loop every 10 seconds while its diff shows
+    App->>C: pullRequestDetail, mergeReadiness, pullRequestDiff, checks
+    loop every 10 seconds while any of its screens shows
         App->>C: pullRequestRevision
+        App->>C: pullRequestDetail when the update time moved
     end
 ```
 

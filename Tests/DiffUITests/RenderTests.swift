@@ -4,6 +4,7 @@ import Foundation
 import GitHubKit
 import RepoKit
 import SwiftUI
+import StateKit
 import Testing
 import WebKit
 @testable import DiffUI
@@ -288,7 +289,7 @@ struct RenderTests {
         )
         let root = FileManager.default.temporaryDirectory.appending(path: "hermes-render-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let review = ReviewModel(pullRequest: pullRequest, client: GitHubClient(), draftsRoot: root)
+        let review = ReviewModel(pullRequest: pullRequest, store: GitHubStore(client: GitHubClient()), draftsRoot: root)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         for dark in [false, true] {
             let suffix = dark ? "dark" : "light"

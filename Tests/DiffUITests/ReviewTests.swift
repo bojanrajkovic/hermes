@@ -4,6 +4,7 @@ import Foundation
 import GitHubKit
 import os
 import SwiftUI
+import StateKit
 import Testing
 @testable import DiffUI
 
@@ -312,7 +313,7 @@ struct ReviewModelTests {
             headRefName: "guide", baseRefName: "main", headOID: "abc", reviewDecision: nil, additions: 2, deletions: 2,
             changedFileCount: 1, mergeable: .mergeable, labels: [], checkState: nil, stack: nil, closingIssueNumbers: []
         )
-        let model = ReviewModel(pullRequest: pullRequest, client: client, draftsRoot: root)
+        let model = ReviewModel(pullRequest: pullRequest, store: GitHubStore(client: client), draftsRoot: root)
         model.show(diff: shown ?? diff, head: "abc")
         return model
     }

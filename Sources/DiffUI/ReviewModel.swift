@@ -2,6 +2,7 @@ import DiffKit
 import Foundation
 import GitHubKit
 import Observation
+import StateKit
 
 /// The review of one pull request: its threads on GitHub, the user's pending
 /// comments, and the comment being written.
@@ -40,7 +41,8 @@ final class ReviewModel {
     }
 
     let pullRequest: PullRequest
-    private(set) var threads: [ReviewThread] = []
+    /// The pull request's review threads, as the store holds them.
+    var threads: [ReviewThread] { store.details[pullRequest.key]?.reviewThreads ?? [] }
     private(set) var pending: PendingReview
     private(set) var layout = ReviewLayout() {
         didSet { updateAttachedLines() }
@@ -51,7 +53,7 @@ final class ReviewModel {
     /// The line whose comments the popover shows. `nil` while the popover is closed.
     var focusedLine: LineRef?
     /// Why the threads could not be loaded. Drafts still work without them.
-    private(set) var threadsError: String?
+    var threadsError: String? { store.detailErrors[pullRequest.key] }
     /// Saved with the drafts as it changes, so its text is still there after
     /// the user leaves the pull request or quits.
     var composer: Composer? {
@@ -103,27 +105,22 @@ final class ReviewModel {
     private(set) var submission = Submission.idle
     /// Whether the signed-in user opened the pull request. GitHub rejects
     /// approving or requesting changes on one's own pull request.
-    private(set) var isOwnPullRequest = false
+    var isOwnPullRequest: Bool { store.viewer != nil && store.viewer == pullRequest.author?.login }
 
     /// Called after a review is sent, so the app can load the pull request again.
     @ObservationIgnored var onSubmitted: @MainActor () -> Void = {}
-    @ObservationIgnored private let client: GitHubClient
+    @ObservationIgnored private let store: GitHubStore
     @ObservationIgnored private let draftsURL: URL
     @ObservationIgnored private var diff = Diff(parsing: "")
     @ObservationIgnored private var head: String?
-    @ObservationIgnored private var pullRequestID: String?
-    /// The signed-in user's login, once known.
-    @ObservationIgnored private var viewer: String?
+    /// The pull request's node ID, which a review needs. Nil until the threads load.
+    private var pullRequestID: String? { store.details[pullRequest.key]?.id }
     @ObservationIgnored private var saving: Task<Void, Never>?
-    /// How many changes `apply` has made.
-    @ObservationIgnored private var applied = 0
-    /// How many loads of the threads have started.
-    @ObservationIgnored private var threadLoads = 0
     @ObservationIgnored private let changeLoads = BurstLoader()
 
-    init(pullRequest: PullRequest, client: GitHubClient, draftsRoot: URL = PendingReview.defaultRoot) {
+    init(pullRequest: PullRequest, store: GitHubStore, draftsRoot: URL = PendingReview.defaultRoot) {
         self.pullRequest = pullRequest
-        self.client = client
+        self.store = store
         draftsURL = PendingReview.url(root: draftsRoot, repository: pullRequest.repository, number: pullRequest.number)
         // A few hundred bytes, read once, so the drafts are there before the first frame.
         pending = PendingReview.load(from: draftsURL)
@@ -175,14 +172,6 @@ final class ReviewModel {
 
     // MARK: Loading
 
-    /// Matches threads and drafts against a new diff, then reloads the threads from GitHub.
-    /// - Returns: Whether the threads were loaded.
-    @discardableResult
-    func refresh(diff: Diff, head: String?) async -> Bool {
-        show(diff: diff, head: head)
-        return await reloadThreads()
-    }
-
     /// Matches the threads and drafts already loaded against a diff.
     func show(diff: Diff, head: String?) {
         self.diff = diff
@@ -219,10 +208,8 @@ final class ReviewModel {
     ///
     /// - Returns: False when the threads have to load instead.
     func apply(_ change: WebhookChange) -> Bool {
-        guard let changed = ReviewThread.applying(change, to: threads) else { return false }
-        threads = changed
-        applied += 1
-        rebuild()
+        guard store.applyToThreads(change, for: pullRequest.key) else { return false }
+        threadsChanged()
         return true
     }
 
@@ -233,41 +220,38 @@ final class ReviewModel {
         changeLoads.load { [weak self] in _ = await self?.reloadThreads() }
     }
 
-    /// Loads the threads from GitHub. A change applied while GitHub answers is newer than
-    /// the answer, so the threads then load once more. A load that a later one overtakes
-    /// drops its answer.
+    /// Loads the threads into the store. The store drops an answer that a webhook change or a
+    /// later load overtook.
     ///
     /// - Returns: Whether the threads were loaded. The caller asks again when they were not.
     @discardableResult
     func reloadThreads() async -> Bool {
-        threadLoads += 1
-        let load = threadLoads
-        var loaded = false
-        do {
-            var before: Int
-            var detail: PullRequestDetail
-            repeat {
-                before = applied
-                detail = try await client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
-                guard load == threadLoads else { return false }
-            } while applied != before
-            pullRequestID = detail.id
-            threads = detail.reviewThreads
-            threadsError = nil
-            // A reply to a thread that is gone has no row to show its composer, so its text becomes an outdated draft.
-            if case .reply(let id) = composer?.target, !threads.contains(where: { $0.id == id }) { addComposerToReview() }
-            rebuild()
-            loaded = true
-        } catch is CancellationError {
-        } catch {
-            threadsError = DiffLoader.message(for: error)
-        }
-        if viewer == nil {
-            struct Viewer: Decodable, Sendable { let login: String }
-            viewer = (try? await client.get("/user", as: Viewer.self))?.login
-            isOwnPullRequest = viewer != nil && viewer == pullRequest.author?.login
-        }
+        let loaded = await store.loadDetail(pullRequest.key)
+        if loaded { threadsChanged() }
         return loaded
+    }
+
+    /// Follows the store's threads until the calling task is cancelled. They change when the
+    /// store loads the pull request again, and when a webhook change is applied.
+    ///
+    /// - Parameter changed: Runs after each change is shown, for a link waiting on a thread.
+    func followThreads(_ changed: @escaping @MainActor () -> Void) async {
+        let key = pullRequest.key
+        for await _ in Observations({ @MainActor [store] in store.details[key]?.reviewThreads }) {
+            threadsChanged()
+            changed()
+        }
+    }
+
+    private func threadsChanged() {
+        // Threads of a newer head would land on the wrong lines of the diff on screen. The
+        // diff's reload calls `show(diff:head:)`, which places them.
+        if let head, let current = store.revisions[pullRequest.key]?.value.headOID, current != head { return }
+        // A reply to a thread that is gone has no row to show its composer, so its text becomes an outdated draft.
+        if case .reply(let id) = composer?.target, store.details[pullRequest.key] != nil, !threads.contains(where: { $0.id == id }) {
+            addComposerToReview()
+        }
+        rebuild()
     }
 
     private func rebuild() {
@@ -523,7 +507,7 @@ final class ReviewModel {
         )
         submission = .sending
         do {
-            _ = try await client.submitReview(request)
+            _ = try await store.client.submitReview(request)
         } catch {
             submission = .failed(DiffLoader.message(for: error))
             return false

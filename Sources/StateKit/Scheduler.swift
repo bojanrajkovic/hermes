@@ -1,9 +1,21 @@
 import Foundation
+import GitHubKit
 
 /// Something a screen shows, which the store keeps fresh while any screen shows it.
 public enum Interest: Hashable, Sendable {
     /// An account's lists: its open pull requests, repositories, and opened issue lists.
     case account(String)
+    /// One pull request's screens: its head commit and viewed files, its conversation and
+    /// review threads, and whether it can merge.
+    case pullRequest(ItemKey)
+
+    /// How long a poll loop waits between polls.
+    var interval: Duration {
+        switch self {
+        case .account: GitHubStore.tick
+        case .pullRequest: .seconds(10)
+        }
+    }
 }
 
 /// Runs one poll loop per interest while at least one screen shows it.
@@ -11,13 +23,14 @@ public enum Interest: Hashable, Sendable {
 final class Scheduler {
     private var counts: [Interest: Int] = [:]
     private var loops: [Interest: Task<Void, Never>] = [:]
-    private let tick: Duration
+    private let tick: @Sendable (Interest) -> Duration
     private let poll: @MainActor (Interest) async -> Void
 
     /// - Parameters:
-    ///   - tick: How long a loop waits between polls. `poll` decides whether a tick loads anything.
-    ///   - poll: Loads the interest, or does nothing when it is fresh enough.
-    init(tick: Duration, poll: @escaping @MainActor (Interest) async -> Void) {
+    ///   - tick: How long an interest's loop waits between polls.
+    ///   - poll: Loads the interest, or does nothing when it is fresh enough. The first poll
+    ///     runs as soon as a screen shows the interest.
+    init(tick: @escaping @Sendable (Interest) -> Duration, poll: @escaping @MainActor (Interest) async -> Void) {
         self.tick = tick
         self.poll = poll
     }
@@ -30,11 +43,11 @@ final class Scheduler {
         counts[interest, default: 0] += 1
         if loops[interest] == nil {
             loops[interest] = Task { [tick, poll] in
-                while (try? await Task.sleep(for: tick)) != nil {
+                repeat {
                     // A poll runs in its own task, so the last screen going away stops the loop
                     // without cancelling a refresh half done.
                     await Task { await poll(interest) }.value
-                }
+                } while (try? await Task.sleep(for: tick(interest))) != nil
             }
         }
 

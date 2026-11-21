@@ -78,16 +78,16 @@ GitHub last changed the pull request, and `GitHubStore.apply` drops a payload
 that is older than the last one its row took. A dropped payload whose event
 needs a load still loads the pull request.
 
-The description, the requested reviewers, the conversation, and the reviews
-belong to the pull request pane, which holds them in a `Loader`. `AppStore.eventCounts` keeps, for each
+The description, the requested reviewers, the conversation, the reviews, and
+the review threads live in the store's `details`. `AppStore.eventCounts` keeps, for each
 pull request and each part of it, a `WebhookChanges`: how many deliveries came
 and the latest one's change. The pane watches the count. When it rises by one,
-the pane applies that change with `PullRequestDetail.applying`. When it rises
+the pane applies that change with `GitHubStore.applyToDetail`. When it rises
 by more, the earlier changes are gone, so the pane loads the detail again.
 
-The diff screen does the same for the review threads, which `ReviewModel`
-holds: it applies a change with `ReviewModel.apply`, and loads the threads when
-that returns false. A change to a thread that is not loaded can't be applied.
+The diff screen does the same for the review threads: it applies a change with
+`GitHubStore.applyToThreads`, through `ReviewModel.apply`, and loads the detail
+when that returns false. A change to a thread that is not loaded can't be applied.
 
 The checks screen and the checks summary do the same with
 `ChecksModel.apply`. A check run that is a job of a GitHub Actions workflow
@@ -123,12 +123,11 @@ may have asked GitHub before the change, and its answer would undo it:
 |---|---|
 | One pull request, `GitHubStore.refetch` | It drops the answer and asks again. |
 | The account's lists, `GitHubStore.refresh` | It loads the rows that took a payload again when it ends. |
-| The pane's detail, `Loader.load` | It drops the answer and asks again. |
-| The review threads, `ReviewModel.reloadThreads` | It drops the answer and asks again. |
+| The detail and its review threads, `GitHubStore.loadDetail` | It drops the answer and asks again. |
 | The checks, `ChecksModel.run` | It drops the answer and asks again, without waiting ten seconds. |
 
-Two loads of the review threads can run at once: the diff's polling and a
-delivery. The one that started first drops its answer.
+Two loads of a pull request's detail can run at once: the store's polling and
+a delivery. The one that started first drops its answer.
 
 The payload types are small `Decodable` structs that hold only the fields
 Hermes reads. Types generated from GitHub's REST schema refuse real deliveries:

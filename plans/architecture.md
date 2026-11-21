@@ -128,9 +128,9 @@ sequenceDiagram
   time. [github.md](github.md) has the details.
   Repositories reload on ⌘R or once they are 10 minutes old. A repository
   archived after the first load keeps its PRs until the app relaunches.
-- An open PR polls its head commit every 10 seconds while its diff is on
-  screen. When the head changes, the diff and threads reload in place and
-  keep the scroll position.
+- An open PR polls its head commit every 10 seconds while any of its screens
+  is up. When the head changes, the diff reloads in place and keeps the scroll
+  position. When the update time changes, its conversation and threads reload.
 - A commit's checks reload every 10 seconds while any check is queued or
   running.
 - A webhook forwarder or a relay tenant reports a change within seconds.

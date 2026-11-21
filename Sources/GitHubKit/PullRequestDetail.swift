@@ -154,7 +154,7 @@ public struct PullRequestDetail: Sendable, Hashable, Identifiable {
     public let requestedReviewers: [RequestedReviewer]
     /// Oldest first.
     public let commits: [Commit]
-    public let reviewThreads: [ReviewThread]
+    public var reviewThreads: [ReviewThread]
 
     public init(
         id: String, body: String, comments: [Comment], reviews: [Review],
