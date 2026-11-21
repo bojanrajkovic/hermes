@@ -2,34 +2,35 @@ import AppKit
 import GitHubKit
 import HermesUI
 import SessionsUI
+import StateKit
 import SwiftUI
 
 struct IssueDetailView: View {
     let issue: Issue
     let repository: RepositoryRef
     @Environment(WindowModel.self) private var model
-    @State private var detail = Loader<IssueDetail>()
 
     private var key: ItemKey { ItemKey(repository: repository, number: issue.number) }
 
     var body: some View {
+        let detail = model.github.issueDetails[key]
         VStack(spacing: 0) {
             header
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.readingSectionSpacing) {
-                    if let value = detail.value {
+                    if let value = detail {
                         CommentCard(
                             author: issue.author, verb: "opened this issue", date: issue.createdAt,
                             markdown: value.body, baseURL: issue.url
                         )
-                    } else if let error = detail.error {
+                    } else if let error = model.github.issueDetailErrors[key] {
                         ContentUnavailableView {
                             Label("Could Not Load the Issue", systemImage: "exclamationmark.bubble")
                         } description: {
                             Text(error)
                         } actions: {
-                            Button("Try Again") { detail.retry() }
+                            Button("Try Again") { Task { await model.github.loadIssueDetail(key) } }
                         }
                     } else {
                         HStack(spacing: 8) {
@@ -51,8 +52,9 @@ struct IssueDetailView: View {
                         }
                     }
 
-                    if let comments = detail.value?.comments {
-                        PaneSection(comments.count == 1 ? "1 Comment" : "\(comments.count) Comments") {
+                    if let comments = detail?.comments {
+                        // The issue's own count, the one its row shows. It can be more than the 100 loaded.
+                        PaneSection(issue.commentCount == 1 ? "1 Comment" : "\(issue.commentCount) Comments") {
                             if comments.isEmpty {
                                 Text("No comments yet.").foregroundStyle(.secondary)
                             }
@@ -70,11 +72,10 @@ struct IssueDetailView: View {
                 .frame(maxWidth: Theme.conversationMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
-            .modifier(ScrollsToLinkedComment(comments: detail.value?.comments))
+            .modifier(ScrollsToLinkedComment(comments: detail?.comments))
         }
-        .task(id: LoadID(updatedAt: issue.updatedAt, attempt: detail.attempt)) {
-            await detail.load { try await model.client.issueDetail(repository: repository, number: issue.number) }
-        }
+        // Loads when the issue opens, and again when its record says it changed.
+        .task(id: issue.updatedAt) { await model.github.loadIssueDetailIfStale(key) }
     }
 
     private var header: some View {

@@ -38,6 +38,14 @@ public final class GitHubStore {
     /// revision fetch or viewed mark left them.
     public internal(set) var revisions: [ItemKey: Stamped<PullRequestRevision>] = [:]
 
+    /// Each shown issue's description and first 100 comments. The issue's comment count is
+    /// in its record.
+    public internal(set) var issueDetails: [ItemKey: IssueDetail] = [:]
+    public internal(set) var issueDetailErrors: [ItemKey: String] = [:]
+    /// The update time of the issue record each successful detail load saw. Nil inside means
+    /// the issue had no record then.
+    @ObservationIgnored var issueDetailLoadedFor: [ItemKey: Date?] = [:]
+
     /// Each shown commit's checks.
     public internal(set) var checks: [CommitKey: CommitChecks] = [:]
 

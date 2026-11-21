@@ -8,59 +8,6 @@ import SessionsUI
 import StateKit
 import SwiftUI
 
-/// Loads one value for a detail pane and keeps the last good one while it reloads.
-@Observable
-@MainActor
-final class Loader<Value: Sendable> {
-    private(set) var value: Value?
-    private(set) var error: String?
-    /// How many times the user asked to try again. Part of `LoadID`, so a retry restarts the load.
-    private(set) var attempt = 0
-
-    func retry() {
-        error = nil
-        attempt += 1
-    }
-
-    /// Replaces the loaded value with what `change` makes of it.
-    ///
-    /// - Returns: False when nothing is loaded yet, or `change` returns nil.
-    func apply(_ change: (Value) -> Value?) -> Bool {
-        guard let value, let changed = change(value) else { return false }
-        self.value = changed
-        applied += 1
-        return true
-    }
-
-    /// How many changes `apply` has made.
-    @ObservationIgnored private var applied = 0
-
-    func load(_ operation: () async throws -> Value) async {
-        do {
-            while true {
-                let before = applied
-                let loaded = try await operation()
-                // A change applied while this ran is newer than its answer, so it runs once more.
-                guard applied == before else { continue }
-                value = loaded
-                break
-            }
-            error = nil
-        } catch is CancellationError {
-        } catch let error as URLError where error.code == .cancelled {
-        } catch {
-            self.error = describe(error)
-        }
-    }
-}
-
-/// Identifies one load of a detail pane: it runs again when the item changes
-/// on GitHub or the user retries.
-struct LoadID: Hashable {
-    let updatedAt: Date
-    let attempt: Int
-}
-
 /// One entry in a pull request's activity: a comment or a submitted review.
 struct TimelineEntry: Identifiable, Hashable {
     enum Kind: Hashable {

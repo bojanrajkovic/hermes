@@ -36,37 +36,3 @@ struct EventTargetTests {
         #expect(WebhookEvent(repository: airway, pullRequest: nil).pullRequest(among: held) == nil)
     }
 }
-
-@MainActor
-struct LoaderTests {
-    @Test func aChangeIsAppliedToWhatIsLoadedAndNotBeforeAnythingIs() async {
-        let loader = Loader<[Int]>()
-        // Nothing is loaded yet, so there is nothing to change and the caller loads.
-        #expect(!loader.apply { $0 + [3] })
-
-        await loader.load { [1, 2] }
-        #expect(loader.apply { $0 + [3] })
-        #expect(loader.value == [1, 2, 3])
-
-        // A change that can't be applied leaves the value alone.
-        #expect(!loader.apply { _ in nil })
-        #expect(loader.value == [1, 2, 3])
-    }
-
-    @Test func aChangeAppliedDuringALoadMakesTheLoadRunAgain() async {
-        let loader = Loader<[Int]>()
-        await loader.load { [1] }
-
-        var runs = 0
-        await loader.load {
-            runs += 1
-            // The first answer was asked for before the change, so it lacks it.
-            guard runs == 1 else { return [1, 2] }
-            _ = loader.apply { $0 + [2] }
-            return [1]
-        }
-
-        #expect(runs == 2)
-        #expect(loader.value == [1, 2])
-    }
-}
