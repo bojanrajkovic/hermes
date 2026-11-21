@@ -1,5 +1,6 @@
 import Foundation
 import GitHubKit
+import StateKit
 import HermesUI
 
 /// A pull request or issue, named by repository and number.
@@ -11,17 +12,7 @@ struct WindowState: Codable, Hashable {
     var login: String?
     var url: URL?
 }
-
-struct ItemKey: Hashable, Sendable, CustomStringConvertible {
-    let repository: RepositoryRef
-    let number: Int
-
-    var description: String { "\(repository)#\(number)" }
-}
-
 extension PullRequest {
-    var key: ItemKey { ItemKey(repository: repository, number: number) }
-
     /// The pull requests that merge when this one does: itself, and for a
     /// stacked one the open members of its stack below it, bottom first.
     func mergeSet(among pullRequests: [PullRequest]) -> [PullRequest] {

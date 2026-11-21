@@ -4,17 +4,7 @@ import GitHubKit
 import HermesUI
 import RepoKit
 import SessionsUI
-
-/// The loaded part of one repository's open issues.
-struct IssueList: Sendable {
-    var items: [Issue] = []
-    var endCursor: String?
-    var hasNextPage = true
-    /// Open issues across all pages. Nil until the first page arrives.
-    var totalCount: Int?
-    var isLoading = false
-    var error: String?
-}
+import StateKit
 
 /// Why the app cannot show the signed-in user's data.
 enum StartupProblem: Equatable {
@@ -32,28 +22,6 @@ enum StartupProblem: Equatable {
     }
 }
 
-/// A sentence for an error a list or a pane failed with.
-func describe(_ error: any Error) -> String {
-    switch error {
-    case GitHubError.rateLimited(let resetAt):
-        "GitHub's rate limit is used up until \(resetAt.formatted(date: .omitted, time: .shortened))."
-    case GitHubError.http(let status, let message):
-        message.isEmpty ? "GitHub answered with HTTP \(status)." : message
-    case GitHubError.graphQL(let errors):
-        errors.first?.message ?? "GitHub could not answer the query."
-    case GitHubError.decoding(let description):
-        "GitHub's answer had an unexpected shape: \(description)"
-    case GitHubError.commandFailed(let message):
-        message
-    case GitHubError.ghNotInstalled:
-        "The GitHub CLI (gh) is not installed."
-    case GitHubError.ghNotLoggedIn:
-        "The GitHub CLI (gh) is not logged in."
-    default:
-        error.localizedDescription
-    }
-}
-
 /// One window's state: the account it shows and what it shows of it. The
 /// data comes from the `AppStore` every window shares.
 @Observable
@@ -66,8 +34,9 @@ final class WindowModel {
     // MARK: Account
 
     private(set) var account: Account?
-    /// The account's lists, shared with the other windows that show it.
-    var data: AccountData { store.data(for: account?.login ?? "") }
+    /// The window's account login. Empty before the window has an account.
+    var login: String { account?.login ?? "" }
+    var github: GitHubStore { store.github }
 
     var client: GitHubClient { store.client }
     var repoCache: RepoCache { store.repoCache }
@@ -80,15 +49,17 @@ final class WindowModel {
     /// The account's pull requests, without those in ignored repositories. Every list reads these.
     var pullRequests: [PullRequest] {
         let ignored = store.ignored
-        return ignored.isEmpty ? data.pullRequests : data.pullRequests.filter { !ignored.contains($0.repository) }
+        let open = github.openPullRequests(of: login)
+        return ignored.isEmpty ? open : open.filter { !ignored.contains($0.repository) }
     }
     var repositories: [Repository] {
         let ignored = store.ignored
-        return ignored.isEmpty ? data.repositories : data.repositories.filter { !ignored.contains($0.ref) }
+        let owned = github.repositories(of: login)
+        return ignored.isEmpty ? owned : owned.filter { !ignored.contains($0.ref) }
     }
-    var hasLoaded: Bool { data.hasLoaded }
-    var listError: String? { data.listError }
-    var isRefreshing: Bool { data.isRefreshing }
+    var hasLoaded: Bool { github.lists(of: login).hasLoaded }
+    var listError: String? { github.lists(of: login).listError }
+    var isRefreshing: Bool { github.lists(of: login).isRefreshing }
 
     // MARK: Settings
 
@@ -172,15 +143,18 @@ final class WindowModel {
     // MARK: Loading
 
     /// Reloads everything, repositories included. For ⌘R and the Refresh buttons.
-    func refresh() async { await data.refresh(everything: true) }
-    func refreshIfStale() async { await data.refreshIfStale() }
-    func refetch(_ key: ItemKey) async { await data.refetch(key) }
+    func refresh() async { await github.refresh(login, everything: true) }
+    func refreshIfStale() async { await github.refreshIfStale(login) }
+    func refetch(_ key: ItemKey) async { await github.refetch(key) }
 
     // MARK: Issues
 
-    func issueList(of repository: RepositoryRef) -> IssueList { data.issueList(of: repository) }
-    func loadMoreIssues(of repository: RepositoryRef) async { await data.loadMoreIssues(of: repository) }
-    func reloadIssues(of repository: RepositoryRef) async { await data.reloadIssues(of: repository) }
+    func issueList(of repository: RepositoryRef) -> IssueList { github.issueList(of: repository) }
+    func listedIssues(of repository: RepositoryRef) -> [Issue] { github.listedIssues(of: repository) }
+    /// Open issues across all pages. Nil until a repository load or an issue page reports it.
+    func openIssueCount(of repository: RepositoryRef) -> Int? { github.openIssueCount(of: repository) }
+    func loadMoreIssues(of repository: RepositoryRef) async { await github.loadMoreIssues(of: repository) }
+    func reloadIssues(of repository: RepositoryRef) async { await github.reloadIssues(of: repository) }
 
     // MARK: Lookups
 
@@ -207,7 +181,7 @@ final class WindowModel {
 
     private func matcher(_ filter: InboxFilter) -> (PullRequest) -> Bool {
         let viewer = viewer?.login ?? ""
-        let attention = data.attention
+        let attention = github.attention(of: login)
         let showingAllBots = showingAllBots
         let now = Date.now
         return { filter.matches($0, viewer: viewer, attention: attention, now: now, showingAllBots: showingAllBots) }
@@ -216,7 +190,7 @@ final class WindowModel {
     /// The attention inbox: the pull requests that need the viewer, each with its strongest reason, ranked.
     var attentionItems: [(pullRequest: PullRequest, reason: AttentionReason)] {
         attentionList(
-            pullRequests.filter(matcher(.needsAttention)), viewer: viewer?.login ?? "", signals: data.attention, now: .now
+            pullRequests.filter(matcher(.needsAttention)), viewer: viewer?.login ?? "", signals: github.attention(of: login), now: .now
         )
     }
 
@@ -236,12 +210,14 @@ final class WindowModel {
         }
     }
 
-    func pullRequest(_ key: ItemKey) -> PullRequest? { data.pullRequest(key) }
+    func pullRequest(_ key: ItemKey) -> PullRequest? { github.pullRequest(key) }
 
-    /// Merged or closed, for a pull request that is not in the open list. Nil when unknown.
-    func closedState(of key: ItemKey) -> LinkedPullRequest.State? { data.closedState(of: key) }
+    /// Merged or closed. Nil for an open pull request or one that isn't loaded.
+    func closedState(of key: ItemKey) -> LinkedPullRequest.State? {
+        github.pullRequest(key).flatMap { $0.state == .open ? nil : $0.state }
+    }
 
-    func issue(_ key: ItemKey) -> Issue? { data.issue(key) }
+    func issue(_ key: ItemKey) -> Issue? { github.issue(key) }
 
     /// The pull requests a merge of `pullRequest` lands: itself, and for a
     /// stacked one every member below it, bottom first.
@@ -272,7 +248,7 @@ final class WindowModel {
     }
 
     /// Every loaded pull request of `pullRequest`'s stack, bottom first. Empty when it is not in a stack.
-    func stack(of pullRequest: PullRequest) -> [PullRequest] { data.stack(of: pullRequest) }
+    func stack(of pullRequest: PullRequest) -> [PullRequest] { github.stack(of: pullRequest) }
 
     /// The repository the user is looking at: the open item's, or the listed one.
     var currentRepository: RepositoryRef? {
@@ -416,7 +392,7 @@ final class WindowModel {
             let item = try await client.item(key)
             // The user went elsewhere or switched account meanwhile.
             guard resolving == key else { return }
-            data.store(item, for: key)
+            github.store(item, for: key)
             switch item {
             case .pullRequest: navigate(to: .pullRequest(key), tab: .files)
             case .issue: navigate(to: .issue(key))
@@ -499,66 +475,4 @@ extension SessionOrigin {
     }
 
     var key: ItemKey { ItemKey(repository: repository, number: number) }
-}
-
-// MARK: Loading one item by number
-
-/// A pull request or an issue, whichever a number names.
-enum FetchedItem: Decodable, Sendable {
-    case pullRequest(PullRequest)
-    case issue(Issue)
-
-    private enum CodingKeys: String, CodingKey {
-        case typename = "__typename"
-    }
-
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        if try container.decode(String.self, forKey: .typename) == "PullRequest" {
-            self = .pullRequest(try PullRequest(from: decoder))
-        } else {
-            self = .issue(try Issue(from: decoder))
-        }
-    }
-}
-
-extension GitHubClient {
-    /// Loads the pull request or issue with a number, in any state.
-    ///
-    /// The field lists repeat the ones `GitHubKit` uses for its list queries,
-    /// because `PullRequest` and `Issue` decode exactly those fields.
-    func item(_ key: ItemKey) async throws -> FetchedItem {
-        struct Data: Decodable, Sendable {
-            struct Repository: Decodable, Sendable { let issueOrPullRequest: FetchedItem }
-            let repository: Repository
-        }
-        let user = "__typename login avatarUrl"
-        let query = """
-            query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) {
-                issueOrPullRequest(number: $number) {
-                  __typename
-                  ... on PullRequest {
-                    \(PullRequest.fields)
-                  }
-                  ... on Issue {
-                    id number title url state createdAt updatedAt
-                    author { \(user) }
-                    labels(first: 20) { nodes { name color } }
-                    comments { totalCount }
-                    assignees(first: 20) { nodes { \(user) } }
-                    closedByPullRequestsReferences(first: 20, includeClosedPrs: true) {
-                      nodes { number title state headRefName }
-                    }
-                  }
-                }
-              }
-            }
-            """
-        return try await graphQL(
-            query,
-            variables: ["owner": .string(key.repository.owner), "name": .string(key.repository.name), "number": .int(key.number)],
-            as: Data.self
-        ).repository.issueOrPullRequest
-    }
 }

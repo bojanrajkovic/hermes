@@ -447,6 +447,7 @@ extension GitHubClient {
         let query = """
             query($owner: String!, $name: String!, $first: Int!, $after: String) {
               repository(owner: $owner, name: $name) {
+                name owner { login } url isPrivate
                 issues(first: $first, after: $after, states: OPEN, orderBy: { field: UPDATED_AT, direction: DESC }) {
                   totalCount
                   pageInfo { hasNextPage endCursor }
@@ -472,12 +473,12 @@ extension GitHubClient {
                 "first": .int(pageSize), "after": JSONValue(after),
             ],
             as: RepositoryData<IssuesField>.self
-        ).repository.issues
+        ).repository
         return IssuePage(
-            items: page.nodes,
-            endCursor: page.pageInfo?.endCursor,
-            hasNextPage: page.pageInfo?.hasNextPage ?? false,
-            totalCount: page.totalCount ?? page.nodes.count
+            items: page.issues.nodes,
+            endCursor: page.issues.pageInfo?.endCursor,
+            hasNextPage: page.issues.pageInfo?.hasNextPage ?? false,
+            repository: page.repository
         )
     }
 
@@ -750,8 +751,17 @@ struct PullRequestDetailPage: Decodable, Sendable {
     }
 }
 
+/// A repository's fields and one page of its issues, from the same object.
 struct IssuesField: Decodable, Sendable {
+    let repository: Repository
     let issues: Connection<Issue>
+
+    private enum CodingKeys: String, CodingKey { case issues }
+
+    init(from decoder: any Decoder) throws {
+        repository = try Repository(from: decoder)
+        issues = try decoder.container(keyedBy: CodingKeys.self).decode(Connection<Issue>.self, forKey: .issues)
+    }
 }
 
 struct IssueField: Decodable, Sendable {

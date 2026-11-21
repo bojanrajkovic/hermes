@@ -1,4 +1,5 @@
 import AppKit
+import StateKit
 import SwiftUI
 
 struct RootView: View {
@@ -25,6 +26,7 @@ struct RootView: View {
         }
         // Signs in once for the app. Each window then picks its account and loads it.
         .task { await model.start() }
+        .showing(.account(model.login), in: model.github)
     }
 }
 

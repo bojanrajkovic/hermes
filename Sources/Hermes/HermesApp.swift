@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         if store.usesWebhooks { WebhookForwarder.endLeftovers() }
         store.relays.sync()
-        Task { await store.keepFresh() }
+        Task { await store.keepForwardersInSync() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

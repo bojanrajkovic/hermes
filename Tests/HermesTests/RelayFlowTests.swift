@@ -3,6 +3,7 @@ import Foundation
 import GitHubKit
 import Network
 import os
+import TestSupport
 import Testing
 @testable import Hermes
 

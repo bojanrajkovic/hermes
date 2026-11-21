@@ -1,7 +1,8 @@
 import Foundation
 import GitHubKit
+import TestSupport
 import Testing
-@testable import Hermes
+@testable import StateKit
 
 struct PullRequestChangesTests {
     private let day: TimeInterval = 86_400

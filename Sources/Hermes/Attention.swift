@@ -1,5 +1,6 @@
 import Foundation
 import GitHubKit
+import StateKit
 
 /// Why a pull request needs the viewer's attention, strongest first.
 enum AttentionReason: Int, Comparable, Hashable, Sendable {
@@ -54,22 +55,6 @@ enum AttentionReason: Int, Comparable, Hashable, Sendable {
     }
 
     static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
-}
-
-/// A branch of a repository, such as the head of a merged pull request.
-struct ItemBranch: Hashable, Sendable {
-    let repository: RepositoryRef
-    let name: String
-}
-
-/// What Hermes knows about the viewer's part in pull requests, besides what each pull request holds.
-struct AttentionSignals: Equatable, Sendable {
-    /// The teams the viewer is on.
-    var teams: Set<Reviewer> = []
-    /// Node IDs of pull requests that mention the viewer.
-    var mentions: Set<String> = []
-    /// Head branches of pull requests Hermes knows merged.
-    var mergedBranches: Set<ItemBranch> = []
 }
 
 /// The strongest reason `pullRequest` needs the viewer's attention, or nil when it does not.

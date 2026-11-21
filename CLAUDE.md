@@ -51,6 +51,10 @@ Read [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md) first. Read
 * Models are `@Observable @MainActor` classes. `GitHubClient` and `RepoCache` are actors.
   There is no `ObservableObject`.
 
+* GitHub state has one home: `GitHubStore` in `StateKit`. Views and models read it and never keep
+  their own copy. When two views disagree, remove the second source instead of syncing it.
+  [plans/store.md](plans/store.md) describes the store.
+
 ## Build and test
 
 * `make check` compiles. `make test` runs the tests. Run both after every change.

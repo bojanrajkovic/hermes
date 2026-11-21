@@ -103,10 +103,10 @@ passes 10 seconds. Loading IDs first lets those requests run side by side.
 
 `ViewerProfile.accounts` is the personal account followed by the viewer's
 organizations, sorted by login. Each window shows one account. The account's
-lists live in an `AccountData` that every window showing it shares, and it
-stays in memory, so switching back to an account shows its lists at once
-while they reload. A pull request or issue that leaves a list is kept by
-number and loaded again, since a window may be showing it.
+lists live in the app's `GitHubStore` as keys into its tables, and they stay in
+memory, so switching back to an account shows its lists at once while they
+reload. A pull request or issue that leaves a list keeps its record and loads
+again, since a window may be showing it. See [store.md](store.md).
 
 ## Bot filter
 

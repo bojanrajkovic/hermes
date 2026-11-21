@@ -30,6 +30,9 @@ graph TD
     ChecksUI --> HermesUI
     SessionsUI --> HermesUI
     Hermes --> HermesUI
+    Hermes --> StateKit
+    HermesUI --> StateKit
+    StateKit --> GitHubKit
 ```
 
 The `Hermes` target also imports `GitHubKit` and `RepoKit` directly. Those
@@ -38,12 +41,13 @@ edges are left out of the diagram.
 | Target       | Owns |
 |--------------|------|
 | `GitHubKit`  | Token from `gh auth token`, REST and GraphQL calls, domain models, the bot filter. |
+| `StateKit`   | `GitHubStore`: the one copy of every pull request, issue, and repository Hermes has loaded, each account's lists, and the polling that keeps them fresh. See [store.md](store.md). |
 | `RepoKit`    | Running `git`. A cache of bare clones for reading files at a PR's head commit. Local checkouts, worktrees, working-tree diffs, and file change watching. |
 | `DiffKit`    | Parsing unified diffs, pairing lines for split view, intraline changes, review comment positions. Pure. |
 | `SyntaxKit`  | Tree-sitter: language detection, highlighting, finding definitions in a source file. Pure. |
 | `TreeSitterScanners` | C sources of four grammar scanners that their packages do not compile as dependencies. See [PROBLEMS.md](../PROBLEMS.md). |
 | `MarkdownUI` | GitHub-flavored Markdown in a `WKWebView`, including Mermaid, and a rendered ("rich") diff of two Markdown versions. |
-| `HermesUI`   | `Theme` (type scale and metrics) and small shared views. Depends on nothing. |
+| `HermesUI`   | `Theme` (type scale and metrics), small shared views, and the `.showing` modifier that tells the store what a view shows. |
 | `DiffUI`     | The diff viewer: file list, unified and split layouts, review comments, definition lookup. |
 | `ChecksUI`   | CI check lists and the log viewer. |
 | `SessionsUI` | The embedded terminal and Claude Code session launching. |
@@ -67,10 +71,10 @@ the models that need it.
 The `Hermes` target splits its state in three:
 
 - `AppStore`, one for the app: the signed-in user, Claude sessions, settings,
-  and one `AccountData` per account.
-- `AccountData`, one per account: its pull requests, repositories, issues, and
-  items loaded by number. Every window that shows the account reads the same
-  copy, so each list loads once.
+  and the `GitHubStore`.
+- `GitHubStore`, one for the app: every pull request, issue, and repository
+  Hermes has loaded, and each account's lists as keys into them. Every window
+  reads the same copy, so each list loads once. See [store.md](store.md).
 - `WindowModel`, one per window: the account the window shows and what it
   shows of it, such as the selection, the scope, and the tab.
 
@@ -84,11 +88,10 @@ Window on list rows, and links that end in `?window=new`.
 
 ```mermaid
 graph LR
-    S[AppStore] --> A1["AccountData (you)"]
-    S --> A2["AccountData (org)"]
-    W1[WindowModel] --> A1
-    W2[WindowModel] --> A1
-    W3[WindowModel] --> A2
+    S[AppStore] --> G[GitHubStore]
+    W1["WindowModel (you)"] --> G
+    W2["WindowModel (you)"] --> G
+    W3["WindowModel (org)"] --> G
 ```
 
 ## Data flow
@@ -114,9 +117,8 @@ sequenceDiagram
 - The PR and issue lists refresh every 15 seconds while Hermes is the active
   app, and on the interval set in Settings (60 seconds by default) while it is
   in the background. They also refresh when the app becomes active, if the last
-  refresh is more than 10 seconds old. `AppStore.keepFresh()` is the one loop:
-  it refreshes each account a window shows, so two windows on an account cost
-  one refresh.
+  refresh is more than 10 seconds old. The store polls each account a window
+  shows, so two windows on an account cost one refresh. See [store.md](store.md).
 - An account's first load fetches the viewer's own PRs and review requests,
   shows them, then fetches the rest. Later refreshes search for the PRs updated
   since the last one, because reloading every PR of an organization with

@@ -71,10 +71,10 @@ carry.
 | `check_suite` | Nothing | The checks and the pull request |
 | Anything else | Nothing | The pull request |
 
-A row's fields go into the account's lists through `AccountData.apply`.
+A row's fields go into the pull request's record through `GitHubStore.apply`.
 
 Deliveries can arrive out of order. A `pull_request` payload carries the time
-GitHub last changed the pull request, and `AccountData.apply` drops a payload
+GitHub last changed the pull request, and `GitHubStore.apply` drops a payload
 that is older than the last one its row took. A dropped payload whose event
 needs a load still loads the pull request.
 
@@ -121,8 +121,8 @@ may have asked GitHub before the change, and its answer would undo it:
 
 | Load | When a payload is applied while it runs |
 |---|---|
-| One pull request, `AccountData.refetch` | It drops the answer and asks again. |
-| The account's lists, `AccountData.refresh` | It loads the rows that took a payload again when it ends. |
+| One pull request, `GitHubStore.refetch` | It drops the answer and asks again. |
+| The account's lists, `GitHubStore.refresh` | It loads the rows that took a payload again when it ends. |
 | The pane's detail, `Loader.load` | It drops the answer and asks again. |
 | The review threads, `ReviewModel.reloadThreads` | It drops the answer and asks again. |
 | The checks, `ChecksModel.run` | It drops the answer and asks again, without waiting ten seconds. |

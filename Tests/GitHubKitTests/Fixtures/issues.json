@@ -1,6 +1,10 @@
 {
   "data": {
     "repository": {
+      "name": "airway",
+      "owner": { "login": "bojanrajkovic" },
+      "url": "https://github.com/bojanrajkovic/airway",
+      "isPrivate": false,
       "issues": {
         "totalCount": 59,
         "pageInfo": {

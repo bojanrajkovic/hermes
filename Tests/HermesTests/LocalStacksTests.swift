@@ -1,4 +1,5 @@
 import RepoKit
+import TestSupport
 import Testing
 @testable import Hermes
 

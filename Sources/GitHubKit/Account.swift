@@ -133,7 +133,7 @@ public struct Repository: Sendable, Hashable, Identifiable {
     public let ref: RepositoryRef
     public let url: URL
     public let isPrivate: Bool
-    public let openIssueCount: Int
+    public var openIssueCount: Int
 
     public var id: RepositoryRef { ref }
 

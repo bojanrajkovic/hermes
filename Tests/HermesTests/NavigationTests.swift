@@ -1,6 +1,8 @@
 import Foundation
 import GitHubKit
 import HermesUI
+import StateKit
+import TestSupport
 import Testing
 @testable import Hermes
 

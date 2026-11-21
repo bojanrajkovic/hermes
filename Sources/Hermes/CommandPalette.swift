@@ -1,4 +1,5 @@
 import GitHubKit
+import StateKit
 import HermesUI
 import SwiftUI
 
@@ -211,7 +212,7 @@ extension WindowModel {
         PaletteContext(
             repositories: sections.map(\.ref),
             pullRequests: pullRequests,
-            issues: data.issueLists.flatMap { repository, list in list.items.map { (repository, $0) } },
+            issues: github.issueLists.keys.flatMap { repository in listedIssues(of: repository).map { (repository, $0) } },
             sessions: sessions.sessions.map {
                 PaletteContext.Session(id: $0.id, title: $0.title, subtitle: "\($0.origin.repository.name)#\($0.origin.number)")
             },

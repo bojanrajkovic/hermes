@@ -1,5 +1,6 @@
 import AppKit
 import GitHubKit
+import StateKit
 import HermesUI
 import SessionsUI
 import SwiftUI
@@ -444,7 +445,9 @@ struct IssueRows: View {
 
     var body: some View {
         let list = model.issueList(of: repository)
-        ForEach(list.items) { issue in
+        let issues = model.listedIssues(of: repository)
+        let total = model.openIssueCount(of: repository)
+        ForEach(issues) { issue in
             IssueRow(issue: issue)
                 .tag(Destination.issue(ItemKey(repository: repository, number: issue.number)))
                 .contextMenu { ItemMenu(url: issue.url, origin: SessionOrigin(issue, in: repository), model: model) }
@@ -465,18 +468,18 @@ struct IssueRows: View {
                         .buttonStyle(.link)
                 }
                 Spacer(minLength: 4)
-                if let total = list.totalCount {
-                    Text("\(list.items.count) of \(total)").monospacedDigit()
+                if let total {
+                    Text("\(issues.count) of \(total)").monospacedDigit()
                 }
             }
             .font(Theme.Fonts.rowMeta)
             .foregroundStyle(.secondary)
             // A failed page waits for a click, so an error does not retry in a loop.
             // The load runs in its own task: this row scrolling away must not cancel the request.
-            .task(id: list.items.count) {
+            .task(id: issues.count) {
                 if list.error == nil { Task { await model.loadMoreIssues(of: repository) } }
             }
-        } else if let total = list.totalCount, total > 0 {
+        } else if let total, total > 0 {
             Text("All \(total) issues loaded")
                 .font(Theme.Fonts.rowMeta)
                 .foregroundStyle(.tertiary)
