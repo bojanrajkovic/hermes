@@ -161,7 +161,10 @@ final class AppStore {
         github.isActive = { NSApp?.isActive ?? true }
         github.watched = { [weak self] login in self?.watched(in: login) ?? [] }
         relays.onEvent = { [weak self] event in
-            guard let webhook = WebhookEvent(payload: event.payload) else { return }
+            guard let webhook = WebhookEvent(payload: event.payload) else {
+                return Relays.log.info("relay event \(event.name, privacy: .public) names no repository")
+            }
+            Relays.log.info("relay event \(event.name, privacy: .public) for \(webhook.repository.description, privacy: .public)")
             self?.reload(webhook, part: EventPart(event: event.name))
         }
     }
