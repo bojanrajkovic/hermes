@@ -102,6 +102,7 @@ public final class SessionStore {
             command = configuration.commandLine()
             let script = """
                 export PATH=\(shellQuoted(await Shell.path.value))
+                export CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1
                 \(configuration.commandLine(executable: claude?.path ?? "claude"))
 
                 """
