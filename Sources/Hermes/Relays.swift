@@ -128,6 +128,9 @@ final class Relays {
 
     /// Each tenant's connection, by the tenant's ID. A tenant with no entry has not been tried yet.
     private(set) var states: [String: RelayState] = [:]
+    /// When each tenant last sent an event, by the tenant's ID. Settings shows it, because a
+    /// connection that is open proves only that the relay answered, not that events arrive.
+    private(set) var lastEvents: [String: Date] = [:]
     /// The commit each relay server reports, for Settings.
     private(set) var versions: [URL: String] = [:]
     /// The tenants the viewer's accounts publish, as last looked up.
@@ -265,7 +268,7 @@ final class Relays {
         memberships.append(membership)
         self.setup?.credentials = nil
         self.setup?.phase = .done(membership)
-        Self.log.info("registered a tenant for \(setup.account.login, privacy: .public)")
+        Self.log.notice("registered a tenant for \(setup.account.login, privacy: .public)")
         // The new tenant has no token yet, so this marks it signed out, which shows Sign In on its row.
         sync()
     }
@@ -280,6 +283,7 @@ final class Relays {
     func forget(_ membership: RelayMembership) {
         disconnect(membership.id)
         states[membership.id] = nil
+        lastEvents[membership.id] = nil
         failures[membership.id] = nil
         gone.remove(membership.id)
         // A sign-in the browser has not come back from is no longer wanted.
@@ -439,7 +443,7 @@ final class Relays {
                 }
             }
         }
-        Self.log.info("connecting to tenant \(id.prefix(8), privacy: .public)")
+        Self.log.notice("connecting to tenant \(id.prefix(8), privacy: .public)")
     }
 
     private func disconnect(_ id: String) {
@@ -459,8 +463,9 @@ final class Relays {
                 Self.log.error("the Keychain refused the token of tenant \(membership.id.prefix(8), privacy: .public)")
             }
             states[membership.id] = .connected(repositories: Set(session.repositories))
-            Self.log.info("tenant \(membership.id.prefix(8), privacy: .public) covers \(session.repositories.count) repositories")
+            Self.log.notice("tenant \(membership.id.prefix(8), privacy: .public) covers \(session.repositories.count) repositories")
         case .event(let event):
+            lastEvents[membership.id] = .now
             onEvent(event)
         }
     }
@@ -475,7 +480,7 @@ final class Relays {
         // are not counted with the next one, whatever ended it.
         if ran >= Forwarders.settledAfter { failures[id] = nil }
         let next = Self.next(after: ending, failures: failures[id] ?? 0, ran: ran)
-        Self.log.info("tenant \(id.prefix(8), privacy: .public) ended: \(String(describing: ending), privacy: .public)")
+        Self.log.notice("tenant \(id.prefix(8), privacy: .public) ended: \(String(describing: ending), privacy: .public)")
         switch next {
         case .connect:
             connect(membership)

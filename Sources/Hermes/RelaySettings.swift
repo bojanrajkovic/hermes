@@ -58,6 +58,21 @@ private struct RelayRow: View {
         }
     }
 
+    /// When the tenant last sent an event. "Connected" proves only that the relay answered;
+    /// this proves events arrive. Nothing until the tenant has connected once.
+    @ViewBuilder
+    private var lastEvent: some View {
+        if let date = store.relays.lastEvents[membership.id] {
+            // Each tick formats the age against the clock again, so it moves while Settings stays open.
+            TimelineView(.periodic(from: .now, by: 30)) { _ in
+                Text("Last event \(date.formatted(.relative(presentation: .named, unitsStyle: .wide)))")
+                    .help(date.formatted(date: .abbreviated, time: .standard))
+            }
+        } else if case .connected = state {
+            Text("No events since connecting")
+        }
+    }
+
     /// The server's host, and the commit its relay runs once the server has answered.
     private var server: String {
         let host = membership.tenant.server.host() ?? membership.tenant.server.absoluteString
@@ -89,6 +104,7 @@ private struct RelayRow: View {
         } label: {
             Text(verbatim: title)
             Text(verbatim: status)
+            lastEvent
             Text(verbatim: server)
         }
         .contextMenu {

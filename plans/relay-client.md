@@ -22,7 +22,13 @@ in Settings removes it from this Mac and deletes its refresh token. The App
 stays on GitHub.
 
 A tenant's row in Settings shows whose it is, what its connection is doing,
-and its server with the commit that server's relay reports at `/version`.
+when it last sent an event, and its server with the commit that server's
+relay reports at `/version`. "Connected" means the relay accepted the sign-in
+and the WebSocket is open. "Last event 2 minutes ago" means events arrive.
+A tenant that stays "Connected" with "No events since connecting" while its
+repositories change has a problem upstream: the App isn't installed on them,
+or GitHub isn't delivering. [Checking a tenant](#checking-a-tenant) has the
+log commands.
 
 ## Which accounts get a tenant
 
@@ -418,6 +424,32 @@ Three rules keep a relay's volume from becoming requests:
 
 A repository that a connected tenant covers gets no webhook forwarder.
 `Forwarders.targets` leaves those out.
+
+## Checking a tenant
+
+Hermes logs the relay under the subsystem `com.coderinserepeat.hermes`,
+category `relay`:
+
+| Message | Level |
+|---|---|
+| `connecting to tenant <id>` | notice |
+| `tenant <id> covers N repositories`: the relay accepted the sign-in | notice |
+| `tenant <id> ended: <reason>` | notice |
+| `relay event <name> for <owner/repo>`, one per event | info |
+
+macOS keeps notice messages, so `log show` finds a tenant's connections after
+the fact. It keeps info messages only in memory, so watch events live:
+
+```bash
+log stream --level info --style compact --predicate 'subsystem == "com.coderinserepeat.hermes" AND category == "relay"'
+```
+
+To keep the event lines too, raise the subsystem's persisted level once. It
+holds until reset, and the unified log's size cap still applies:
+
+```bash
+sudo log config --subsystem com.coderinserepeat.hermes --mode "level:debug,persist:debug"
+```
 
 ## The refresh token
 
