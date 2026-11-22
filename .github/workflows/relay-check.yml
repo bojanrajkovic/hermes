@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       # Installs the Node and pnpm that mise.toml pins. Only a push to main saves the cache. A pull
       # request restores main's cache and saves none.
-      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         with:
           cache_save: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
