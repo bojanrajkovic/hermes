@@ -133,6 +133,8 @@ The terminal is libghostty, through `libghostty-spm`.
 `SessionScreen` in the app target shows the terminal beside a `DiffScreen`.
 The diff is the worktree against its base, and it reloads as files change. A
 picker switches it to one branch of the local stack against its parent.
+A header button (⌥⌘D) hides the diff so the terminal takes the full width; the
+choice is stored in `sessionShowsDiff` and applies to every session.
 Stacks come from the `gh stack` extension when it tracks the checkout, and are
 otherwise inferred from branch history.
 
