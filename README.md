@@ -24,6 +24,23 @@ a pull request or an issue.
 Hermes works with github.com. It is not sandboxed, because it runs `gh`,
 `git`, and `claude` and reads your local checkouts.
 
+## Install
+
+Each [release](https://github.com/bojanrajkovic/hermes/releases) has a signed,
+notarized `Hermes-X.Y.Z-macos-arm64.zip`. Unzip it and move `Hermes.app` to
+`/Applications`.
+
+With [mise](https://mise.jdx.dev):
+
+```sh
+mise use -g 'github:bojanrajkovic/hermes[bin_path=Hermes.app/Contents/MacOS]'
+open "$(mise where github:bojanrajkovic/hermes)/Hermes.app"
+```
+
+`bin_path` keeps `Hermes.app` whole. Without it, mise unpacks only the
+bundle's contents, and macOS can't route Hermes links to the app. mise checks
+the release's build attestation before it installs.
+
 ## Build and run
 
 ```sh

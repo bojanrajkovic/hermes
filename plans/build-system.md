@@ -231,14 +231,80 @@ comma-separated prefixes.
 
 ## Release
 
-`make dist` builds a signed, notarized zip. It needs an exact `vX.Y.Z` tag at
-`HEAD`, a Developer ID certificate (`TEAM_ID` or `CERT_NAME`), and notary
-credentials stored once with `make notary-setup`.
+To cut a release, bump `VERSION` on `main`, then publish a release on GitHub
+with a new tag `vX.Y.Z` and the release notes. Publishing creates the tag, and
+`.github/workflows/release.yml` builds, signs, notarizes, and attests the app,
+then attaches `Hermes-X.Y.Z-macos-arm64.zip` and its `.sha256` to the release.
+The repository's tag ruleset lets only admins create tags, so only an admin can
+publish a release with a new one.
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant GitHub
+    participant Job as release.yml (xcode-27, environment "release")
+    participant Apple as Apple notary service
+    You->>GitHub: Publish release vX.Y.Z
+    GitHub->>GitHub: Create tag vX.Y.Z
+    GitHub->>Job: release published
+    Job->>Job: Import certificate and notary key into a temporary keychain
+    Job->>Job: make dist (check-version, build, sign)
+    Job->>Apple: notarytool submit --wait
+    Apple-->>Job: Accepted
+    Job->>Job: Staple, zip, checksum, verify
+    Job->>GitHub: Attest the zip's build provenance
+    Job->>GitHub: make github-release (upload zip and .sha256)
+```
+
+The `release` environment holds these secrets and runs only from `v*` tags:
+
+| Secret | Holds |
+|---|---|
+| `BUILD_CERTIFICATE_BASE64` | The Developer ID Application certificate and key, as a base64 `.p12` |
+| `P12_PASSWORD` | The `.p12` password |
+| `NOTARY_KEY_P8` | The App Store Connect API key that notarizes |
+| `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and issuer |
+
+The job creates a temporary keychain with a random password, and deletes it at
+the end. The signing identity comes from the certificate, so no team ID is
+configured.
+
+Immutable releases stay off: the job uploads the zip after the release is
+published, and an immutable release refuses new assets. If the job fails, the
+release stays published without assets. Re-run the job, or upload from a local
+build (below). `make github-release` replaces assets an earlier attempt left.
+
+### make dist
+
+`make dist` runs the pipeline. It needs an exact `vX.Y.Z` tag at `HEAD` that
+matches the `VERSION` file, a Developer ID certificate in a keychain
+(`TEAM_ID` or `CERT_NAME`), and the notary API key stored once with
+`make notary-setup NOTARY_KEY=<.p8> NOTARY_KEY_ID=<id> NOTARY_ISSUER_ID=<uuid>`.
 
 ```
-clean → release → sign → zip-notary → notarize → staple → zip-release → checksum → verify-release
+check-version → clean → release → sign → zip-notary → notarize → staple → zip-release → checksum → verify-release
 ```
 
 Apple's notary service takes a zip, and stapling writes the ticket into the
 app. So the zip that ships is made after stapling, not the one that was
-notarized. `make github-release` uploads the zip and its checksum with `gh`.
+notarized. The shipped zip leaves out resource forks and extended attributes.
+`ditto` would store them as `._` files, which unzip tools other than Archive
+Utility write into the bundle, and those break its signature. `make
+github-release` uploads the zip and its checksum to the published release.
+
+To release from your Mac instead of CI:
+
+```sh
+git fetch --tags && git checkout vX.Y.Z
+make dist github-release TEAM_ID=XXXXXXXXXX
+```
+
+### Checking a release
+
+The attestation ties the zip to the workflow run that built it:
+
+```sh
+gh attestation verify Hermes-X.Y.Z-macos-arm64.zip --repo bojanrajkovic/hermes
+```
+
+mise's `github` backend checks the attestation itself when it installs Hermes.

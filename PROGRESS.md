@@ -149,6 +149,9 @@ What is built and works, and what is known not to work or is unverified.
   [plans/build-system.md](plans/build-system.md).
 - `renovate.json` sets which dependency updates Renovate opens and which it
   merges. See [plans/build-system.md](plans/build-system.md#dependency-updates).
+- Publishing a GitHub release runs `release.yml`, which signs, notarizes, and
+  attests the app and attaches the zip. See
+  [plans/build-system.md](plans/build-system.md#release).
 
 ## Known limits
 
@@ -193,8 +196,9 @@ What is built and works, and what is known not to work or is unverified.
   running forwarder or relay.
 - **Relay discovery.** Reading and committing `hermes-relay.json` are tested
   against a stubbed GitHub. Hermes has committed the file to no repository.
-- **The release pipeline.** `make dist` needs a Developer ID (`TEAM_ID`) and a
-  stored notary profile. The Makefile sets neither.
+- **The release workflow.** `release.yml` passes zizmor's auditor checks, but
+  it hasn't run yet. The next published release is its first run. Installing
+  with mise was tested against the v0.5.0 zip, not one the workflow built.
 
 **Missing**
 

@@ -1,0 +1,87 @@
+# Builds, signs, notarizes, and attests Hermes when a release is published, then attaches the zip
+# and its checksum to the release. Publishing a release with a new tag creates the tag.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+# One release at a time. A release in progress finishes before the next starts.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, and attach
+    # The image with Xcode 27. `make deps` fails if it lacks the version .xcode-version names.
+    runs-on: xcode-27
+    # Notarization usually takes a few minutes, but Apple's queue can be slow.
+    timeout-minutes: 60
+    # The Developer ID certificate and the notary API key belong to this environment, which only
+    # runs from v* tags.
+    environment: release
+    permissions:
+      contents: write # attach the zip to the release
+      id-token: write # sign the zip's attestation
+      attestations: write # store the attestation
+    steps:
+      # A release event checks out the release's tag, which `make check-version` reads.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A temporary keychain holds the certificate and the notary profile for this job only. Its
+      # password is random, because nothing outside the job unlocks it.
+      - name: Import the signing certificate
+        id: keychain
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/release.keychain-db"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          password=$(openssl rand -hex 24)
+          printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$password" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          rm "$RUNNER_TEMP/certificate.p12"
+          # Lets codesign use the key without a prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          identity=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' '/Developer ID Application/ { print $2; exit }')
+          [ -n "$identity" ] || { echo "::error::No Developer ID Application identity in the certificate"; exit 1; }
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
+      - name: Store the notary API key
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          printf '%s\n' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          make notary-setup NOTARY_KEY="$RUNNER_TEMP/notary.p8" NOTARY_KEY_ID="$NOTARY_KEY_ID" \
+            NOTARY_ISSUER_ID="$NOTARY_ISSUER_ID" NOTARY_KEYCHAIN="$KEYCHAIN"
+          rm "$RUNNER_TEMP/notary.p8"
+
+      - name: Build, sign, notarize, and staple
+        env:
+          CERT_NAME: ${{ steps.keychain.outputs.identity }}
+        run: make dist CERT_NAME="$CERT_NAME" NOTARY_KEYCHAIN="$KEYCHAIN"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/Hermes-*-macos-arm64.zip
+
+      - name: Attach the zip to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make github-release
+
+      - name: Delete the keychain
+        if: ${{ always() && steps.keychain.outcome != 'skipped' }}
+        run: security delete-keychain "$RUNNER_TEMP/release.keychain-db" || true
