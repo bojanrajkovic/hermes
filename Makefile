@@ -44,23 +44,26 @@ VERSION         ?= $(or $(GIT_TAG_VERSION),$(FILE_VERSION))
 
 DIST_DIR      := dist
 NOTARY_ZIP    := $(DIST_DIR)/$(APP_NAME)-$(VERSION)-notary.zip
-RELEASE_ZIP   := $(DIST_DIR)/$(APP_NAME)-$(VERSION)-macos.zip
+# mise's github backend picks a release asset by the OS and architecture in its name.
+RELEASE_ZIP   := $(DIST_DIR)/$(APP_NAME)-$(VERSION)-macos-arm64.zip
 
 # Dev signing identity (used by ./build.sh). Falls back to ad-hoc ("-") if
 # the named identity is missing — fine for `make run` on your own machine.
 DEV_IDENTITY  ?= -
 
 # Distribution signing. Developer ID + hardened runtime + notarization.
-# Fill TEAM_ID / CERT_NAME in before the first `make dist`.
+# Pass TEAM_ID or CERT_NAME to `make dist`. The release workflow passes CERT_NAME.
 TEAM_ID       ?=
 CERT_NAME     ?= $(if $(TEAM_ID),Developer ID Application: Bojan Rajkovic ($(TEAM_ID)),)
 
-# Notarization credentials profile name. Populate once with
-# `make notary-setup` (interactive; never puts the password on the cmdline).
-NOTARY_PROFILE ?= hermes-notary
+# The keychain profile that holds the notary API key. `make notary-setup` stores it.
+# NOTARY_KEYCHAIN names a keychain other than the default, as the release workflow's
+# temporary keychain is.
+NOTARY_PROFILE  ?= hermes-notary
+NOTARY_KEYCHAIN ?=
+NOTARY_KEYCHAIN_ARG := $(if $(NOTARY_KEYCHAIN),--keychain "$(NOTARY_KEYCHAIN)",)
 
 PROVISION_PROFILE ?=
-NOTES_FILE       ?=
 
 .PHONY: all deps build check test release run clean install uninstall register help \
         icon check-version notary-setup sign zip-notary notarize staple zip-release \
@@ -86,10 +89,10 @@ help:
 	@echo "  uninstall         Remove /Applications/$(APP_NAME).app"
 	@echo "  register          Refresh LaunchServices for ./$(APP)"
 	@echo ""
-	@echo "Release pipeline (require an exact 'vX.Y.Z' git tag + signing identity):"
-	@echo "  notary-setup      One-time: store notary creds in keychain ($(NOTARY_PROFILE))"
-	@echo "  dist              Build → sign → notarize → staple → zip → checksum"
-	@echo "  github-release    Upload \$$(RELEASE_ZIP) + .sha256 to a GitHub release"
+	@echo "Release pipeline (CI runs these when a release is published; see plans/build-system.md):"
+	@echo "  notary-setup      One-time: store the notary API key in keychain profile $(NOTARY_PROFILE)"
+	@echo "  dist              Build → sign → notarize → staple → zip → checksum (needs tag v\$$(VERSION) at HEAD)"
+	@echo "  github-release    Upload \$$(RELEASE_ZIP) + .sha256 to the published v\$$(VERSION) release"
 	@echo "  print-version     Print resolved release VERSION"
 	@echo ""
 	@echo "  help              Show this message"
@@ -223,43 +226,41 @@ clean:
 # service operates on a zip; stapling writes the ticket back into the .app;
 # the zip we distribute must be a fresh one taken AFTER stapling.
 #
-#   git tag v0.1.0 && make dist
+# The release workflow runs it when a release is published. To run it locally, from the
+# release's tag:
+#
+#   git fetch --tags && git checkout v0.6.0 && make dist github-release TEAM_ID=XXXXXXXXXX
 # ---------------------------------------------------------------------------
 
 dist: check-version clean release sign zip-notary notarize staple zip-release checksum verify-release
 	@echo "✓ release artifact ready: $(RELEASE_ZIP)"
-	@echo "  next: make github-release   (or upload $(RELEASE_ZIP) manually)"
+	@echo "  next: make github-release"
 
 check-version:
-	@if [ -z "$(VERSION)" ]; then \
-	  echo "✗ VERSION is empty — no exact vX.Y.Z git tag at HEAD and no VERSION file."; \
-	  echo "  Tag the release first:   git tag v0.1.0 && make dist"; \
-	  echo "  Or override:             make dist VERSION=0.1.0"; \
-	  exit 1; \
-	fi
 	@if [ -z "$(GIT_TAG_VERSION)" ]; then \
 	  echo "✗ make dist requires an exact 'vX.Y.Z' git tag at HEAD."; \
-	  echo "  HEAD currently has no matching tag; VERSION=$(VERSION) came from a fallback."; \
-	  echo "  Tag the release first:   git tag v$(VERSION) && make dist"; \
+	  echo "  Publish a release on GitHub, then check out its tag."; \
+	  exit 1; \
+	fi
+	@if [ "$(GIT_TAG_VERSION)" != "$(FILE_VERSION)" ]; then \
+	  echo "✗ tag v$(GIT_TAG_VERSION) doesn't match the VERSION file ($(FILE_VERSION))."; \
+	  echo "  Bump VERSION to $(GIT_TAG_VERSION) on main before publishing the release."; \
 	  exit 1; \
 	fi
 	@echo "→ release version $(VERSION)"
 
 notary-setup:
 	@command -v xcrun >/dev/null 2>&1 || { echo "✗ xcrun not found — install Xcode or the Command Line Tools"; exit 1; }
-	@if [ ! -t 0 ]; then \
-	  echo "✗ make notary-setup is interactive — run it in a real terminal,"; \
-	  echo "  not from an editor / agent shell (it prompts for your password)."; \
-	  echo "    1. Create an App-Specific Password at https://appleid.apple.com → Sign-In and Security."; \
-	  echo "    2. Run: make notary-setup APPLE_ID=you@example.com TEAM_ID=XXXXXXXXXX"; \
-	  echo "    3. Paste the App-Specific Password when prompted."; \
+	@if [ -z "$(NOTARY_KEY)" ] || [ -z "$(NOTARY_KEY_ID)" ] || [ -z "$(NOTARY_ISSUER_ID)" ]; then \
+	  echo "✗ make notary-setup needs an App Store Connect API key:"; \
+	  echo "    make notary-setup NOTARY_KEY=AuthKey_XXXXXXXXXX.p8 NOTARY_KEY_ID=XXXXXXXXXX NOTARY_ISSUER_ID=<uuid>"; \
+	  echo "  Create a key in App Store Connect → Users and Access → Integrations → Team Keys."; \
 	  exit 1; \
 	fi
-	@if [ -z "$(TEAM_ID)" ]; then echo "✗ TEAM_ID required: make notary-setup TEAM_ID=XXXXXXXXXX APPLE_ID=you@example.com"; exit 1; fi
-	@echo "→ storing notary credentials in keychain profile '$(NOTARY_PROFILE)' (team $(TEAM_ID))"
+	@echo "→ storing the notary API key in keychain profile '$(NOTARY_PROFILE)'"
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" \
-	  --team-id "$(TEAM_ID)" \
-	  $(if $(APPLE_ID),--apple-id "$(APPLE_ID)",)
+	  --key "$(NOTARY_KEY)" --key-id "$(NOTARY_KEY_ID)" --issuer "$(NOTARY_ISSUER_ID)" \
+	  $(NOTARY_KEYCHAIN_ARG)
 	@echo "✓ stored. 'make dist' / 'make notarize' will use profile '$(NOTARY_PROFILE)'."
 
 sign: release
@@ -283,16 +284,18 @@ notarize: zip-notary
 	fi
 	@echo "→ submitting $(NOTARY_ZIP) via profile '$(NOTARY_PROFILE)' (a few minutes)"
 	xcrun notarytool submit "$(NOTARY_ZIP)" \
-	  --keychain-profile "$(NOTARY_PROFILE)" \
+	  --keychain-profile "$(NOTARY_PROFILE)" $(NOTARY_KEYCHAIN_ARG) \
 	  --wait
 
 staple: notarize
 	xcrun stapler staple "$(APP)"
 	xcrun stapler validate "$(APP)"
 
+# No resource forks or extended attributes: ditto stores them as ._ files, which unzip tools other
+# than Archive Utility (mise's included) write into the bundle, breaking its signature.
 zip-release: staple
 	rm -f "$(RELEASE_ZIP)"
-	ditto -c -k --keepParent "$(APP)" "$(RELEASE_ZIP)"
+	ditto -c -k --norsrc --noextattr --keepParent "$(APP)" "$(RELEASE_ZIP)"
 	@echo "✓ wrote $(RELEASE_ZIP)"
 
 checksum: zip-release
@@ -308,9 +311,6 @@ github-release:
 	@if [ -z "$(VERSION)" ]; then echo "✗ VERSION required (tag or override)"; exit 1; fi
 	@if [ ! -f "$(RELEASE_ZIP)" ]; then echo "✗ $(RELEASE_ZIP) not found — run make dist first"; exit 1; fi
 	@if [ ! -f "$(RELEASE_ZIP).sha256" ]; then echo "✗ $(RELEASE_ZIP).sha256 not found — run make dist first"; exit 1; fi
-	gh release create "v$(VERSION)" \
-	  "$(RELEASE_ZIP)" \
-	  "$(RELEASE_ZIP).sha256" \
-	  --title "$(APP_NAME) $(VERSION)" \
-	  $(if $(NOTES_FILE),--notes-file "$(NOTES_FILE)",--generate-notes)
-	@echo "✓ published v$(VERSION)"
+	@# --clobber lets a re-run of a failed release replace assets an earlier attempt uploaded.
+	gh release upload "v$(VERSION)" "$(RELEASE_ZIP)" "$(RELEASE_ZIP).sha256" --clobber
+	@echo "✓ uploaded to v$(VERSION)"
