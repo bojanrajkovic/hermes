@@ -20,6 +20,8 @@ struct SessionScreen: View {
     @State private var checkout: Checkout?
     @State private var branches: [LocalStack.Branch] = []
     @State private var scope: DiffScope = .workingTree
+    /// Whether the diff pane sits beside the terminal. Shared by all sessions.
+    @AppStorage("sessionShowsDiff") private var showsDiff = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,8 +37,10 @@ struct SessionScreen: View {
                 HSplitView {
                     SessionTerminalView(session: session)
                         .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                    diff
-                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    if showsDiff {
+                        diff
+                            .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
         }
@@ -92,6 +96,15 @@ struct SessionScreen: View {
                 }
                 .fixedSize()
                 .help("Choose what the diff shows: the working tree, or one branch of the local stack")
+                if session.state != .inClaudeApp {
+                    Button {
+                        showsDiff.toggle()
+                    } label: {
+                        Image(systemName: "sidebar.trailing")
+                    }
+                    .keyboardShortcut("d", modifiers: [.command, .option])
+                    .help(showsDiff ? "Hide the diff to give the transcript the full width" : "Show the diff")
+                }
             }
         }
         .padding(.horizontal, Theme.detailInset)
