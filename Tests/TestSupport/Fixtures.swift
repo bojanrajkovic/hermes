@@ -49,7 +49,7 @@ public func pullRequestJSON(_ number: Int, state: String = "OPEN", head: String 
     """
     {"__typename":"PullRequest","id":"PR_\(number)","number":\(number),"title":"A pull request",
      "url":"https://github.com/bojan/airway/pull/\(number)","state":"\(state)","isDraft":false,
-     "createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","headRefName":"branch","baseRefName":"main",
+     "createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","headRefName":"branch","baseRefName":"main","isCrossRepository":false,
      "headRefOid":"\(head)","additions":1,"deletions":1,"changedFiles":1,"mergeable":"MERGEABLE",
      "repository":{"name":"airway","owner":{"login":"bojan"}},"labels":{"nodes":[]},"commits":{"nodes":[]},
      "closingIssuesReferences":{"nodes":[]}}

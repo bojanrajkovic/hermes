@@ -87,7 +87,7 @@ public final class SessionStore {
         try Task.checkCancellation()
 
         var branch = plan?.branch
-        if branch == nil, case let .pullRequest(_, _, _, headRefName, _, _) = origin { branch = headRefName }
+        if branch == nil, case let .pullRequest(_, _, _, headRefName, _, _, _) = origin { branch = headRefName }
 
         // A session in the Claude app gets no terminal: Hermes opens the link and keeps the entry,
         // so the worktree's diff and the link to its pull request still work.

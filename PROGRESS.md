@@ -115,6 +115,8 @@ What is built and works, and what is known not to work or is unverified.
 - A worktree per session branch under
   `~/Library/Application Support/Hermes/worktrees`. An existing worktree of
   the branch is reused.
+- A session for a pull request from a fork reviews it on a local `pr-<number>`
+  branch fetched from `refs/pull/<number>/head`. It can't push to the fork.
 - Cloning a repository that has no local checkout.
 - The session screen: terminal beside a diff of the worktree that reloads as
   files change.
@@ -157,10 +159,6 @@ What is built and works, and what is known not to work or is unverified.
 
 **Does not work**
 
-- **Fork pull requests cannot run in a local session.** The worktree is made
-  from the pull request's head branch on the checkout's remote. A fork's
-  branch is not there, so the launch sheet reports that the branch is not on
-  the remote.
 - **Sessions do not survive quitting.** The session list lives in memory and
   the terminals end with the app. Worktrees and branches stay on disk.
 - **Go to definition is pointer-only.** A click on an identifier opens the

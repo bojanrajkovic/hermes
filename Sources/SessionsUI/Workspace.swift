@@ -27,8 +27,7 @@ enum WorkspaceError: LocalizedError, Equatable {
             "The branch “\(branch)” is checked out in your working copy at \(directory.abbreviatedPath). "
                 + "Hermes doesn't change that copy. Switch it to another branch and try again."
         case let .branchNotOnRemote(branch, remote):
-            "The branch “\(branch)” isn't on the remote “\(remote)”. "
-                + "A pull request from a fork can't run in a local session."
+            "The branch “\(branch)” isn't on the remote “\(remote)”."
         case let .toolNotFound(tool):
             "“\(tool)” wasn't found on your PATH."
         case let .cloneFailed(message):
@@ -112,10 +111,12 @@ enum Workspace {
     static func create(_ plan: WorkspacePlan, origin: SessionOrigin) async throws -> String {
         let checkout = plan.checkout
         switch origin {
-        case let .pullRequest(_, _, _, _, baseRefName, _):
+        case let .pullRequest(_, number, _, _, baseRefName, _, isCrossRepository):
             if !plan.exists {
                 do {
-                    _ = try await checkout.addWorktree(branch: .existing(plan.branch))
+                    let branch: WorktreeBranch = isCrossRepository
+                        ? .pullRequest(number: number, name: plan.branch) : .existing(plan.branch)
+                    _ = try await checkout.addWorktree(branch: branch)
                 } catch {
                     throw worktreeError(error, branch: plan.branch, remote: checkout.remote)
                 }
