@@ -89,7 +89,8 @@ What is built and works, and what is known not to work or is unverified.
 
 - Several windows, each on its own account. New windows come from ⇧⌘N, Open
   Link in New Window… (⌥⌘O), ⌥↩ in ⌘K, row menus, and `?window=new` links.
-  Windows come back after a relaunch when macOS keeps windows on quit.
+  Windows come back after a relaunch when macOS keeps windows on quit, with
+  their pull request tab and open list groups.
 
 **Reviews**
 

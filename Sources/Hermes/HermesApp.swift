@@ -110,7 +110,10 @@ struct WindowRoot: View {
 
     init(store: AppStore, state: Binding<WindowState>) {
         _state = state
-        _model = State(initialValue: WindowModel(store: store))
+        let model = WindowModel(store: store)
+        model.pullRequestTab = state.wrappedValue.tab
+        model.expansion = state.wrappedValue.expansion
+        _model = State(initialValue: model)
     }
 
     var body: some View {
@@ -132,7 +135,9 @@ struct WindowRoot: View {
                 }
             }
             // Kept current, so a restored window shows its account and what it showed.
-            .onChange(of: WindowState(id: state.id, login: model.account?.login, url: model.placeURL)) { _, new in
+            .onChange(of: WindowState(
+                id: state.id, login: model.account?.login, url: model.placeURL, tab: model.pullRequestTab, expansion: model.expansion
+            )) { _, new in
                 state = new
                 if activeState == .key { model.store.lastPlace = new.url }
             }
