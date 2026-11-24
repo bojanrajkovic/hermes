@@ -101,12 +101,16 @@ What is built and works, and what is known not to work or is unverified.
 **Checks**
 
 - Checks grouped by workflow with a rollup, refreshed every 10 seconds while
-  any check is queued or running.
+  any check is queued or running, or a workflow run waits for approval.
 - Steps for a running GitHub Actions job, and the log once it finishes.
 - The log viewer: groups, ANSI colors, timestamps, search, and opening at the
   first error.
 - Summaries for check runs that are not Actions jobs, and descriptions for
   legacy commit statuses.
+- Workflow runs from a fork that wait for a maintainer show above the checks,
+  in the Checks tab and the overview, with an Approve button. Reading them is
+  checked against a public repository's waiting runs. Approving one is not yet
+  tried against GitHub.
 
 **Sessions**
 

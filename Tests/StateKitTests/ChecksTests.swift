@@ -109,9 +109,9 @@ private final class ChecksProtocol: URLProtocol {
         #expect(ChecksProtocol.heldRequests.withLock { $0 } == 2)
     }
 
-    @Test func aCheckThatStartsAfterPollingEndedMakesPollingResume() async {
+    @Test func aCheckThatStartsAfterPollingEndedMakesPollingResume() async throws {
         let store = await loadedStore()
-        #expect(!keepsPolling(checks(in: store), elapsed: .seconds(3600)))
+        #expect(!keepsPolling(try #require(store.checks[commit]), elapsed: .seconds(3600)))
 
         // The job runs again: a new check run, for the same job of the same workflow run.
         #expect(store.applyToChecks(.checkRun(queued("build", id: 12), runID: 5), for: commit))
@@ -119,7 +119,7 @@ private final class ChecksProtocol: URLProtocol {
         guard case .run(let rerun)? = checks(in: store).first else { return #expect(Bool(false), "build is a check run") }
         #expect(rerun.workflow == CheckRun.Workflow(name: "CI", runID: 5))
         // The commit's next poll loads it again.
-        #expect(keepsPolling(checks(in: store), elapsed: .seconds(3600)))
+        #expect(keepsPolling(try #require(store.checks[commit]), elapsed: .seconds(3600)))
     }
 
     @Test func aSettledListLoadsAgainWhenAScreenShowsItAgain() async {
@@ -153,13 +153,18 @@ private final class ChecksProtocol: URLProtocol {
         #expect(requests() == before + 2)
     }
 
-    @Test func pollsWhilePendingOrNewlyEmpty() async {
+    @Test func pollsWhilePendingWaitingOrNewlyEmpty() async {
         let store = await loadedStore()
-        let done = checks(in: store)
+        let done = CommitChecks(checks: checks(in: store), isLoaded: true)
         #expect(!keepsPolling(done, elapsed: .zero))
         // Right after a push GitHub has not created the checks yet.
-        #expect(keepsPolling([], elapsed: .seconds(5)))
-        #expect(!keepsPolling([], elapsed: emptyChecksPolling))
+        #expect(keepsPolling(CommitChecks(isLoaded: true), elapsed: .seconds(5)))
+        #expect(!keepsPolling(CommitChecks(isLoaded: true), elapsed: emptyChecksPolling))
+        // Someone can approve a waiting run on github.com.
+        let waiting = CommitChecks(
+            checks: done.checks, awaitingApproval: [CheckRun.Workflow(name: "CI", runID: 6)], isLoaded: true
+        )
+        #expect(keepsPolling(waiting, elapsed: .seconds(3600)))
     }
 
     @Test func waitsForARateLimitToReset() {

@@ -508,16 +508,17 @@ extension GitHubClient {
 // MARK: Checks
 
 extension GitHubClient {
-    /// Loads every check on a commit: check runs and legacy commit statuses.
+    /// Loads every check on a commit, check runs and legacy commit statuses, and the workflow
+    /// runs that wait for approval.
     ///
     /// - Parameter commitOID: The commit's full SHA.
-    /// - Returns: The checks in GitHub's order. Empty when the commit has
+    /// - Returns: The checks in GitHub's order. Both lists are empty when the commit has
     ///   none, or does not exist.
     /// - Throws: `GitHubError.graphQL` with type `NOT_FOUND` when the
     ///   repository does not exist or is not visible.
-    public func checks(repository: RepositoryRef, commitOID: String) async throws -> [Check] {
+    public func checks(repository: RepositoryRef, commitOID: String) async throws -> CommitCheckList {
         let query = """
-            query($owner: String!, $name: String!, $oid: GitObjectID!, $after: String) {
+            query($owner: String!, $name: String!, $oid: GitObjectID!, $after: String, $paging: Boolean!) {
               repository(owner: $owner, name: $name) {
                 object(oid: $oid) {
                   ... on Commit {
@@ -534,6 +535,9 @@ extension GitHubClient {
                         }
                       }
                     }
+                    checkSuites(first: 100) @skip(if: $paging) {
+                      nodes { conclusion workflowRun { databaseId workflow { name } } }
+                    }
                   }
                 }
               }
@@ -541,20 +545,33 @@ extension GitHubClient {
             """
 
         var checks: [Check] = []
+        var awaitingApproval: [CheckRun.Workflow] = []
         var cursor: String?
         repeat {
-            let page = try await graphQL(
+            let commit = try await graphQL(
                 query,
                 variables: [
                     "owner": .string(repository.owner), "name": .string(repository.name),
-                    "oid": .string(commitOID), "after": JSONValue(cursor),
+                    "oid": .string(commitOID), "after": JSONValue(cursor), "paging": .bool(cursor != nil),
                 ],
                 as: RepositoryData<ChecksField>.self
-            ).repository.object?.statusCheckRollup?.contexts
+            ).repository.object
+            // shortcut: reads the first 100 suites only; page them if a commit ever has more.
+            if cursor == nil { awaitingApproval = commit?.checkSuites?.nodes.compactMap(\.awaitingApproval) ?? [] }
+            let page = commit?.statusCheckRollup?.contexts
             checks += page?.nodes ?? []
             cursor = page?.nextCursor
         } while cursor != nil
-        return checks
+        return CommitCheckList(checks: checks, awaitingApproval: awaitingApproval)
+    }
+
+    /// Approves a workflow run that waits for a maintainer, such as one from a fork, so it runs.
+    ///
+    /// - Parameter runID: A run from `CommitCheckList.awaitingApproval`.
+    /// - Throws: `GitHubError.http` with GitHub's reason, for example 403 when the viewer may
+    ///   not approve runs in the repository, or when the run does not need approval.
+    public func approveWorkflowRun(repository: RepositoryRef, runID: Int) async throws {
+        try await post("/repos/\(repository.owner)/\(repository.name)/actions/runs/\(runID)/approve")
     }
 
     /// The pull request numbers of a stack, from its bottom up.
@@ -788,7 +805,27 @@ struct IssueField: Decodable, Sendable {
 struct ChecksField: Decodable, Sendable {
     struct Commit: Decodable, Sendable {
         struct Rollup: Decodable, Sendable { let contexts: Connection<Check> }
+
+        struct Suite: Decodable, Sendable {
+            struct WorkflowRun: Decodable, Sendable {
+                struct Workflow: Decodable, Sendable { let name: String }
+                let databaseId: Int
+                let workflow: Workflow
+            }
+            let conclusion: CheckRun.Conclusion?
+            let workflowRun: WorkflowRun?
+
+            /// The workflow run, when it waits for approval. Such a suite has finished with
+            /// "action required" and has no check runs until someone approves it.
+            var awaitingApproval: CheckRun.Workflow? {
+                guard conclusion == .actionRequired, let run = workflowRun else { return nil }
+                return CheckRun.Workflow(name: run.workflow.name, runID: run.databaseId)
+            }
+        }
+
         let statusCheckRollup: Rollup?
+        /// Nil on pages after the first, which skip it.
+        let checkSuites: Connection<Suite>?
     }
     let object: Commit?
 }

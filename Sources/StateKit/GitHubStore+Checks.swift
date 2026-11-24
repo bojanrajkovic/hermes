@@ -16,6 +16,8 @@ public struct CommitKey: Hashable, Sendable {
 /// A commit's checks and how their loads went.
 public struct CommitChecks: Sendable {
     public internal(set) var checks: [Check] = []
+    /// Workflow runs that wait for a maintainer's approval before they run.
+    public internal(set) var awaitingApproval: [CheckRun.Workflow] = []
     /// False until the first load succeeds.
     public internal(set) var isLoaded = false
     /// Why the first load failed. A failed refresh keeps the checks it had.
@@ -31,10 +33,12 @@ let checksInterval = Duration.seconds(10)
 /// on stays empty, so this ends.
 let emptyChecksPolling = Duration.seconds(120)
 
-/// Whether to reload: a check is queued or running, or the list is still empty `elapsed`
-/// after a screen started showing it.
-func keepsPolling(_ checks: [Check], elapsed: Duration) -> Bool {
-    checks.contains(where: \.isPending) || (checks.isEmpty && elapsed < emptyChecksPolling)
+/// Whether to reload: a check is queued or running, a workflow run waits for approval, which
+/// can come from github.com, or the list is still empty `elapsed` after a screen started
+/// showing it.
+func keepsPolling(_ held: CommitChecks, elapsed: Duration) -> Bool {
+    held.checks.contains(where: \.isPending) || !held.awaitingApproval.isEmpty
+        || (held.checks.isEmpty && elapsed < emptyChecksPolling)
 }
 
 /// How long to wait before loading again after `error`. A used-up rate limit rejects every
@@ -57,7 +61,7 @@ extension GitHubStore {
         if let held = checks[commit] {
             if held.errorMessage != nil { return }
             let elapsed = Duration.seconds(Date.now.timeIntervalSince(shownAt))
-            if held.isLoaded, held.refreshError == nil, !keepsPolling(held.checks, elapsed: elapsed) { return }
+            if held.isLoaded, held.refreshError == nil, !keepsPolling(held, elapsed: elapsed) { return }
         }
         await fetchChecks(commit)
     }
@@ -82,7 +86,7 @@ extension GitHubStore {
                 let loaded = try await client.checks(repository: commit.repository, commitOID: commit.oid)
                 guard load == checkLoads[commit] else { return }
                 guard checkWrites[commit, default: 0] == before else { continue }
-                checks[commit] = CommitChecks(checks: loaded, isLoaded: true)
+                checks[commit] = CommitChecks(checks: loaded.checks, awaitingApproval: loaded.awaitingApproval, isLoaded: true)
                 checksWaitUntil[commit] = nil
             } catch is CancellationError {
             } catch let error as URLError where error.code == .cancelled {
