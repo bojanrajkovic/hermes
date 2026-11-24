@@ -93,6 +93,8 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     public let updatedAt: Date
     public let headRefName: String
     public let baseRefName: String
+    /// Whether the head branch is in another repository, such as a fork.
+    public let isCrossRepository: Bool
     /// The head commit's SHA.
     public let headOID: String
     /// Nil when the repository does not require reviews and nobody reviewed.
@@ -123,7 +125,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         changedFileCount: Int, mergeable: MergeableState, labels: [GitHubLabel], checkState: ChecksRollup?,
         stack: StackEntry?, closingIssueNumbers: [Int], autoMergeMethod: MergeMethod? = nil,
         requestedReviewers: [Reviewer] = [], viewerReviewedCommit: String? = nil,
-        state: LinkedPullRequest.State = .open
+        state: LinkedPullRequest.State = .open, isCrossRepository: Bool = false
     ) {
         self.id = id
         self.number = number
@@ -150,6 +152,7 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
         self.requestedReviewers = requestedReviewers
         self.viewerReviewedCommit = viewerReviewedCommit
         self.state = state
+        self.isCrossRepository = isCrossRepository
     }
 }
 
@@ -158,7 +161,7 @@ extension PullRequest: Decodable {
         case id, number, title, url, repository, author, isDraft, createdAt, updatedAt, headRefName
         case baseRefName, headRefOid, reviewDecision, additions, deletions, changedFiles, mergeable
         case labels, commits, stack, stackEntry, closingIssuesReferences, autoMergeRequest
-        case reviewRequests, viewerLatestReview, state
+        case reviewRequests, viewerLatestReview, state, isCrossRepository
     }
 
     private struct HeadCommit: Decodable {
@@ -218,6 +221,7 @@ extension PullRequest: Decodable {
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         headRefName = try container.decode(String.self, forKey: .headRefName)
         baseRefName = try container.decode(String.self, forKey: .baseRefName)
+        isCrossRepository = try container.decode(Bool.self, forKey: .isCrossRepository)
         headOID = try container.decode(String.self, forKey: .headRefOid)
         reviewDecision = try container.decodeIfPresent(ReviewDecision.self, forKey: .reviewDecision)
         additions = try container.decode(Int.self, forKey: .additions)

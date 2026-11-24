@@ -206,7 +206,7 @@ extension PullRequest {
             changedFileCount: fields.changedFileCount, mergeable: mergeable, labels: fields.labels,
             checkState: checkState, stack: stack, closingIssueNumbers: closingIssueNumbers,
             autoMergeMethod: fields.autoMergeMethod, requestedReviewers: requestedReviewers,
-            viewerReviewedCommit: viewerReviewedCommit, state: fields.state
+            viewerReviewedCommit: viewerReviewedCommit, state: fields.state, isCrossRepository: isCrossRepository
         )
     }
 }

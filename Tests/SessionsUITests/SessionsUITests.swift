@@ -7,7 +7,11 @@ import Testing
 let repository = RepositoryRef(owner: "bojanrajkovic", name: "airway")
 let pullRequest = SessionOrigin.pullRequest(
     repository: repository, number: 94, title: "Add retries", headRefName: "feature/retries", baseRefName: "main",
-    url: URL(string: "https://github.com/bojanrajkovic/airway/pull/94")!
+    url: URL(string: "https://github.com/bojanrajkovic/airway/pull/94")!, isCrossRepository: false
+)
+let forkPullRequest = SessionOrigin.pullRequest(
+    repository: repository, number: 95, title: "Fix typo", headRefName: "main", baseRefName: "main",
+    url: URL(string: "https://github.com/bojanrajkovic/airway/pull/95")!, isCrossRepository: true
 )
 let issue = SessionOrigin.issue(
     repository: repository, number: 12, title: "Crash when the config file's missing (macOS 15)!",
@@ -128,6 +132,12 @@ let issue = SessionOrigin.issue(
         #expect(pullRequest.branchName == "feature/retries")
     }
 
+    @Test func forkPullRequestGetsItsOwnBranchAndAReviewPrompt() {
+        #expect(forkPullRequest.branchName == "pr-95")
+        #expect(forkPullRequest.defaultPrompt.contains("https://github.com/bojanrajkovic/airway/pull/95"))
+        #expect(!forkPullRequest.defaultPrompt.contains("push your commits"))
+    }
+
     @Test func issuePromptAsksForFixesLine() {
         #expect(issue.defaultPrompt.contains("https://github.com/bojanrajkovic/airway/issues/12"))
         #expect(issue.defaultPrompt.contains(#""Fixes #12""#))
@@ -176,7 +186,7 @@ let issue = SessionOrigin.issue(
         }
     }
 
-    @Test func missingRemoteBranchReadsAsForkHint() {
+    @Test func missingRemoteBranchReadsAsReadableError() {
         let failure = GitError.failed(arguments: ["fetch"], status: 128, stderr: "fatal: couldn't find remote ref refs/heads/feature/retries\n")
         #expect(worktreeError(failure, branch: "feature/retries", remote: "origin") as? WorkspaceError
             == .branchNotOnRemote(branch: "feature/retries", remote: "origin"))

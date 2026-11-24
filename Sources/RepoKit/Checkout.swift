@@ -20,13 +20,18 @@ public enum WorktreeBranch: Hashable, Sendable {
     /// when it has commits the remote lacks. Otherwise a branch is created
     /// that tracks `<remote>/<name>`.
     case existing(String)
+    /// A local branch `name` at the head of pull request `number`, fetched
+    /// from the remote's `refs/pull/<number>/head`. This is how a pull request
+    /// from a fork is checked out, since its head branch is not on the remote.
+    /// The branch tracks nothing. A leftover branch is reused as for `.existing`.
+    case pullRequest(number: Int, name: String)
     /// A new branch created from the tip of the remote's default branch.
     case new(String)
 
     /// The branch's short name.
     public var name: String {
         switch self {
-        case let .existing(name), let .new(name): name
+        case let .existing(name), let .pullRequest(_, name), let .new(name): name
         }
     }
 }
@@ -83,14 +88,22 @@ public struct Checkout: Hashable, Sendable {
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         switch branch {
-        case .existing:
-            try await fetchBranch(name)
+        case .existing, .pullRequest:
+            let start: String
+            if case let .pullRequest(number, _) = branch {
+                start = "refs/pull/\(number)/head"
+                try await fetch("+\(start):\(start)")
+            } else {
+                start = "\(remote)/\(name)"
+                try await fetchBranch(name)
+            }
             if try await Git.succeeds(["show-ref", "--verify", "--quiet", "refs/heads/\(name)"], in: directory) {
                 try await Git.run(["worktree", "add", target.path, name], in: directory)
                 // Fails, and is left alone, when the branch has commits the remote lacks.
-                _ = try await Git.succeeds(["merge", "--ff-only", "--quiet", "\(remote)/\(name)"], in: target)
+                _ = try await Git.succeeds(["merge", "--ff-only", "--quiet", start], in: target)
             } else {
-                try await Git.run(["worktree", "add", "--track", "-b", name, target.path, "\(remote)/\(name)"], in: directory)
+                let track = if case .existing = branch { "--track" } else { "--no-track" }
+                try await Git.run(["worktree", "add", track, "-b", name, target.path, start], in: directory)
             }
         case .new:
             let start = try await Git.defaultBranch(in: directory, remote: remote)

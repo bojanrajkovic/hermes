@@ -310,6 +310,34 @@ let grepFixture = [
     #expect(try await checkout.addWorktree(branch: .existing("pr"), root: root).oid == local)
 }
 
+@Test func worktreeOfAForkPullRequestComesFromItsPullRef() async throws {
+    let scratch = try Scratch()
+    let origin = scratch("origin")
+    try await makeRepo(at: origin)
+    let main = scratch("checkout")
+    try await git("clone", "--quiet", origin.path, main.path, in: scratch.url)
+    // GitHub keeps a fork's head commit at refs/pull/<N>/head; no branch of origin has it.
+    try await git("checkout", "--quiet", "-b", "fork-main", in: origin)
+    try await commit("fork.txt", "one\n", in: origin)
+    try await git("update-ref", "refs/pull/7/head", "HEAD", in: origin)
+    try await git("checkout", "--quiet", "main", in: origin)
+    try await git("branch", "--quiet", "-D", "fork-main", in: origin)
+    let checkout = Checkout(repo: RepoID(owner: "o", name: "n"), directory: main)
+    let root = scratch("worktrees")
+
+    let first = try await checkout.addWorktree(branch: .pullRequest(number: 7, name: "pr-7"), root: root)
+    #expect(first.branch == "pr-7")
+    #expect(try String(contentsOf: first.directory.appending(path: "fork.txt"), encoding: .utf8) == "one\n")
+
+    // A leftover branch moves to the pull request's new head.
+    try await checkout.removeWorktree(at: first.directory)
+    try await git("checkout", "--quiet", "refs/pull/7/head", in: origin)
+    try await commit("fork.txt", "two\n", in: origin)
+    try await git("update-ref", "refs/pull/7/head", "HEAD", in: origin)
+    let pushed = try await git("rev-parse", "HEAD", in: origin)
+    #expect(try await checkout.addWorktree(branch: .pullRequest(number: 7, name: "pr-7"), root: root).oid == pushed)
+}
+
 @Test func parsesDetachedAndBareWorktrees() {
     let output = [
         "worktree /repo.git\0bare\0",

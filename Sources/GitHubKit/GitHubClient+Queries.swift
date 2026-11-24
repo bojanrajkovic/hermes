@@ -4,7 +4,7 @@ private let userFields = "__typename login avatarUrl"
 extension PullRequest {
     /// The GraphQL fields `PullRequest` decodes from, for any query that loads one.
     public static let fields = """
-        id number title url state isDraft createdAt updatedAt headRefName baseRefName headRefOid
+        id number title url state isDraft createdAt updatedAt headRefName baseRefName headRefOid isCrossRepository
         reviewDecision additions deletions changedFiles mergeable autoMergeRequest { mergeMethod }
         repository { name owner { login } }
         author { \(userFields) }

@@ -4,30 +4,34 @@ import RepoKit
 
 /// What a Claude Code session was started from.
 public enum SessionOrigin: Hashable, Sendable {
-    case pullRequest(repository: RepositoryRef, number: Int, title: String, headRefName: String, baseRefName: String, url: URL)
+    /// `isCrossRepository` is true when the head branch is in a fork.
+    case pullRequest(
+        repository: RepositoryRef, number: Int, title: String, headRefName: String, baseRefName: String, url: URL,
+        isCrossRepository: Bool
+    )
     case issue(repository: RepositoryRef, number: Int, title: String, url: URL)
 
     public var repository: RepositoryRef {
         switch self {
-        case let .pullRequest(repository, _, _, _, _, _), let .issue(repository, _, _, _): repository
+        case let .pullRequest(repository, _, _, _, _, _, _), let .issue(repository, _, _, _): repository
         }
     }
 
     public var number: Int {
         switch self {
-        case let .pullRequest(_, number, _, _, _, _), let .issue(_, number, _, _): number
+        case let .pullRequest(_, number, _, _, _, _, _), let .issue(_, number, _, _): number
         }
     }
 
     public var title: String {
         switch self {
-        case let .pullRequest(_, _, title, _, _, _), let .issue(_, _, title, _): title
+        case let .pullRequest(_, _, title, _, _, _, _), let .issue(_, _, title, _): title
         }
     }
 
     public var url: URL {
         switch self {
-        case let .pullRequest(_, _, _, _, _, url), let .issue(_, _, _, url): url
+        case let .pullRequest(_, _, _, _, _, url, _), let .issue(_, _, _, url): url
         }
     }
 
@@ -35,10 +39,13 @@ public enum SessionOrigin: Hashable, Sendable {
     public var reference: String { "\(repository.name)#\(number)" }
 
     /// The branch a local session works on: the pull request's head branch,
-    /// or a new `issue-<number>-<slug>` branch for an issue.
+    /// `pr-<number>` for a pull request from a fork, or a new
+    /// `issue-<number>-<slug>` branch for an issue. A fork's head branch is
+    /// often `main`, which would clash with the checkout's own.
     public var branchName: String {
         switch self {
-        case let .pullRequest(_, _, _, headRefName, _, _): headRefName
+        case let .pullRequest(_, number, _, _, _, _, true): "pr-\(number)"
+        case let .pullRequest(_, _, _, headRefName, _, _, false): headRefName
         case let .issue(_, number, title, _): issueBranchName(number: number, title: title)
         }
     }
@@ -46,7 +53,12 @@ public enum SessionOrigin: Hashable, Sendable {
     /// The prompt the launch sheet starts with.
     public var defaultPrompt: String {
         switch self {
-        case let .pullRequest(_, _, _, headRefName, _, url):
+        case let .pullRequest(_, _, _, _, _, url, true):
+            """
+            Review the pull request at \(url.absoluteString). It comes from a fork, so you can't push to it. \
+            Report what needs to change.
+            """
+        case let .pullRequest(_, _, _, headRefName, _, url, false):
             """
             Review the pull request at \(url.absoluteString) and continue the work on it. \
             Address open review comments and failing checks, and push your commits to its branch `\(headRefName)`.

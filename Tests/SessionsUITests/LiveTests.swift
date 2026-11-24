@@ -215,7 +215,7 @@ struct SnapshotTests {
         let origin = SessionOrigin.pullRequest(
             repository: RepositoryRef(owner: "bojanrajkovic", name: "hermes"), number: 94,
             title: "Add retry budgets to the upstream client", headRefName: branch, baseRefName: "main",
-            url: URL(string: "https://github.com/bojanrajkovic/hermes/pull/94")!
+            url: URL(string: "https://github.com/bojanrajkovic/hermes/pull/94")!, isCrossRepository: false
         )
         let model = SessionLaunchModel(origin: origin, store: SessionStore(settings: try settings()))
         if cloud { model.environmentChoice = .cloud("ccpool_01HZX4T9QK") }
@@ -271,7 +271,7 @@ struct LiveClaudeTests {
         let origin = SessionOrigin.pullRequest(
             repository: playgroundRepository, number: 2, title: "Price quotes by destination zone",
             headRefName: "feature/zone-pricing", baseRefName: "main",
-            url: URL(string: "https://github.com/bojanrajkovic/hermes-playground/pull/2")!
+            url: URL(string: "https://github.com/bojanrajkovic/hermes-playground/pull/2")!, isCrossRepository: false
         )
 
         // No prompt: the session must not start working on the pull request.
@@ -377,12 +377,12 @@ struct LiveClaudeTests {
         #expect(!plan.exists)
     }
 
-    @Test func forkBranchFailsWithAReadableError() async throws {
+    @Test func missingBranchFailsWithAReadableError() async throws {
         let (settings, root) = try await playground()
         defer { try? FileManager.default.removeItem(at: root) }
         let origin = SessionOrigin.pullRequest(
-            repository: playgroundRepository, number: 9999, title: "From a fork", headRefName: "someone/not-on-origin", baseRefName: "main",
-            url: URL(string: "https://github.com/bojanrajkovic/hermes-playground/pull/9999")!
+            repository: playgroundRepository, number: 9999, title: "Gone branch", headRefName: "someone/not-on-origin", baseRefName: "main",
+            url: URL(string: "https://github.com/bojanrajkovic/hermes-playground/pull/9999")!, isCrossRepository: false
         )
         await #expect(throws: WorkspaceError.branchNotOnRemote(branch: "someone/not-on-origin", remote: "origin")) {
             try await SessionStore(settings: settings).launch(origin, environment: .local(remoteControl: false), prompt: "")

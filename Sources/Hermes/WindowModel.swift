@@ -444,30 +444,13 @@ extension SessionOrigin {
     init(_ pullRequest: PullRequest) {
         self = .pullRequest(
             repository: pullRequest.repository, number: pullRequest.number, title: pullRequest.title,
-            headRefName: pullRequest.headRefName, baseRefName: pullRequest.baseRefName, url: pullRequest.url
+            headRefName: pullRequest.headRefName, baseRefName: pullRequest.baseRefName, url: pullRequest.url,
+            isCrossRepository: pullRequest.isCrossRepository
         )
     }
 
     init(_ issue: Issue, in repository: RepositoryRef) {
         self = .issue(repository: repository, number: issue.number, title: issue.title, url: issue.url)
-    }
-
-    var repository: RepositoryRef {
-        switch self {
-        case .pullRequest(let repository, _, _, _, _, _), .issue(let repository, _, _, _): repository
-        }
-    }
-
-    var number: Int {
-        switch self {
-        case .pullRequest(_, let number, _, _, _, _), .issue(_, let number, _, _): number
-        }
-    }
-
-    var url: URL {
-        switch self {
-        case .pullRequest(_, _, _, _, _, let url), .issue(_, _, _, let url): url
-        }
     }
 
     var isPullRequest: Bool {

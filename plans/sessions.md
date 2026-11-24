@@ -99,6 +99,12 @@ local session runs in a linked worktree at
 - **From a pull request**, the branch is the head branch. It is fetched from
   the checkout's remote, and the worktree's diff is compared with
   `<remote>/<base branch>`.
+- **From a pull request in a fork**, the head branch isn't on the checkout's
+  remote. Hermes fetches GitHub's `refs/pull/<number>/head` instead, into a
+  local branch named `pr-<number>` that tracks nothing. The name avoids a
+  clash with the checkout's own branches, since a fork's head branch is often
+  `main`. The session can't push to the fork, so its default prompt asks for a
+  review only.
 - **From an issue**, the branch is new: `issue-<number>-<slug of the title>`,
   cut from the remote's default branch. The diff is compared with that
   default branch.
@@ -106,9 +112,6 @@ local session runs in a linked worktree at
 If the branch already has a linked worktree, the session uses it. If the
 branch is checked out in the main working copy, the launch fails and asks the
 user to switch that copy to another branch.
-
-A pull request from a fork fails here: its head branch is not on the
-checkout's remote, so the fetch finds nothing.
 
 ## The terminal
 
