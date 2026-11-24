@@ -282,7 +282,7 @@ final class DiffModel {
     /// - Parameter store: The app's store. Nil makes one of the model's own, for local sources and tests.
     init(
         source: DiffSource, store: GitHubStore? = nil, client: GitHubClient, repoCache: RepoCache, layout: DiffLayout = .unified,
-        draftsRoot: URL = PendingReview.defaultRoot
+        draftsRoot: URL = Drafts.defaultRoot
     ) {
         let store = store ?? GitHubStore(client: client)
         self.source = source

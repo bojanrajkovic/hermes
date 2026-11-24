@@ -254,6 +254,10 @@ and the one comment being written.
 - A finished comment becomes a `DraftComment`. Drafts and the review summary
   are saved to
   `~/Library/Application Support/Hermes/drafts/<owner>/<repo>/<number>.json`.
+  `Drafts` in `StateKit` owns that folder. The conversation's comment box
+  saves its unsent text beside the review as `<number>.comment.md`. Each file
+  has one writer: `ReviewModel` rewrites the whole `.json` on each change, so
+  the comment box keeps its own file rather than sharing it.
 - `ReviewLayout` matches threads and drafts against the current diff. A draft
   whose line left the diff is outdated. It stays in the Outdated Comments
   list, where it can be moved to a new line or deleted, and it is left out of

@@ -1,29 +1,22 @@
 import GitHubKit
 import HermesUI
+import StateKit
 import SwiftUI
 
 /// A box at the end of a pull request's or an issue's conversation for a comment that is not
 /// part of a review.
 ///
-/// Unsent text is kept in UserDefaults, one key per item, so it survives switching items and
-/// quitting. The key is removed once the text is sent or emptied. `@AppStorage` keeps the key it
-/// was made with, so callers give each item its own view with `.id(key)`.
+/// Unsent text is saved in the item's drafts folder (`Drafts`) as it changes, so it survives
+/// switching items and quitting. The file is removed once the text is sent or emptied. The text
+/// loads when the view appears, so callers give each item its own view with `.id(key)`.
 struct CommentComposer: View {
     let key: ItemKey
     /// The node ID of the pull request or issue.
     let subjectID: String
     @Environment(WindowModel.self) private var model
-    @AppStorage private var text: String
+    @State private var text = ""
     @State private var isSending = false
     @State private var failure: String?
-
-    init(key: ItemKey, subjectID: String) {
-        self.key = key
-        self.subjectID = subjectID
-        _text = AppStorage(wrappedValue: "", Self.defaultsKey(key))
-    }
-
-    static func defaultsKey(_ key: ItemKey) -> String { "comment.\(key.repository)#\(key.number)" }
 
     private var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -47,9 +40,9 @@ struct CommentComposer: View {
                     .mainAction(isDisabled: isEmpty || isSending)
             }
         }
-        .onChange(of: text) {
-            if text.isEmpty { UserDefaults.standard.removeObject(forKey: Self.defaultsKey(key)) }
-        }
+        .onAppear { text = Drafts.comment(key: key) }
+        // shortcut: writes on the main thread at each keystroke; fine for a comment's few KB.
+        .onChange(of: text) { try? Drafts.saveComment(text, key: key) }
         .alert("Could Not Comment", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("OK") {}
         } message: {
@@ -58,14 +51,16 @@ struct CommentComposer: View {
     }
 
     private func send() {
+        let sent = text
         isSending = true
         Task {
             defer { isSending = false }
             do {
-                try await model.github.addComment(text, subjectID: subjectID, to: key)
+                try await model.github.addComment(sent, subjectID: subjectID, to: key)
                 text = ""
-                // This view may be gone if the user moved on while it sent, so remove the key here too.
-                UserDefaults.standard.removeObject(forKey: Self.defaultsKey(key))
+                // This view may be gone if the user moved on while it sent. Remove the saved text
+                // unless a new view for this item has saved something else since.
+                if Drafts.comment(key: key) == sent { try? Drafts.saveComment("", key: key) }
             } catch {
                 failure = describe(error)
             }
