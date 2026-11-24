@@ -79,10 +79,13 @@ The `Hermes` target splits its state in three:
   shows of it, such as the selection, the scope, and the tab.
 
 Each window is a `WindowGroup` window whose value is a `WindowState`: its
-account and a `hermes://` link to what it shows, kept current as the window
-changes. macOS saves it with the window, so when the system setting "Close
-windows when quitting an application" is off, a relaunch brings each window
-back on its account and page. New windows come from File ▸ New Window (⇧⌘N),
+account, a `hermes://` link to what it shows, the pull request tab, and which
+list groups are open, kept current as the window changes. macOS saves it with
+the window, so when the system setting "Close windows when quitting an
+application" is off, a relaunch brings each window back as it was. Per-window
+state goes in `WindowState` rather than `@SceneStorage`, so there is one place
+to look for it. A field added later decodes to its default from a window saved
+before it existed. New windows come from File ▸ New Window (⇧⌘N),
 File ▸ Open Link in New Window… (⌥⌘O), ⌥↩ in the command palette, Open in New
 Window on list rows, and links that end in `?window=new`.
 

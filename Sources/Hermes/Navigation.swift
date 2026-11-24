@@ -5,12 +5,35 @@ import HermesUI
 
 /// A pull request or issue, named by repository and number.
 /// What a window was opened with, kept current as it changes: the window's
-/// account, and a `hermes://` link to what it shows. macOS saves it with the
-/// window, so a relaunch restores both.
+/// account, a `hermes://` link to what it shows, the pull request tab, and which
+/// list groups are open. macOS saves it with the window, so a relaunch restores them.
 struct WindowState: Codable, Hashable {
     var id = UUID()
     var login: String?
     var url: URL?
+    var tab = PullRequestTab.files
+    /// `WindowModel.expansion`: list groups the user opened or closed, by node ID.
+    var expansion: [String: Bool] = [:]
+
+    init(id: UUID = UUID(), login: String? = nil, url: URL? = nil, tab: PullRequestTab = .files, expansion: [String: Bool] = [:]) {
+        self.id = id
+        self.login = login
+        self.url = url
+        self.tab = tab
+        self.expansion = expansion
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, login, url, tab, expansion }
+
+    /// A window saved before a field existed restores with that field's default.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        login = try container.decodeIfPresent(String.self, forKey: .login)
+        url = try container.decodeIfPresent(URL.self, forKey: .url)
+        tab = try container.decodeIfPresent(PullRequestTab.self, forKey: .tab) ?? .files
+        expansion = try container.decodeIfPresent([String: Bool].self, forKey: .expansion) ?? [:]
+    }
 }
 extension PullRequest {
     /// The pull requests that merge when this one does: itself, and for a
@@ -34,7 +57,7 @@ enum Destination: Hashable, Sendable {
 }
 
 /// The tabs of a pull request's detail pane.
-enum PullRequestTab: Int, CaseIterable, Identifiable, Sendable {
+enum PullRequestTab: Int, CaseIterable, Identifiable, Sendable, Codable {
     case conversation, files, checks, sessions
 
     var id: Self { self }
