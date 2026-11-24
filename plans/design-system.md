@@ -60,6 +60,8 @@ All values are points, from `Theme`.
 | Detail panes | `detailInset` | 20 |
 | Detail panes | `cardCornerRadius`, `cardPadding` | 8, 12 |
 | Detail panes | `conversationMaxWidth` | 860 |
+| Comment editors | `composerMinHeight`, `composerMaxHeight` | 90, 260 |
+| Comment editors | `editorInset`, `editorCornerRadius` | 6, 6 |
 | Detail panes | `readingSectionSpacing` (between sections) | 28 |
 | Detail panes | `readingHeadingSpacing` (heading to body) | 8 |
 | Badges | corner radius, horizontal and vertical padding | 4, 7, 2 |
@@ -88,6 +90,8 @@ prose column, to fit code blocks and tables.
 | `LabelChip` | A GitHub label in its own color, adjusted to stay legible in light and dark. |
 | `AvatarView` | A round avatar, loaded once per URL through `AvatarCache`. |
 | `RelativeTime` | A compact age such as `5m` or `17h`. |
+| `mainAction(isDisabled:)` | A modifier for a form's main button: prominent while it can be pressed, an ordinary disabled button otherwise, so a disabled one doesn't read as the thing to press. |
+| `commentEditor(placeholder:isEmpty:)` | A modifier for a comment's `TextEditor`: inset body text in a bordered box, with a placeholder while empty. The review summary, the line comment composer, and the conversation's comment box use it. |
 
 ## macOS idioms in use
 

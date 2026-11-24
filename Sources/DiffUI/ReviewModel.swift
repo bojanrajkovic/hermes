@@ -117,7 +117,7 @@ final class ReviewModel {
     private var pullRequestID: String? { store.details[pullRequest.key]?.id }
     @ObservationIgnored private var saving: Task<Void, Never>?
 
-    init(pullRequest: PullRequest, store: GitHubStore, draftsRoot: URL = PendingReview.defaultRoot) {
+    init(pullRequest: PullRequest, store: GitHubStore, draftsRoot: URL = Drafts.defaultRoot) {
         self.pullRequest = pullRequest
         self.store = store
         draftsURL = PendingReview.url(root: draftsRoot, repository: pullRequest.repository, number: pullRequest.number)

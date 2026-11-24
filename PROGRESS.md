@@ -50,6 +50,10 @@ What is built and works, and what is known not to work or is unverified.
 - A pull request has four tabs: Conversation, Files, Checks, and Sessions.
 - Conversation shows the description, comments, review summaries, commits,
   linked issues, and a checks summary, with Markdown rendered as on github.com.
+- A comment box at the end of a pull request's or an issue's conversation
+  sends a comment outside any review. Unsent text is saved beside the item's
+  review drafts, so it survives switching items and quitting. The mutation is
+  verified against `bojanrajkovic/hermes-playground`.
 - Merging from the Merge menu, with the methods the repository allows:
   merging now, merging past unmet requirements when GitHub allows a bypass, and
   turning auto-merge on or off, with a badge in the header while it is on.

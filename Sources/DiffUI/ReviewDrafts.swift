@@ -1,6 +1,7 @@
 import DiffKit
 import Foundation
 import GitHubKit
+import StateKit
 
 /// A comment the user has added to their pending review. It stays on this
 /// Mac until the review is submitted.
@@ -76,12 +77,7 @@ struct PendingReview: Codable, Hashable, Sendable {
     /// Where the pending review of a pull request is saved:
     /// `<root>/drafts/<owner>/<repo>/<number>.json`.
     static func url(root: URL, repository: RepositoryRef, number: Int) -> URL {
-        root.appending(path: "drafts/\(repository.owner)/\(repository.name)/\(number).json")
-    }
-
-    /// `~/Library/Application Support/Hermes`.
-    static var defaultRoot: URL {
-        URL.applicationSupportDirectory.appending(path: "Hermes")
+        Drafts.url(root: root, repository: repository, number: number, extension: "json")
     }
 
     /// Reads a saved review. A missing or unreadable file gives an empty one.

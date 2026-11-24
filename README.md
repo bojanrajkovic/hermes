@@ -129,7 +129,7 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 | ⌃⌘V | Mark the current file as viewed or unviewed |
 | ⌃⌘L | Switch between the unified and side-by-side layouts |
 | ⌘+, ⌘-, ⌘0 | Bigger, smaller, or default code size |
-| ⌘↩ | Add the comment being written to the review, or submit the review |
+| ⌘↩ | Add the comment being written to the review, submit the review, or send a conversation comment |
 | ⌘F | Search the open log |
 | ⌘G and ⇧⌘G | Next and previous search match in the log |
 | ⌘, | Settings |

@@ -45,21 +45,8 @@ struct FinishReview: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Finish Your Review").font(.headline)
             TextEditor(text: $review.summary)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(6)
+                .commentEditor(placeholder: "Leave a summary (Markdown)", isEmpty: review.summary.isEmpty)
                 .frame(height: 110)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
-                .overlay(alignment: .topLeading) {
-                    if review.summary.isEmpty {
-                        Text("Leave a summary (Markdown)")
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .allowsHitTesting(false)
-                    }
-                }
                 .accessibilityLabel("Review summary")
 
             VStack(alignment: .leading, spacing: 8) {

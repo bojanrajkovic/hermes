@@ -65,6 +65,7 @@ struct IssueDetailView: View {
                                 )
                                 .id(comment.id)
                             }
+                            CommentComposer(key: key, subjectID: issue.id).id(key)
                         }
                     }
                 }
