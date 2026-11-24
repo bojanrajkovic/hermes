@@ -27,7 +27,7 @@ struct LiveTests {
         let diff = try await client.pullRequestDiff(repository: pullRequest.repository, number: pullRequest.number)
         #expect(diff.hasPrefix("diff --git"))
 
-        let checks = try await client.checks(repository: pullRequest.repository, commitOID: pullRequest.headOID)
+        let checks = try await client.checks(repository: pullRequest.repository, commitOID: pullRequest.headOID).checks
         let job = checks.lazy.compactMap { check -> CheckRun? in
             // A skipped job never ran, so it has no log.
             if case .run(let run) = check, run.workflow != nil, run.conclusion == .success { run } else { nil }

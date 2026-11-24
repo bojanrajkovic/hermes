@@ -100,6 +100,20 @@ extension CheckRun: Decodable {
     }
 }
 
+/// What `GitHubClient.checks(repository:commitOID:)` finds on a commit.
+public struct CommitCheckList: Sendable, Hashable {
+    public let checks: [Check]
+    /// GitHub Actions workflow runs that wait for a maintainer to approve them, as a run from a
+    /// fork does when the repository requires approval for outside contributors. Such a run has
+    /// no jobs yet, so it is not among `checks`, and a required check it would report stays missing.
+    public let awaitingApproval: [CheckRun.Workflow]
+
+    public init(checks: [Check], awaitingApproval: [CheckRun.Workflow]) {
+        self.checks = checks
+        self.awaitingApproval = awaitingApproval
+    }
+}
+
 /// A legacy commit status, reported through the Statuses API.
 public struct StatusContext: Sendable, Hashable, Decodable {
     /// The status's name, such as "ci/circleci: build".

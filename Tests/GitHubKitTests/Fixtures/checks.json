@@ -53,6 +53,36 @@
               }
             ]
           }
+        },
+        "checkSuites": {
+          "nodes": [
+            {
+              "conclusion": "SUCCESS",
+              "workflowRun": {
+                "databaseId": 42944768580,
+                "workflow": {
+                  "name": "CI"
+                }
+              }
+            },
+            {
+              "conclusion": "ACTION_REQUIRED",
+              "workflowRun": {
+                "databaseId": 44657416107,
+                "workflow": {
+                  "name": "Lint"
+                }
+              }
+            },
+            {
+              "conclusion": "ACTION_REQUIRED",
+              "workflowRun": null
+            },
+            {
+              "conclusion": null,
+              "workflowRun": null
+            }
+          ]
         }
       }
     }

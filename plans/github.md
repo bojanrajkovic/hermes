@@ -85,7 +85,8 @@ sequenceDiagram
 | `pullRequestDetail` | GraphQL | Description, comments, reviews, requested reviewers, commits, review threads. |
 | `pullRequestRevision` | GraphQL | Head commit and update time. The cheap call for polling. |
 | `pullRequestDiff` | REST | Unified diff text. Throws `diffTooLarge` when GitHub refuses to render it. |
-| `checks(repository:commitOID:)` | GraphQL | Check runs and legacy commit statuses of a commit. |
+| `checks(repository:commitOID:)` | GraphQL | Check runs and legacy commit statuses of a commit, and its workflow runs that wait for approval. See [Workflow runs waiting for approval](#workflow-runs-waiting-for-approval). |
+| `approveWorkflowRun(repository:runID:)` | REST | Approves a workflow run that waits for a maintainer, so it starts. |
 | `jobLogs(repository:jobID:)` | REST | The log of a GitHub Actions job. |
 | `rerunJob(repository:jobID:)` | REST | Runs a failed GitHub Actions job again, with the jobs that depend on it. |
 | `rerunFailedJobs(repository:runID:)` | REST | Runs the failed and cancelled jobs of a workflow run again. |
@@ -166,6 +167,37 @@ GitHub refuses the ordinary merge call for a stacked pull request, so a
 stacked one is merged with the `gh stack` extension, which also merges every
 member below it. `GH_REPO` tells the extension the repository, because it
 otherwise reads it from the working directory.
+
+## Workflow runs waiting for approval
+
+A repository can require a maintainer to approve GitHub Actions runs from a fork before
+they start. Until then GitHub creates the run's check suite with the conclusion
+`ACTION_REQUIRED` and no check runs. The commit's `statusCheckRollup` leaves it out, so a
+required check the run would report is missing, and the pull request is blocked while
+every listed check has passed.
+
+`checks(repository:commitOID:)` also reads the commit's first 100 check suites and keeps
+each one that concluded `ACTION_REQUIRED` and has a workflow run. The Checks tab and the
+overview's checks summary list those runs above the checks, with an Approve button that
+calls `approveWorkflowRun` for each and then reloads the checks. The reload runs even when
+GitHub refuses a run, so the row shows what still waits. GitHub can approve a commit's
+other waiting runs along with the first and then refuse the rest, so a refusal shows an
+error only when the reload still finds a run waiting. While a run waits, the checks reload
+every 10 seconds, so an approval on github.com clears the row.
+
+```mermaid
+sequenceDiagram
+    participant V as Checks view
+    participant S as GitHubStore
+    participant G as GitHub
+    S->>G: checks: statusCheckRollup + checkSuites
+    G-->>S: checks, suites (CI: ACTION_REQUIRED, no runs)
+    S-->>V: awaitingApproval = [CI]
+    V->>G: POST /actions/runs/{id}/approve
+    V->>S: loadChecks, 3 seconds later
+    S->>G: checks
+    G-->>S: CI's jobs, queued
+```
 
 When a missing review or check blocks the merge, or the branch is behind its
 base, and GitHub's `viewerCanMergeAsAdmin` is true, the Merge menu offers

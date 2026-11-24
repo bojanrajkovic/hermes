@@ -107,8 +107,9 @@ actor TokenCounter {
 
         let checks = try await client.checks(repository: repository, commitOID: "abc")
 
-        #expect(checks.map(\.id) == ["run-1", "run-2", "run-3"])
-        #expect(StubProtocol.requests.withLock { $0.count } == 3)
+        #expect(checks.checks.map(\.id) == ["run-1", "run-2", "run-3"])
+        // Only the first page asks for the check suites.
+        #expect(StubProtocol.requests.withLock { $0.map { $0.body.contains(#""paging":true"#) } } == [false, true, true])
     }
 
     /// Answers the two queries of `openPullRequests`: a search that finds

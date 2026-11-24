@@ -193,6 +193,54 @@ struct CheckListFooter: View {
     }
 }
 
+/// Workflow runs that wait for a maintainer's approval, with a button that approves them.
+/// GitHub doesn't list such runs among a commit's checks, so without this row a required
+/// check they would report looks missing for no visible reason.
+struct AwaitingApprovalRow: View {
+    let runs: [CheckRun.Workflow]
+    /// Approves every run in `runs` and reloads the checks.
+    let approve: () async throws -> Void
+
+    @State private var isApproving = false
+    @State private var approveError: String?
+
+    var body: some View {
+        HStack(spacing: Metrics.rowSpacing) {
+            StatusGlyph(state: .actionRequired)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Waiting for approval")
+                    .font(Theme.Fonts.tableCell)
+                    .lineLimit(1)
+                Text(runs.map(\.name).joined(separator: ", "))
+                    .font(Theme.Fonts.meta)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: Metrics.rowSpacing)
+            Button("Approve") {
+                Task {
+                    isApproving = true
+                    defer { isApproving = false }
+                    do { try await approve() } catch { approveError = ChecksError.message(for: error) }
+                }
+            }
+            .controlSize(.small)
+            .disabled(isApproving)
+            .help("Approve these workflow runs so they start")
+        }
+        .alert(
+            "Couldn't Approve the Workflows",
+            isPresented: Binding { approveError != nil } set: { if !$0 { approveError = nil } }
+        ) {
+            Button("OK") { approveError = nil }
+        } message: {
+            Text(approveError ?? "")
+        }
+    }
+}
+
 /// Why the latest refresh failed, next to checks that may be out of date.
 struct RefreshErrorLabel: View {
     let message: String

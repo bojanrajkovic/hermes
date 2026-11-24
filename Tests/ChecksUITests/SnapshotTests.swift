@@ -94,6 +94,29 @@ func snapshot(
         }
     }
 
+    @Test func awaitingApproval() async throws {
+        let checks = [run("PR title", workflow: "PR Title")]
+        let one = [CheckRun.Workflow(name: "CI", runID: 1)]
+        let two = one + [CheckRun.Workflow(name: "Lint", runID: 2)]
+        try await snapshot("approval-list", size: CGSize(width: 300, height: 200)) {
+            CheckListView(groups: CheckList.grouped(checks), selection: .constant(nil), rerun: { _ in })
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    AwaitingApprovalRow(runs: two) {}
+                        .padding(.horizontal, Metrics.barHorizontalPadding)
+                        .padding(.vertical, Metrics.barVerticalPadding)
+                        .background(.bar)
+                        .overlay(alignment: .bottom) { Divider() }
+                }
+        }
+        try await snapshot("approval-summary", size: CGSize(width: 360, height: 110)) {
+            VStack(alignment: .leading, spacing: 2) {
+                AwaitingApprovalRow(runs: one) {}.padding(.bottom, 2)
+                CheckSummaryList(checks: checks, onSelect: { _ in })
+            }
+            .padding()
+        }
+    }
+
     @Test func steps() async throws {
         let start = now.addingTimeInterval(-90)
         let steps = [
@@ -165,7 +188,7 @@ func snapshot(
             ChecksScreen(repository: playground, commitOID: commit, store: store)
         }
         // Looked up by name: a re-run gives the check a new ID.
-        let build = try #require(try await client.checks(repository: playground, commitOID: commit).first { $0.name == "build" })
+        let build = try #require(try await client.checks(repository: playground, commitOID: commit).checks.first { $0.name == "build" })
         try await snapshot("screen-passing", size: CGSize(width: 1100, height: 640), settle: .seconds(5)) {
             ChecksScreen(repository: playground, commitOID: commit, store: store, initiallySelected: build.id)
         }

@@ -190,6 +190,16 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(checks[0].outcome == .passed)
     }
 
+    /// A run waiting for approval is a suite that concluded "action required" with no jobs. A
+    /// suite from another app has no workflow run, so there's nothing to approve.
+    @Test func onlyWorkflowRunsThatNeedActionAwaitApproval() throws {
+        let suites = try #require(
+            try graphQLFixture("checks", as: RepositoryData<ChecksField>.self).repository.object?.checkSuites?.nodes
+        )
+
+        #expect(suites.compactMap(\.awaitingApproval) == [CheckRun.Workflow(name: "Lint", runID: 44_657_416_107)])
+    }
+
     // No repository at hand reports legacy statuses, so this response is written by hand.
     @Test func statusContextsAndThirdPartyRunsDecode() throws {
         let json = """

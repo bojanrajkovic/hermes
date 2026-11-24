@@ -6,8 +6,9 @@ import SwiftUI
 /// The CI checks of one commit: a list of checks grouped by workflow, and the
 /// selected check's log, steps, or summary beside it.
 ///
-/// The store reloads the list every ten seconds while a check is queued or running, and
-/// for the first two minutes while the commit has no checks yet.
+/// The store reloads the list every ten seconds while a check is queued or running or a
+/// workflow run waits for approval, and for the first two minutes while the commit has no
+/// checks yet.
 public struct ChecksScreen: View {
     private let commit: CommitKey
     private let store: GitHubStore
@@ -37,6 +38,16 @@ public struct ChecksScreen: View {
                     rollup: state?.isLoaded == true ? CheckList.rollup(checks) : "", refreshError: state?.refreshError,
                     rerunFailed: rerunFailed(checks), isRerunning: model.isRerunning, refresh: reload
                 )
+            }
+            // Outside the loading view, so it shows when the waiting runs are all the commit has.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let runs = state?.awaitingApproval, !runs.isEmpty {
+                    AwaitingApprovalRow(runs: runs) { try await approve(runs, on: commit, in: store) }
+                        .padding(.horizontal, Metrics.barHorizontalPadding)
+                        .padding(.vertical, Metrics.barVerticalPadding)
+                        .background(.bar)
+                        .overlay(alignment: .bottom) { Divider() }
+                }
             }
             .frame(minWidth: Metrics.listMinWidth, idealWidth: Metrics.listIdealWidth, maxWidth: Metrics.listMaxWidth)
 
@@ -112,6 +123,10 @@ public struct ChecksSummary: View {
     public var body: some View {
         let state = store.checks[commit]
         VStack(alignment: .leading, spacing: 2) {
+            if let runs = state?.awaitingApproval, !runs.isEmpty {
+                AwaitingApprovalRow(runs: runs) { try await approve(runs, on: commit, in: store) }
+                    .padding(.bottom, 2)
+            }
             ChecksLoadingView(state: state, isCompact: true, retry: { Task { await store.loadChecks(commit) } }) {
                 CheckSummaryList(checks: state?.checks ?? [], onSelect: onSelect)
             }
@@ -124,6 +139,28 @@ public struct ChecksSummary: View {
         }
         .showing(.checks(commit), in: store)
     }
+}
+
+/// Approves workflow runs that wait for a maintainer, then reloads the commit's checks so the
+/// runs' jobs show. The reload runs after a refusal too, so the list shows what still waits.
+///
+/// - Throws: The first refusal, unless the reload finds no run still waiting. GitHub can
+///   approve a commit's other waiting runs along with the first, and then refuses the rest.
+@MainActor
+private func approve(_ runs: [CheckRun.Workflow], on commit: CommitKey, in store: GitHubStore) async throws {
+    var refusal: (any Error)?
+    for run in runs {
+        do {
+            try await store.client.approveWorkflowRun(repository: commit.repository, runID: run.runID)
+        } catch {
+            refusal = refusal ?? error
+        }
+    }
+
+    // GitHub queues the jobs a moment after it answers.
+    try? await Task.sleep(for: ChecksModel.rerunSettle)
+    await store.loadChecks(commit)
+    if let refusal, store.checks[commit]?.awaitingApproval.isEmpty != true { throw refusal }
 }
 
 /// Shows `content` once the checks have loaded and there are some; otherwise
@@ -164,7 +201,11 @@ private struct ChecksLoadingView<Content: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         } else if state?.checks.isEmpty ?? true {
-            if isCompact {
+            if state?.awaitingApproval.isEmpty == false {
+                // The approval row above says why nothing has reported yet. The full screen
+                // still fills its pane, so the row and footer stay at its edges.
+                if !isCompact { Color.clear }
+            } else if isCompact {
                 Label("No checks ran on this commit", systemImage: "checklist")
                     .font(Theme.Fonts.meta)
                     .foregroundStyle(.secondary)
