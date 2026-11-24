@@ -3,6 +3,8 @@ import DiffUI
 import GitHubKit
 import HermesUI
 import SessionsUI
+import StateKit
+import os
 import SwiftUI
 
 @main
@@ -39,8 +41,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
 
+    /// Restores the store's snapshot before windows open, so their first frame shows the lists.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        store.github.restore(from: StoreSnapshot.url)
+    }
+
     /// Comes to the front: launched by `open` from a background process, macOS can leave the app behind.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { await saveSnapshots() }
         NSApp.activate()
         if store.usesWebhooks { WebhookForwarder.endLeftovers() }
         store.relays.sync()
@@ -54,6 +62,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         store.forwarders.stopAll()
         store.relays.stopAll()
+        Self.write(store.github.snapshot())
+    }
+
+    /// Saves the store's snapshot every 2 minutes, so a crash loses little. Encoding and
+    /// writing run off the main actor.
+    private func saveSnapshots() async {
+        while (try? await Task.sleep(for: .seconds(120))) != nil {
+            let snapshot = store.github.snapshot()
+            await Task.detached(priority: .utility) { Self.write(snapshot) }.value
+        }
+    }
+
+    nonisolated private static func write(_ snapshot: StoreSnapshot) {
+        do {
+            try snapshot.write(to: StoreSnapshot.url)
+        } catch {
+            Logger(subsystem: "com.coderinserepeat.hermes", category: "store")
+                .error("snapshot not saved: \(error, privacy: .public)")
+        }
     }
 
     /// Closing the last window quits, as it did with one window. The quit still asks about running sessions.

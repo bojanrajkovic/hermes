@@ -26,7 +26,9 @@ public final class GitHubStore {
     public internal(set) var issueLists: [RepositoryRef: IssueList] = [:]
 
     /// The signed-in user's login. Nil until sign-in finishes.
-    public var viewer: String?
+    public internal(set) var viewer: String?
+    /// Who saved the snapshot restored at launch. Nil once sign-in checks it.
+    @ObservationIgnored var restoredViewer: String?
 
     /// Each open pull request's description, conversation, reviews, commits, and review threads.
     public internal(set) var details: [ItemKey: PullRequestDetail] = [:]

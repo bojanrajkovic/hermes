@@ -1,7 +1,7 @@
 import Foundation
 
 /// The side of a diff a line is on.
-public enum DiffSide: String, Sendable, Hashable, Decodable {
+public enum DiffSide: String, Sendable, Hashable, Codable {
     /// The base version: deleted lines.
     case left = "LEFT"
     /// The head version: added and unchanged lines.
@@ -9,8 +9,8 @@ public enum DiffSide: String, Sendable, Hashable, Decodable {
 }
 
 /// A submitted or pending review.
-public struct Review: Sendable, Hashable, Identifiable, Decodable {
-    public enum State: String, Sendable, Hashable, Decodable {
+public struct Review: Sendable, Hashable, Identifiable, Codable {
+    public enum State: String, Sendable, Hashable, Codable {
         /// Started but not submitted. Only its author sees it.
         case pending = "PENDING"
         case commented = "COMMENTED"
@@ -44,7 +44,7 @@ public enum RequestedReviewer: Sendable, Hashable {
     case team(name: String, slug: String)
 }
 
-extension RequestedReviewer: Decodable {
+extension RequestedReviewer: Codable {
     private enum CodingKeys: String, CodingKey {
         case typename = "__typename"
         case name, slug
@@ -59,6 +59,18 @@ extension RequestedReviewer: Decodable {
             )
         } else {
             self = .user(try User(from: decoder))
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        switch self {
+        case .user(let user):
+            try user.encode(to: encoder)
+        case .team(let name, let slug):
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode("Team", forKey: .typename)
+            try container.encode(name, forKey: .name)
+            try container.encode(slug, forKey: .slug)
         }
     }
 }
@@ -78,7 +90,7 @@ public struct Commit: Sendable, Hashable, Identifiable {
     }
 }
 
-extension Commit: Decodable {
+extension Commit: Codable {
     private enum CodingKeys: String, CodingKey {
         case oid
         case headline = "messageHeadline"
@@ -122,7 +134,7 @@ public struct ReviewThread: Sendable, Hashable, Identifiable {
     }
 }
 
-extension ReviewThread: Decodable {
+extension ReviewThread: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, path, line, startLine, diffSide, startDiffSide, isResolved, isOutdated, comments
     }
@@ -138,6 +150,19 @@ extension ReviewThread: Decodable {
         isResolved = try container.decode(Bool.self, forKey: .isResolved)
         isOutdated = try container.decode(Bool.self, forKey: .isOutdated)
         comments = try container.decode(Connection<Comment>.self, forKey: .comments).nodes
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(path, forKey: .path)
+        try container.encodeIfPresent(line, forKey: .line)
+        try container.encodeIfPresent(startLine, forKey: .startLine)
+        try container.encode(diffSide, forKey: .diffSide)
+        try container.encodeIfPresent(startDiffSide, forKey: .startDiffSide)
+        try container.encode(isResolved, forKey: .isResolved)
+        try container.encode(isOutdated, forKey: .isOutdated)
+        try container.encode(Connection(comments), forKey: .comments)
     }
 }
 
@@ -170,14 +195,14 @@ public struct PullRequestDetail: Sendable, Hashable, Identifiable {
     }
 }
 
-extension PullRequestDetail: Decodable {
+extension PullRequestDetail: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, body, comments, reviews, reviewRequests, commits, reviewThreads
     }
 
     // Null when the requested reviewer is a team the viewer cannot see.
-    private struct Request: Decodable { let requestedReviewer: RequestedReviewer? }
-    private struct CommitNode: Decodable { let commit: Commit }
+    private struct Request: Codable { let requestedReviewer: RequestedReviewer? }
+    private struct CommitNode: Codable { let commit: Commit }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -190,11 +215,23 @@ extension PullRequestDetail: Decodable {
         commits = try container.decode(Connection<CommitNode>.self, forKey: .commits).nodes.map(\.commit)
         reviewThreads = try container.decode(Connection<ReviewThread>.self, forKey: .reviewThreads).nodes
     }
+
+    /// Writes the shape `init(from:)` reads, for the store's cache.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(body, forKey: .body)
+        try container.encode(Connection(comments), forKey: .comments)
+        try container.encode(Connection(reviews), forKey: .reviews)
+        try container.encode(Connection(requestedReviewers.map(Request.init)), forKey: .reviewRequests)
+        try container.encode(Connection(commits.map(CommitNode.init)), forKey: .commits)
+        try container.encode(Connection(reviewThreads), forKey: .reviewThreads)
+    }
 }
 
 /// What changes when someone pushes to or edits a pull request, and which
 /// files the viewer marked viewed.
-public struct PullRequestRevision: Sendable, Hashable {
+public struct PullRequestRevision: Sendable, Hashable, Codable {
     /// The head commit's SHA.
     public let headOID: String
     /// When GitHub last recorded activity. Marking a file viewed does not change it.

@@ -3,7 +3,7 @@ import Foundation
 /// A check run: one job reported through the Checks API, by GitHub Actions or
 /// another app.
 public struct CheckRun: Sendable, Hashable {
-    public enum Status: String, Sendable, Hashable, Decodable {
+    public enum Status: String, Sendable, Hashable, Codable {
         case requested = "REQUESTED"
         case queued = "QUEUED"
         case inProgress = "IN_PROGRESS"
@@ -12,7 +12,7 @@ public struct CheckRun: Sendable, Hashable {
         case pending = "PENDING"
     }
 
-    public enum Conclusion: String, Sendable, Hashable, Decodable {
+    public enum Conclusion: String, Sendable, Hashable, Codable {
         case success = "SUCCESS"
         case failure = "FAILURE"
         case neutral = "NEUTRAL"
@@ -68,15 +68,15 @@ public struct CheckRun: Sendable, Hashable {
     }
 }
 
-extension CheckRun: Decodable {
+extension CheckRun: Codable {
     private enum CodingKeys: String, CodingKey {
         case databaseId, name, status, conclusion, startedAt, completedAt, detailsUrl, checkSuite
     }
 
-    private struct Suite: Decodable {
-        struct App: Decodable { let name: String }
-        struct WorkflowRun: Decodable {
-            struct Workflow: Decodable { let name: String }
+    private struct Suite: Codable {
+        struct App: Codable { let name: String }
+        struct WorkflowRun: Codable {
+            struct Workflow: Codable { let name: String }
             let databaseId: Int
             let workflow: Workflow
         }
@@ -98,6 +98,22 @@ extension CheckRun: Decodable {
         appName = suite.app?.name
         workflow = suite.workflowRun.map { Workflow(name: $0.workflow.name, runID: $0.databaseId) }
     }
+
+    /// Writes the shape `init(from:)` reads, for the store's cache.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(databaseID, forKey: .databaseId)
+        try container.encode(name, forKey: .name)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(conclusion, forKey: .conclusion)
+        try container.encodeIfPresent(startedAt, forKey: .startedAt)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(detailsURL, forKey: .detailsUrl)
+        try container.encode(Suite(
+            app: appName.map(Suite.App.init),
+            workflowRun: workflow.map { .init(databaseId: $0.runID, workflow: .init(name: $0.name)) }
+        ), forKey: .checkSuite)
+    }
 }
 
 /// What `GitHubClient.checks(repository:commitOID:)` finds on a commit.
@@ -115,7 +131,7 @@ public struct CommitCheckList: Sendable, Hashable {
 }
 
 /// A legacy commit status, reported through the Statuses API.
-public struct StatusContext: Sendable, Hashable, Decodable {
+public struct StatusContext: Sendable, Hashable, Codable {
     /// The status's name, such as "ci/circleci: build".
     public let context: String
     public let state: StatusState
@@ -201,7 +217,7 @@ public enum Check: Sendable, Hashable, Identifiable {
     }
 }
 
-extension Check: Decodable {
+extension Check: Codable {
     private enum CodingKeys: String, CodingKey { case typename = "__typename" }
 
     public init(from decoder: any Decoder) throws {
@@ -213,6 +229,18 @@ extension Check: Decodable {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath, debugDescription: "Unknown check type \(typename)"
             ))
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .run(let run):
+            try container.encode("CheckRun", forKey: .typename)
+            try run.encode(to: encoder)
+        case .status(let status):
+            try container.encode("StatusContext", forKey: .typename)
+            try status.encode(to: encoder)
         }
     }
 }

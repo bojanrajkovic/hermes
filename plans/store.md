@@ -44,6 +44,89 @@ graph TD
 Records stay until the app quits. A screen that shows one again makes the
 store load it again, so a kept record doesn't stay stale on screen.
 
+## Cache between launches
+
+The store saves its tables to `~/Library/Caches/Hermes/store.json` and
+restores them at the next launch, before any window opens. The lists show
+at once instead of after the first refresh. The file is a cache, not a
+second home for GitHub state: the store reads it once, and every fetch
+after that writes over what it restored.
+
+```mermaid
+sequenceDiagram
+    participant D as AppDelegate
+    participant S as GitHubStore
+    participant F as store.json
+    D->>S: restore(from:) in applicationWillFinishLaunching
+    S->>F: read and decode
+    F-->>S: snapshot, or nothing
+    Note over S: windows open and poll
+    loop every 2 minutes
+        D->>S: snapshot()
+        D->>F: encode and write, off the main actor
+    end
+    D->>F: snapshot().write(to:) in applicationWillTerminate
+```
+
+What it keeps:
+
+| Kept | Left out |
+|---|---|
+| The pull requests in an account's open list, and their `details`, `readiness`, and `revisions`. | Pull requests that are in no list, such as one opened by link. |
+| `repositories`, with each record's fetch time. The sidebar's issue counts live here. | `issues`, `issueLists`, and `issueDetails`. |
+| `accounts`: the open list, repositories, review signals, `hasLoaded`, and `pullRequestsLoadedAt`. | `detailErrors`, `issueDetailErrors`, and the errors in `AccountLists` and `CommitChecks`. |
+| The loaded checks of each kept pull request's head commit. | Load state: `isRefreshing`, `lastAttempt`, `repositoriesTriedAt`, `lastRefresh`. |
+| | The bookkeeping that orders loads: write counters, load counters, `AppliedPayloads`, and what each detail was loaded for. |
+
+Keeping only what the account lists name stops the file from growing across
+launches. Issue lists stay out for the same reason: every refresh reloads
+each issue list the store holds, one request per repository, so carrying
+them across launches would grow that cost without end. A repository's
+Issues list loads its first page when opened, and ⌘K finds issues once a
+list has loaded.
+
+**A restored value never beats a fetched one.** Restoring merges into the
+tables and keeps any record a fetch already wrote. After that, every fetch
+writes over a restored record: plain tables take any write, and a `Stamped`
+value keeps the start time of the fetch that produced it, which is before
+any fetch this launch makes. The bookkeeping starts empty, so each screen's
+first poll loads its detail, readiness, and checks, and no write counter or
+payload makes a load drop its answer.
+
+**The first refresh loads only what changed.** `pullRequestsLoadedAt` is
+restored, so the account's first refresh searches for pull requests updated
+since the last launch's load. That finds pull requests that closed while
+Hermes was quit, and costs a few requests instead of a full load.
+
+**An account that loaded over a day ago isn't restored.** GitHub's search
+returns at most 1,000 results. After a longer gap, a busy organization could
+have more closed pull requests than that, and the ones the search missed
+would stay listed. The check reads each account's own `pullRequestsLoadedAt`,
+not the file's save time, because an account no window has shown keeps its
+old load time through every save. Leaving it out also drops it from the next
+save, so the file doesn't collect accounts nobody opens.
+
+**Another user's snapshot is dropped at sign-in.** The snapshot records the
+signed-in user. When `gh` now signs in as someone else, `signedIn(as:)`
+empties the restored tables, so the last user's private pull requests don't
+show.
+
+**A file that doesn't decode is deleted**, such as one an older build wrote.
+There is no migration: the next launch loads from GitHub.
+
+**Encoding.** GitHubKit's models decode GitHub's GraphQL shapes with
+hand-written `init(from:)`. Their `encode(to:)` writes the same shape back,
+so each model has one decoder for both GitHub and the cache, and a
+round-trip test catches a decoder and encoder that drift apart. A separate
+cache format would have needed a second decoder per model, because a type
+has only one `Decodable` conformance. One value has no GraphQL shape:
+`ChecksRollup.optionalFailed`, which Hermes works out itself. `PullRequest`
+writes its rollup under an extra `checkState` key, which the decoder reads
+when it is present.
+
+Snapshot mode (`HERMES_SNAPSHOT_DIR`) doesn't create the app delegate, so it
+neither reads nor writes the cache.
+
 ## Which answer wins
 
 Two fetches can return the same fact in either order. The one that started

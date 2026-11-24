@@ -35,3 +35,13 @@ public struct IssueList: Sendable {
 
     public init() {}
 }
+
+/// The store's cache keeps the lists and what the next refresh needs, not the state of a load.
+extension AccountLists: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case openPullRequests, repositories, signals, hasLoaded
+        /// Kept so the first refresh after a launch loads only what changed since.
+        case pullRequestsLoadedAt
+    }
+}
+

@@ -1,14 +1,14 @@
 import Foundation
 
 /// The combined review outcome GitHub computes for a pull request.
-public enum ReviewDecision: String, Sendable, Hashable, Decodable {
+public enum ReviewDecision: String, Sendable, Hashable, Codable {
     case approved = "APPROVED"
     case changesRequested = "CHANGES_REQUESTED"
     case reviewRequired = "REVIEW_REQUIRED"
 }
 
 /// Whether a pull request merges cleanly into its base.
-public enum MergeableState: String, Sendable, Hashable, Decodable {
+public enum MergeableState: String, Sendable, Hashable, Codable {
     case mergeable = "MERGEABLE"
     /// The pull request has merge conflicts.
     case conflicting = "CONFLICTING"
@@ -17,7 +17,7 @@ public enum MergeableState: String, Sendable, Hashable, Decodable {
 }
 
 /// The state of a commit status, and of the rollup of all checks on a commit.
-public enum StatusState: String, Sendable, Hashable, Decodable {
+public enum StatusState: String, Sendable, Hashable, Codable {
     case success = "SUCCESS"
     case failure = "FAILURE"
     case error = "ERROR"
@@ -27,7 +27,7 @@ public enum StatusState: String, Sendable, Hashable, Decodable {
 }
 
 /// What the checks on a pull request's head commit amount to.
-public enum ChecksRollup: Sendable, Hashable {
+public enum ChecksRollup: String, Sendable, Hashable, Codable {
     case passed
     /// A check is queued or running, and no required check has failed.
     case pending
@@ -51,7 +51,7 @@ public enum ChecksRollup: Sendable, Hashable {
 }
 
 /// A pull request's place in a stack of dependent pull requests.
-public struct StackEntry: Sendable, Hashable {
+public struct StackEntry: Sendable, Hashable, Codable {
     /// The stack's node ID.
     public let stackID: String
     /// The stack's number within its repository.
@@ -73,7 +73,7 @@ public struct StackEntry: Sendable, Hashable {
 }
 
 /// Someone a pull request asks for a review.
-public enum Reviewer: Sendable, Hashable {
+public enum Reviewer: Sendable, Hashable, Codable {
     case user(login: String)
     case team(organization: String, slug: String)
 }
@@ -156,39 +156,50 @@ public struct PullRequest: Sendable, Hashable, Identifiable {
     }
 }
 
-extension PullRequest: Decodable {
+extension PullRequest: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, number, title, url, repository, author, isDraft, createdAt, updatedAt, headRefName
         case baseRefName, headRefOid, reviewDecision, additions, deletions, changedFiles, mergeable
         case labels, commits, stack, stackEntry, closingIssuesReferences, autoMergeRequest
         case reviewRequests, viewerLatestReview, state, isCrossRepository
+        /// Not GitHub's: the store's cache writes it, because GitHub's rollup can't say `optionalFailed`.
+        case checkState
     }
 
-    private struct HeadCommit: Decodable {
-        struct Commit: Decodable {
-            struct Rollup: Decodable { let state: StatusState }
+    private struct HeadCommit: Codable {
+        struct Commit: Codable {
+            struct Rollup: Codable { let state: StatusState }
             let statusCheckRollup: Rollup?
         }
         let commit: Commit
     }
 
-    private struct Stack: Decodable {
+    private struct Stack: Codable {
         let id: String
         let number: Int
         let size: Int
         let baseRefName: String
     }
 
-    private struct AutoMerge: Decodable { let mergeMethod: MergeMethod }
-    private struct ReviewRequest: Decodable {
-        struct Requested: Decodable {
-            struct Organization: Decodable { let login: String }
+    private struct AutoMerge: Codable { let mergeMethod: MergeMethod }
+    private struct ReviewRequest: Codable {
+        struct Requested: Codable {
+            struct Organization: Codable { let login: String }
             let login: String?
             let slug: String?
             let organization: Organization?
         }
         /// Nil when the viewer may not see the team.
         let requestedReviewer: Requested?
+
+        init(_ reviewer: Reviewer) {
+            switch reviewer {
+            case .user(let login):
+                requestedReviewer = Requested(login: login, slug: nil, organization: nil)
+            case .team(let organization, let slug):
+                requestedReviewer = Requested(login: nil, slug: slug, organization: .init(login: organization))
+            }
+        }
 
         var reviewer: Reviewer? {
             if let slug = requestedReviewer?.slug, let organization = requestedReviewer?.organization {
@@ -199,14 +210,14 @@ extension PullRequest: Decodable {
         }
     }
 
-    private struct Review: Decodable {
-        struct Commit: Decodable { let oid: String }
+    private struct Review: Codable {
+        struct Commit: Codable { let oid: String }
         let state: String
         let commit: Commit?
     }
 
-    private struct Position: Decodable { let position: Int }
-    private struct Number: Decodable { let number: Int }
+    private struct Position: Codable { let position: Int }
+    private struct Number: Codable { let number: Int }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -229,7 +240,8 @@ extension PullRequest: Decodable {
         changedFileCount = try container.decode(Int.self, forKey: .changedFiles)
         mergeable = try container.decode(MergeableState.self, forKey: .mergeable)
         labels = try container.decode(Connection<GitHubLabel>.self, forKey: .labels).nodes
-        checkState = try container.decode(Connection<HeadCommit>.self, forKey: .commits)
+        checkState = try container.decodeIfPresent(ChecksRollup.self, forKey: .checkState)
+            ?? container.decode(Connection<HeadCommit>.self, forKey: .commits)
             .nodes.last?.commit.statusCheckRollup.map { ChecksRollup($0.state) }
         closingIssueNumbers = try container.decode(Connection<Number>.self, forKey: .closingIssuesReferences)
             .nodes.map(\.number)
@@ -250,6 +262,47 @@ extension PullRequest: Decodable {
             )
         } else {
             self.stack = nil
+        }
+    }
+
+    /// Writes the shape `init(from:)` reads, for the store's cache.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(number, forKey: .number)
+        try container.encode(title, forKey: .title)
+        try container.encode(url, forKey: .url)
+        try container.encode(repository, forKey: .repository)
+        try container.encodeIfPresent(author, forKey: .author)
+        try container.encode(isDraft, forKey: .isDraft)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(headRefName, forKey: .headRefName)
+        try container.encode(baseRefName, forKey: .baseRefName)
+        try container.encode(isCrossRepository, forKey: .isCrossRepository)
+        try container.encode(headOID, forKey: .headRefOid)
+        try container.encodeIfPresent(reviewDecision, forKey: .reviewDecision)
+        try container.encode(additions, forKey: .additions)
+        try container.encode(deletions, forKey: .deletions)
+        try container.encode(changedFileCount, forKey: .changedFiles)
+        try container.encode(mergeable, forKey: .mergeable)
+        try container.encode(Connection(labels), forKey: .labels)
+        // `checkState` carries the rollup, so the commit list the decoder also requires stays empty.
+        try container.encode(Connection<HeadCommit>([]), forKey: .commits)
+        try container.encodeIfPresent(checkState, forKey: .checkState)
+        try container.encode(Connection(closingIssueNumbers.map(Number.init)), forKey: .closingIssuesReferences)
+        try container.encodeIfPresent(autoMergeMethod.map(AutoMerge.init), forKey: .autoMergeRequest)
+        try container.encode(Connection(requestedReviewers.map(ReviewRequest.init)), forKey: .reviewRequests)
+        try container.encodeIfPresent(
+            viewerReviewedCommit.map { Review(state: "COMMENTED", commit: .init(oid: $0)) }, forKey: .viewerLatestReview
+        )
+        try container.encode(state, forKey: .state)
+        if let stack {
+            try container.encode(
+                Stack(id: stack.stackID, number: stack.stackNumber, size: stack.size, baseRefName: stack.baseRefName),
+                forKey: .stack
+            )
+            try container.encode(Position(position: stack.position), forKey: .stackEntry)
         }
     }
 }

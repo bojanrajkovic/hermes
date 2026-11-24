@@ -26,3 +26,5 @@ public struct Stamped<Value: Sendable>: Sendable {
 }
 
 extension Stamped: Equatable where Value: Equatable {}
+
+extension Stamped: Codable where Value: Codable {}
