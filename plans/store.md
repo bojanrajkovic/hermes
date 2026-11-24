@@ -34,11 +34,11 @@ graph TD
 | `repositories` | Each repository's URL, visibility, and open issue count. | The account's repository load and every issue page. |
 | `accounts[login]` | The account's open pull requests and repositories, as keys, plus its review signals and load state. | The account's refresh. |
 | `issueLists[repo]` | The loaded part of a repository's open issues, as keys, and its cursor. | Issue pages. |
-| `details[key]` | A pull request's description, conversation, reviews, commits, and review threads. The conversation tab and the diff's review threads read it. | The pull request's poll, webhook changes, and a submitted review. |
+| `details[key]` | A pull request's description, conversation, reviews, commits, and review threads. The conversation tab and the diff's review threads read it. | The pull request's poll, webhook changes, a submitted review, and a sent comment. |
 | `readiness[key]` | Whether a pull request can merge, and how. | The pull request's poll, when its head, update time, or checks change, and after a merge or an auto-merge change. |
 | `revisions[key]` | A pull request's head commit, update time, and viewed files. | The pull request's poll, the diff's own load, and viewed marks. |
 | `checks[commit]` | A commit's checks, keyed by repository and commit SHA, so a pull request's checks are its head commit's. The checks tab and the conversation's summary read the same list. | The commit's poll, webhook changes, retries, and reruns. |
-| `issueDetails[key]` | An issue's description and first 100 comments. The comment count is in the issue's record, which the detail load also writes, so the row and the detail show the same number. | The issue view, when it opens and when the issue's update time moves. |
+| `issueDetails[key]` | An issue's description and first 100 comments. The comment count is in the issue's record, which the detail load also writes, so the row and the detail show the same number. | The issue view, when it opens and when the issue's update time moves, and a sent comment, which also raises the count. |
 | `viewer` | The signed-in user's login. | Sign-in. |
 
 Records stay until the app quits. A screen that shows one again makes the
@@ -61,6 +61,10 @@ confirms the mark, every revision the store takes keeps it.
 A pull request's detail uses a counter instead: a webhook change applied while
 a load runs makes the load ask again, and a load that a later one overtakes
 drops its answer.
+
+A comment sent from Hermes joins the loaded conversation when GitHub answers.
+A webhook or a reload may have brought it already, so it is added only when
+no comment with its ID is there.
 
 Webhook payloads use `AppliedPayloads`. A payload older than the last one a
 pull request took is dropped, and a load that ran while a payload arrived

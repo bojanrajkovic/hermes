@@ -20,7 +20,7 @@ extension PullRequest {
         """
 }
 
-private let commentFields = "id databaseId author { \(userFields) } body createdAt"
+let commentFields = "id databaseId author { \(userFields) } body createdAt"
 
 // MARK: Profile
 

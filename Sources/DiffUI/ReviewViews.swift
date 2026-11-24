@@ -25,8 +25,6 @@ enum ReviewMetrics {
     static let popoverMaxHeight: CGFloat = 560
     /// Comments stay near a comfortable reading width in wide windows.
     static let attachmentMaxWidth: CGFloat = 780
-    static let composerMinHeight: CGFloat = 90
-    static let composerMaxHeight: CGFloat = 260
 }
 
 /// "line 25", "old line 12", or "lines 94 to 96".
@@ -40,18 +38,6 @@ func lineRangeLabel(_ anchor: CommentAnchor) -> String {
 }
 
 extension View {
-    /// Styles a form's main button: prominent while it can be pressed.
-    ///
-    /// A disabled prominent button keeps its filled bezel and still reads as
-    /// the thing to press, so a disabled one is drawn as an ordinary button.
-    @ViewBuilder func mainAction(isDisabled: Bool) -> some View {
-        if isDisabled {
-            buttonStyle(.bordered).disabled(true)
-        } else {
-            buttonStyle(.borderedProminent)
-        }
-    }
-
     fileprivate func card() -> some View {
         background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: ReviewMetrics.cardCornerRadius))
             .overlay { RoundedRectangle(cornerRadius: ReviewMetrics.cardCornerRadius).strokeBorder(.separator) }
@@ -370,14 +356,10 @@ struct CommentComposer: View {
             switch tab {
             case .write:
                 TextEditor(text: Binding { text } set: { review.composer?.text = $0 })
-                    .font(.body)
                     .focused($isFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(6)
-                    .frame(minHeight: ReviewMetrics.composerMinHeight, maxHeight: ReviewMetrics.composerMaxHeight)
+                    .commentEditor()
+                    .frame(minHeight: Theme.composerMinHeight, maxHeight: Theme.composerMaxHeight)
                     .fixedSize(horizontal: false, vertical: true)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
                     .accessibilityLabel("Comment")
             case .preview:
                 Group {
@@ -387,7 +369,7 @@ struct CommentComposer: View {
                         MarkdownView(markdown: text, sizing: .fitContent)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: ReviewMetrics.composerMinHeight, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: Theme.composerMinHeight, alignment: .topLeading)
             }
             HStack {
                 Text("Markdown · ⌘↩ adds the comment · esc cancels")

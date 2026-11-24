@@ -524,6 +524,7 @@ struct ConversationView: View {
                             )
                             .id(entry.id)
                         }
+                        CommentComposer(key: pullRequest.key, subjectID: pullRequest.id).id(pullRequest.key)
                     }
                     PaneSection(value.commits.count == 1 ? "1 Commit" : "\(value.commits.count) Commits") {
                         ForEach(value.commits) { commit in

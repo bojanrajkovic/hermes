@@ -53,6 +53,12 @@ public enum Theme {
     public static let cardPadding: CGFloat = 12
     /// Width cap for a conversation: wider than prose, for code blocks and tables.
     public static let conversationMaxWidth: CGFloat = 860
+    /// A comment editor's box: the inset around its text and the box's corner radius.
+    public static let editorInset: CGFloat = 6
+    public static let editorCornerRadius: CGFloat = 6
+    /// A comment editor's height. Past the maximum, its text scrolls.
+    public static let composerMinHeight: CGFloat = 90
+    public static let composerMaxHeight: CGFloat = 260
 
     // MARK: Reading column
     /// Cap the measure so body lines stay near the 60–75 character ideal for
