@@ -16,6 +16,12 @@ What is built and works, and what is known not to work or is unverified.
 - One store of GitHub state for the app (`GitHubStore`). The sidebar's issue
   count and the repository's Issues list read the same field, which the
   repository load and every issue page update. See [plans/store.md](plans/store.md).
+- Pull request lists and repositories show at launch from a cache of the store in
+  `~/Library/Caches/Hermes/store.json`, saved every 2 minutes and on quit. Issue lists aren't
+  cached. The first refresh loads only what changed since, and every fetch replaces what the
+  cache restored. An account that loaded over a day ago starts empty, another `gh` user's
+  cache is dropped at sign-in, and a cache this build can't read is deleted. Not yet tried in
+  a running app. See [plans/store.md](plans/store.md#cache-between-launches).
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
 - Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own and picked, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
 - Relay setup: "Set Up a Relay…" in Settings and in first-run setup takes an account the user owns, a relay server, and an invite code. It checks that the relay answers, opens GitHub to create the account's App, hands the App's secrets to the relay, and then offers the App's install page and the join link for members. Several accounts can each have a tenant. See [plans/relay-client.md](plans/relay-client.md).

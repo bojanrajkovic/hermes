@@ -3,7 +3,7 @@ import GitHubKit
 
 /// One commit of one repository. Checks belong to a commit, so a pull request's checks are its
 /// head commit's, and a push shows the new commit's checks without a reload.
-public struct CommitKey: Hashable, Sendable {
+public struct CommitKey: Hashable, Sendable, Codable {
     public let repository: RepositoryRef
     public let oid: String
 
@@ -24,6 +24,11 @@ public struct CommitChecks: Sendable {
     public internal(set) var errorMessage: String?
     /// Why the latest refresh failed. Nil once a load succeeds.
     public internal(set) var refreshError: String?
+}
+
+/// The store's cache keeps loaded checks, not errors.
+extension CommitChecks: Codable {
+    private enum CodingKeys: String, CodingKey { case checks, isLoaded }
 }
 
 /// How often a commit's checks reload while one is queued or running.

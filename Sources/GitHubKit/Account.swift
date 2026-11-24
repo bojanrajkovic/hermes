@@ -1,7 +1,7 @@
 import Foundation
 
 /// Someone who acts on GitHub: a person, a bot, or an organization.
-public struct User: Sendable, Hashable, Decodable {
+public struct User: Sendable, Hashable, Codable {
     public let login: String
     public let avatarURL: URL
     /// True for GitHub Apps such as Renovate or Dependabot.
@@ -24,6 +24,13 @@ public struct User: Sendable, Hashable, Decodable {
         login = try container.decode(String.self, forKey: .login)
         avatarURL = try container.decode(URL.self, forKey: .avatarURL)
         isBot = try container.decode(String.self, forKey: .typename) == "Bot"
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isBot ? "Bot" : "User", forKey: .typename)
+        try container.encode(login, forKey: .login)
+        try container.encode(avatarURL, forKey: .avatarURL)
     }
 }
 
@@ -104,9 +111,9 @@ public struct RepositoryRef: Sendable, Hashable, CustomStringConvertible {
     }
 }
 
-extension RepositoryRef: Decodable {
+extension RepositoryRef: Codable {
     private enum CodingKeys: String, CodingKey { case owner, name }
-    private struct Owner: Decodable { let login: String }
+    private struct Owner: Codable { let login: String }
 
     /// Decodes GraphQL's `{ name owner { login } }`.
     public init(from decoder: any Decoder) throws {
@@ -114,10 +121,16 @@ extension RepositoryRef: Decodable {
         owner = try container.decode(Owner.self, forKey: .owner).login
         name = try container.decode(String.self, forKey: .name)
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Owner(login: owner), forKey: .owner)
+        try container.encode(name, forKey: .name)
+    }
 }
 
 /// A label on an issue or pull request.
-public struct GitHubLabel: Sendable, Hashable, Decodable {
+public struct GitHubLabel: Sendable, Hashable, Codable {
     public let name: String
     /// Six hex digits without a leading `#`.
     public let color: String
@@ -145,16 +158,23 @@ public struct Repository: Sendable, Hashable, Identifiable {
     }
 }
 
-extension Repository: Decodable {
+extension Repository: Codable {
     private enum CodingKeys: String, CodingKey { case url, isPrivate, issues }
-    private struct Count: Decodable { let totalCount: Int }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         ref = try RepositoryRef(from: decoder)
         url = try container.decode(URL.self, forKey: .url)
         isPrivate = try container.decode(Bool.self, forKey: .isPrivate)
-        openIssueCount = try container.decode(Count.self, forKey: .issues).totalCount
+        openIssueCount = try container.decode(TotalCount.self, forKey: .issues).totalCount
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        try ref.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(url, forKey: .url)
+        try container.encode(isPrivate, forKey: .isPrivate)
+        try container.encode(TotalCount(totalCount: openIssueCount), forKey: .issues)
     }
 }
 

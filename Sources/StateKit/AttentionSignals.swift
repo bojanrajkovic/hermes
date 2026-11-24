@@ -26,3 +26,8 @@ public struct AttentionSignals: Equatable, Sendable {
         self.mergedBranches = mergedBranches
     }
 }
+
+extension AttentionSignals: Codable {
+    /// Merged branches come from the pull request table, so the signals don't keep them.
+    private enum CodingKeys: String, CodingKey { case teams, mentions }
+}

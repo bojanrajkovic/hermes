@@ -316,7 +316,7 @@ func graphQLFixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
 }
 
 /// The shape of the `repositories` fixture: a page of repositories with their counts.
-private struct RepositoryOwnerFixture: Decodable {
+struct RepositoryOwnerFixture: Decodable {
     struct Owner: Decodable { let repositories: Connection<Repository> }
     let repositoryOwner: Owner
 }

@@ -283,7 +283,7 @@ private struct GraphQLData<T: Decodable>: Decodable { let data: T }
 
 /// A GraphQL connection, with the parts the queries ask for.
 struct Connection<Node: Decodable & Sendable>: Decodable, Sendable {
-    struct PageInfo: Decodable, Sendable {
+    struct PageInfo: Codable, Sendable {
         let hasNextPage: Bool
         let endCursor: String?
     }
@@ -294,4 +294,16 @@ struct Connection<Node: Decodable & Sendable>: Decodable, Sendable {
 
     /// Where the next page starts. Nil on the last page.
     var nextCursor: String? { pageInfo?.hasNextPage == true ? pageInfo?.endCursor : nil }
+}
+
+/// Models write the GraphQL shape their decoders read, so the store's cache needs no second format.
+extension Connection: Encodable where Node: Encodable {
+    init(_ nodes: [Node]) {
+        self.init(nodes: nodes, pageInfo: nil, totalCount: nil)
+    }
+}
+
+/// GraphQL's `{ totalCount }`.
+struct TotalCount: Codable {
+    let totalCount: Int
 }

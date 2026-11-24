@@ -1,7 +1,7 @@
 import Foundation
 
 /// A pull request or issue: its repository and number.
-public struct ItemKey: Hashable, Sendable, CustomStringConvertible {
+public struct ItemKey: Hashable, Sendable, Codable, CustomStringConvertible {
     public let repository: RepositoryRef
     public let number: Int
 

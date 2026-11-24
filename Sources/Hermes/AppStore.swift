@@ -174,7 +174,7 @@ final class AppStore {
         startup = .loading
         do {
             let viewer = try await client.viewer()
-            github.viewer = viewer.login
+            github.signedIn(as: viewer.login)
             startup = .ready(viewer)
             for account in viewer.accounts {
                 Task { _ = await AvatarCache.shared.image(for: account.avatarURL) }

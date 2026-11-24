@@ -2,7 +2,7 @@ import Foundation
 
 /// A pull request that closes an issue when merged.
 public struct LinkedPullRequest: Sendable, Hashable, Decodable {
-    public enum State: String, Sendable, Hashable, Decodable {
+    public enum State: String, Sendable, Hashable, Codable {
         case open = "OPEN"
         case closed = "CLOSED"
         case merged = "MERGED"
@@ -108,7 +108,7 @@ public struct IssuePage: Sendable, Hashable {
 }
 
 /// A comment in a conversation or in a review thread.
-public struct Comment: Sendable, Hashable, Identifiable, Decodable {
+public struct Comment: Sendable, Hashable, Identifiable, Codable {
     /// The GraphQL node ID.
     public let id: String
     /// The REST ID, which GitHub's links to the comment use: `#issuecomment-<id>` or `#discussion_r<id>`.

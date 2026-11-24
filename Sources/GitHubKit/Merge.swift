@@ -1,7 +1,7 @@
 import Foundation
 
 /// How a pull request's commits land on its base branch.
-public enum MergeMethod: String, Sendable, Hashable, CaseIterable, Decodable {
+public enum MergeMethod: String, Sendable, Hashable, CaseIterable, Codable {
     case merge = "MERGE"
     case squash = "SQUASH"
     case rebase = "REBASE"
@@ -26,7 +26,7 @@ public enum MergeMethod: String, Sendable, Hashable, CaseIterable, Decodable {
 }
 
 /// What GitHub says about merging a pull request right now.
-public enum MergeStateStatus: String, Sendable, Hashable, Decodable {
+public enum MergeStateStatus: String, Sendable, Hashable, Codable {
     /// The head branch is behind the base and the repository requires it up to date.
     case behind = "BEHIND"
     /// A required review or check is missing.
@@ -44,7 +44,7 @@ public enum MergeStateStatus: String, Sendable, Hashable, Decodable {
 }
 
 /// Whether the viewer can merge a pull request, and how.
-public struct MergeReadiness: Sendable, Hashable {
+public struct MergeReadiness: Sendable, Hashable, Codable {
     public let state: MergeStateStatus
     /// The methods the repository allows, in GitHub's order.
     public let allowedMethods: [MergeMethod]
