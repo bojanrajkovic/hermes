@@ -17,7 +17,8 @@ sheet picks:
   origin, and both can be edited.
 
 The sheet shows the command line and where it will run. A Copy button copies
-the command for use in another terminal. For a local session it makes the
+the command for use in another terminal. ⌘↩ presses Start Session; plain
+Return types a newline in the prompt. For a local session it makes the
 worktree first, so the copied `cd` works.
 
 ```mermaid

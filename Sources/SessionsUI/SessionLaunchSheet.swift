@@ -351,8 +351,10 @@ public struct SessionLaunchSheet: View {
                     dismiss()
                 }
             }
-            .keyboardShortcut(.defaultAction)
-            .disabled(!model.canLaunch)
+            // ⌘↩, not ↩: Return types a newline in the prompt editor.
+            .keyboardShortcut(.return, modifiers: .command)
+            .mainAction(isDisabled: !model.canLaunch)
+            .help("Start the session (⌘↩)")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
