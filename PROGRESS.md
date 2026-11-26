@@ -196,8 +196,9 @@ What is built and works, and what is known not to work or is unverified.
 
 **Missing**
 
-- Hermes reads, reviews, and merges. It cannot close, resolve threads, edit or
-  delete posted comments, or comment on the conversation.
+- Hermes reads, reviews, and merges pull requests, and marks drafts ready for
+  review. It can't close pull requests, resolve threads, or edit or delete
+  posted comments.
 - Only github.com is supported, not GitHub Enterprise Server.
 - Lists are capped at what one query returns: 1,000 open pull requests per
   account, 100 review requests, and per pull request 100 comments, 100
