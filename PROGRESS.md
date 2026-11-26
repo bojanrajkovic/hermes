@@ -20,14 +20,13 @@ What is built and works, and what is known not to work or is unverified.
   `~/Library/Caches/Hermes/store.json`, saved every 2 minutes and on quit. Issue lists aren't
   cached. The first refresh loads only what changed since, and every fetch replaces what the
   cache restored. An account that loaded over a day ago starts empty, another `gh` user's
-  cache is dropped at sign-in, and a cache this build can't read is deleted. Not yet tried in
-  a running app. See [plans/store.md](plans/store.md#cache-between-launches).
+  cache is dropped at sign-in, and a cache this build can't read is deleted. See [plans/store.md](plans/store.md#cache-between-launches).
 - The attention inbox, "Needs Your Attention": review requests, your pull requests that need action or can merge, new commits since your review, and mentions, ranked by reason. See [plans/attention-inbox.md](plans/attention-inbox.md).
 - Webhook forwarders, off by default: with "Get changes as they happen" on in Settings, a change in one of your own repositories, or in an organization you own and picked, shows in about two seconds. See [plans/webhooks.md](plans/webhooks.md).
 - Relay setup: "Set Up a Relay…" in Settings and in first-run setup takes an account the user owns, a relay server, and an invite code. It checks that the relay answers, opens GitHub to create the account's App, hands the App's secrets to the relay, and then offers the App's install page and the join link for members. Several accounts can each have a tenant. See [plans/relay-client.md](plans/relay-client.md).
 - Relay tenants: opening a `hermes://relay.join` link joins a tenant and signs in through the browser. Hermes tells the relay which organization a tenant belongs to, when it knows, so the relay can tell a member with no repository yet from someone outside it. Each tenant keeps a connection to its relay, and a change in a repository the tenant covers reloads its pull request, and the review threads or checks on screen, at once. Those repositories get no webhook forwarder. Settings shows each tenant's connection, when it last sent an event, and its relay's commit. Connections are logged at notice level, so `log show` keeps them, and each event at info level. See [plans/relay-client.md](plans/relay-client.md#checking-a-tenant).
 - Applied payloads: a forwarder's or a relay's delivery about a pull request's title, labels, draft state, state, reviewers, or auto-merge changes its row at once with no request. New commits change the row at once and then load the rest. An edited description, a review request, a conversation comment, and a review show in the open pull request at once. So do a reply in a review thread, a thread being resolved or reopened, a commit status, and a check run. A delivery that arrives late does not undo a newer one, and a load that was running when a delivery was applied runs once more. Deliveries write to the store whether or not a screen is up, so a tab opened later shows them. A delivery about a plain issue reloads that issue and its repository's issue list, not the whole account. See [plans/webhooks.md](plans/webhooks.md).
-- Relay discovery: an owner can publish a tenant as `hermes-relay.json` in the account's `.github-private` repository, after confirming. Hermes looks there once a launch for each of the viewer's accounts and offers a tenant it finds, so members need no join link. A tenant turned down is not asked about again, and Settings lists it with a Connect button.
+- Relay discovery: an owner can publish a tenant as `hermes-relay.json` in the account's `.github-private` repository, after confirming. Publish is on the tenant's row in Settings, also for a tenant the owner joined by a link. Hermes looks there once a launch for each of the viewer's accounts and offers a tenant it finds, so members need no join link. A tenant turned down is not asked about again, and Settings lists it with a Connect button.
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
 - Local stacks: a repository with a checkout has a Local tab of its stacked
@@ -58,8 +57,7 @@ What is built and works, and what is known not to work or is unverified.
   linked issues, and a checks summary, with Markdown rendered as on github.com.
 - A comment box at the end of a pull request's or an issue's conversation
   sends a comment outside any review. Unsent text is saved beside the item's
-  review drafts, so it survives switching items and quitting. The mutation is
-  verified against `bojanrajkovic/hermes-playground`.
+  review drafts, so it survives switching items and quitting.
 - Merging from the Merge menu, with the methods the repository allows:
   merging now, merging past unmet requirements when GitHub allows a bypass, and
   turning auto-merge on or off, with a badge in the header while it is on.
@@ -87,8 +85,7 @@ What is built and works, and what is known not to work or is unverified.
 
 - Failed or cancelled GitHub Actions jobs can be run again from the Checks
   tab: one job from its header or right-click menu, a workflow's failed jobs
-  from the menu, or every failed job from the button under the list. Not yet
-  tried against GitHub.
+  from the menu, or every failed job from the button under the list.
 
 - `hermes://` links open repositories, issues, pull requests, stacks,
   comments, review threads, and file lines. They use GitHub's own paths.
@@ -105,8 +102,7 @@ What is built and works, and what is known not to work or is unverified.
 - A line with comments shows a badge. The line's threads, drafts, and composer
   open in a popover over it, so the diff has no rows of its own for comments.
 - Drafts are saved on disk per pull request and survive quitting.
-- Finishing a review sends every draft as one review. Submitting with the
-  Comment verdict is verified against `bojanrajkovic/hermes-playground`.
+- Finishing a review sends every draft as one review.
 - Outdated drafts are listed, and each can be moved to a new line or deleted.
 
 **Checks**
@@ -119,9 +115,7 @@ What is built and works, and what is known not to work or is unverified.
 - Summaries for check runs that are not Actions jobs, and descriptions for
   legacy commit statuses.
 - Workflow runs from a fork that wait for a maintainer show above the checks,
-  in the Checks tab and the overview, with an Approve button. Reading them is
-  checked against a public repository's waiting runs. Approving one is not yet
-  tried against GitHub.
+  in the Checks tab and the overview, with an Approve button.
 
 **Sessions**
 
@@ -186,9 +180,13 @@ What is built and works, and what is known not to work or is unverified.
   `GET /user/memberships/orgs/{org}` only when an organization's App reaches
   none of the user's repositories. Its tests stand in for GitHub. Every real
   sign-in so far reached repositories, so no real token has made that call.
-- **Publishing a relay.** Discovery has found a `hermes-relay.json` written
-  with `gh` and offered its tenant. Hermes's own Publish is tested against a
-  stubbed GitHub and has committed the file to no repository.
+- **Approving a fork's workflow run.** Hermes reads waiting runs correctly from
+  a public repository. Nobody has approved one from Hermes, which needs a pull
+  request from a first-time contributor's fork.
+- **Access changes on a personal account's tenant.** The relay checks access
+  again when a delivery says someone's access changed. Nobody knows which of
+  those events GitHub sends to a personal account's App, such as `member` when
+  a collaborator is added. See [plans/relay-client.md](plans/relay-client.md).
 - **The release workflow.** `release.yml` passes zizmor's auditor checks, but
   it hasn't run yet. The next published release is its first run. Installing
   with mise was tested against the v0.5.0 zip, not one the workflow built.
