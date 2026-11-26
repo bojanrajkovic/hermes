@@ -27,7 +27,7 @@
     "@stylistic/eslint-plugin": "6.0.1",
     "@tsconfig/strictest": "2.0.9",
     "@types/node": "26.6.6",
-    "oxfmt": "0.79.0",
+    "oxfmt": "0.80.0",
     "oxlint": "1.94.0",
     "oxlint-plugin-eslint": "1.94.0",
     "oxlint-tsgolint": "7.0.2008",
