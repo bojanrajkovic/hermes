@@ -12,7 +12,6 @@ enum Metrics {
     static let glyphWidth: CGFloat = 18
     static let barHorizontalPadding: CGFloat = 12
     static let barVerticalPadding: CGFloat = 6
-    static let searchFieldWidth: CGFloat = 200
     /// Lines the summary's title up with the Markdown under it.
     static let summaryInset: CGFloat = 24
 }

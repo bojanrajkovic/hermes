@@ -89,6 +89,7 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 - Every changed file in one scrolling list, with a file tree beside it.
 - Unified and side-by-side layouts, syntax highlighting, and intraline changes.
 - Expanders reveal the unchanged lines around a hunk.
+- ⌘F finds text in the diff's lines, including files collapsed as viewed.
 - Click an identifier to see its definition in a pane under the diff, or
   ⌘-click it to list the lines in the repository that use it.
 - Markdown files can show a rendered diff, including Mermaid diagrams.
@@ -131,8 +132,8 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 | ⌃⌘L | Switch between the unified and side-by-side layouts |
 | ⌘+, ⌘-, ⌘0 | Bigger, smaller, or default code size |
 | ⌘↩ | Add the comment being written to the review, submit the review, or send a conversation comment |
-| ⌘F | Search the open log |
-| ⌘G and ⇧⌘G | Next and previous search match in the log |
+| ⌘F | Search the open diff or log |
+| ⌘G and ⇧⌘G | Next and previous search match in the diff or log |
 | ⌘, | Settings |
 
 ## Screenshots

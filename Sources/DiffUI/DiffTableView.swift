@@ -290,6 +290,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         }
         observeReview()
         observeFocus()
+        observeFind()
     }
 
     /// Scrolls down and back up at 120 steps a second for six seconds and writes how long the steps
@@ -334,6 +335,7 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             tableView.reloadData()
             observeReview()
             observeFocus()
+            observeFind()
         }
         if metrics != self.metrics {
             self.metrics = metrics
@@ -730,6 +732,19 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         guard marks != self.marks else { return }
         self.marks = marks
         for (cell, _) in liveCells() { (cell as? NativeLineCell)?.show(marks: marks) }
+    }
+
+    /// Updates the find highlights in the visible cells now, and again whenever the matches or the current match change.
+    private func observeFind() {
+        withObservationTracking {
+            _ = model.find.ranges
+            _ = model.find.current
+        } onChange: { [weak self] in
+            RunLoop.main.perform(inModes: [.common]) {
+                MainActor.assumeIsolated { self?.observeFind() }
+            }
+        }
+        for (cell, _) in liveCells() { (cell as? NativeLineCell)?.showFound() }
     }
 
     // MARK: Pointer

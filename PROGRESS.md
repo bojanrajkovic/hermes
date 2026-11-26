@@ -71,6 +71,10 @@ What is built and works, and what is known not to work or is unverified.
   marks sync with GitHub both ways.
 - Syntax highlighting for 16 languages and intraline change emphasis.
 - Context expansion around hunks.
+- Find in the diff (⌘F). It searches the visible lines of every file,
+  including collapsed files, and opens a collapsed file to show a match. It
+  skips unexpanded context, files shown as rendered Markdown, and large files
+  that show a notice instead of the diff.
 - Rendered Markdown diffs with Mermaid.
 - Go to definition for Swift, TypeScript, TSX, JavaScript, Go, Rust, C#,
   Python, Ruby, Bash, and HCL, in a popover over the identifier that can move

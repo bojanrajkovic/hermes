@@ -79,6 +79,10 @@ public enum Theme {
     public static let badgePaddingHorizontal: CGFloat = 7
     public static let badgePaddingVertical: CGFloat = 2
 
+    // MARK: Find
+    /// The width of the find bar's search field in the log viewer and the diff.
+    public static let findFieldWidth: CGFloat = 200
+
     // MARK: Type scale
     //
     // The whole app's typography lives here so hierarchy stays consistent and

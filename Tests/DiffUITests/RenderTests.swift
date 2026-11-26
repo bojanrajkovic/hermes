@@ -120,6 +120,24 @@ struct RenderTests {
                 try host.write(to: output.appending(path: "\(name)-references-\(dark ? "dark" : "light").png"))
             }
         }
+        // `DIFFUI_FIND=<query>` renders the find bar with the query's first match on screen.
+        if let query = environment["DIFFUI_FIND"] {
+            model.find.isShown = true
+            model.find.query = query
+            await model.search()
+            for layout in DiffLayout.allCases {
+                model.layout = layout
+                for dark in [false, true] {
+                    let host = Host(DiffContent(model: model).environment(\.diffMetrics, DiffMetrics()), dark: dark)
+                    try await host.settle()
+                    // A table scrolls only for requests made after it is on screen.
+                    model.stepFind(by: 1)
+                    model.stepFind(by: -1)
+                    try await host.settle(for: .seconds(2))
+                    try host.write(to: output.appending(path: "\(name)-find-\(layout.rawValue)-\(dark ? "dark" : "light").png"))
+                }
+            }
+        }
     }
 
     /// Watches a working tree (`DIFFUI_LIVE_TREE`), changes a file in it, and

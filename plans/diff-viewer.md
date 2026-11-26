@@ -178,6 +178,7 @@ table's coordinator has them:
 | "+" on the hovered line | One tracking area on the table. The coordinator tells the cell under the pointer where the pointer is. Only that cell and the one the pointer left redraw. While the list scrolls nothing is hovered. The row under a resting pointer gets its "+" 0.1 seconds after the last scrolled step. |
 | Comment on a line or a range | A press on the "+" calls `ReviewModel.beginDrag`. Each drag event finds the row at the pointer's height and calls `drag(over:)` with its lines, so rows that scroll into view during the drag count. The release calls `endDrag`. A shift-click extends the open comment's range. |
 | Selection and range marks | The coordinator observes the review's selection, comment ranges, and drag origin, and gives the cells on screen their `LineMarks`. A cell redraws when its marks change. |
+| Find matches | The coordinator observes `DiffFind`'s matches and current match, and each cell on screen reads its lines' ranges into `FoundRanges`. The cell fills each match with light yellow behind the text, and the current match with a stronger yellow. A cell redraws when its ranges change. |
 | Go to definition | The cell lays the hovered side's code out with a layout manager and finds the character under the pointer. The line is parsed for identifiers when the pointer first reaches it. An identifier under the pointer is underlined, the cursor is a pointing hand, a click looks up its definition, and a ⌘-click looks up its references. |
 | Context menu | The cell's `menu(for:)`: Go to Definition and Find References over an identifier, Copy Line, and Add Comment… for a pull request. The cell's `lookUp` closure passes the identifier to the coordinator, which owns the popover. |
 | Revealed line | A request that puts a line in the middle (`DiffModel.reveal`) tints its row yellow for 0.3 seconds, then fades the tint over 0.9 seconds. When the request names a symbol, as "Show in Diff" does, its first occurrence on the line is tinted more strongly. With Reduce Motion on, the tint goes away at once instead of fading. A jump from the navigator tints nothing. The tint is a view over the cell, so the row keeps its height. |
@@ -292,6 +293,39 @@ A Markdown file has a Source and Rendered switch. Rendered shows the new
 version with the changes marked on the rendered blocks. The new text comes
 from the source tree, and the old text is rebuilt by undoing the hunks. A "+"
 button on a block starts a comment on the block's lines that are in the diff.
+
+## Find in the diff
+
+⌘F shows a find bar under the summary bar. It uses the shared `FindField`, as
+the log viewer does. Return and ⌘G move to the next match, ⇧⌘G to the
+previous one, and Escape or Done clears the query and hides the bar.
+
+`DiffSearch.matches` looks for the query in the code lines of every file's
+rows, ignoring case and diacritics. That covers hunk lines and expanded
+context, in collapsed files too. It leaves out unexpanded context, which has no
+rows, and files that show rendered Markdown. A context line that a split row
+shows on both sides counts once. A `DiffMatch` stores the ID of the row that
+shows the line, so the list can scroll to it. In a split row, that ID can name
+the line on the other side.
+
+```mermaid
+flowchart LR
+    Q[Query or rows change] --> W["Wait 120 ms"]
+    W --> S["DiffSearch.matches, off the main actor"]
+    S --> F["DiffFind.show"]
+    F -- "new query" --> R["reveal the first match"]
+    F -- "same query" --> K["keep the current match"]
+    F --> C["Cells draw their ranges"]
+```
+
+`DiffModel.search` runs from a task on the find bar, keyed on `findKey`: the
+query, the layout, the last reload, each file's row count, and whether each
+file shows rendered Markdown. The bar owns the task, so the screen observes the
+rows only while the bar is visible. A new query moves to its first match. When
+the same query runs again after a context expansion or a reload, the current
+match stays current if it still exists.
+`DiffModel.stepFind` moves through the matches with `reveal`, which opens a
+collapsed file and tints the row for a moment.
 
 ## Go to definition
 
