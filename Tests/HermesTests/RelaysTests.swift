@@ -51,6 +51,33 @@ struct RelaysTests {
         #expect(relays.available == [PublishedRelay(account: "octo", tenant: published)])
     }
 
+    private let publishRepositories: Set<RepositoryRef> = [
+        RepositoryRef(owner: "Bojan", name: "hermes"),
+        RepositoryRef(owner: "acme", name: "api"),
+        RepositoryRef(owner: "someone-else", name: "tool"),
+    ]
+    private let ownedAccounts = ["bojan", "acme", "octo-org"]
+
+    @Test func publishOffersTheAppsAccountForATenantSetUpHere() throws {
+        let server = try #require(URL(string: "https://relay.example.invalid"))
+        let tenant = try #require(RelayTenant(server: server))
+        let membership = RelayMembership(tenant: tenant, app: .init(account: "acme", slug: "hermes-acme"))
+
+        #expect(membership.publishAccounts(repositories: publishRepositories, ownedAccounts: ownedAccounts) == ["acme"])
+        #expect(membership.publishAccounts(repositories: [], ownedAccounts: []) == ["acme"])
+    }
+
+    @Test func publishOffersOwnedAccountsThatOwnTheTenantsRepositories() throws {
+        let server = try #require(URL(string: "https://relay.example.invalid"))
+        let tenant = try #require(RelayTenant(server: server))
+        let membership = RelayMembership(tenant: tenant, app: nil)
+
+        // In the order of the owned accounts. `Bojan` matches `bojan` because GitHub logins
+        // are case-insensitive.
+        #expect(membership.publishAccounts(repositories: publishRepositories, ownedAccounts: ownedAccounts) == ["bojan", "acme"])
+        #expect(membership.publishAccounts(repositories: [], ownedAccounts: ownedAccounts).isEmpty)
+    }
+
     @Test func aTenantRecordsTheOrganizationThatPublishesIt() throws {
         let suite = "relays-tests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

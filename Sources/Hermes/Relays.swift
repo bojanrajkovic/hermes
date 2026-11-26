@@ -24,6 +24,19 @@ struct RelayMembership: Codable, Hashable, Identifiable {
     var organization: String?
 
     var id: String { tenant.id }
+
+    /// Returns the accounts whose `.github-private` repository Publish can commit the tenant's
+    /// file to. For a tenant set up on this Mac, that's only the App's account. For a tenant
+    /// joined by a link, it's each account in `ownedAccounts` that owns one of `repositories`,
+    /// in the order of `ownedAccounts`. The viewer can own a tenant they joined by a link.
+    /// `ownedAccounts` lists the viewer's personal account and the organizations they own,
+    /// because only an owner can publish.
+    func publishAccounts(repositories: Set<RepositoryRef>, ownedAccounts: [String]) -> [String] {
+        if let app { return [app.account] }
+        // GitHub logins are case-insensitive.
+        let owners = Set(repositories.map { $0.owner.lowercased() })
+        return ownedAccounts.filter { owners.contains($0.lowercased()) }
+    }
 }
 
 /// A relay tenant an account publishes in its `.github-private` repository.

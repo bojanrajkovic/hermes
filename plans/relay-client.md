@@ -123,7 +123,10 @@ sequenceDiagram
 
 The sheet ends on the two steps that are left: the App's install page on
 GitHub, and a button that copies the tenant's `hermes://relay.join` link for
-the members. Both stay on the tenant's row in Settings. The owner signs in
+the members. Both also appear on the tenant's row in Settings, next to Publish
+([below](#finding-a-tenant-without-a-link)). Copy Join Link is on every row.
+Install… is only on the row of a tenant set up on this Mac, because the
+install link needs the App's slug. The owner signs in
 from that row once the App is installed, the way a member does.
 
 ## Joining and signing in
@@ -183,10 +186,16 @@ the ID.
 
 ## Finding a tenant without a link
 
-An owner can publish a tenant, so members need no join link. Publish, on the
-last page of setup and in the menu of the tenant's row in Settings, commits a
-file to the account's `.github-private` repository: `<org>/.github-private` for an
-organization, `<login>/.github-private` for a personal account.
+An owner can publish a tenant, so members need no join link. Publish commits a
+file to the account's `.github-private` repository: `<org>/.github-private` for
+an organization, `<login>/.github-private` for a personal account. It's on the
+last page of setup and on the tenant's row in Settings.
+
+For a tenant set up on this Mac, Publish commits to the App's account. For a
+connected tenant joined by a link, Publish lists each account the viewer owns,
+personal or organization, that owns one of the tenant's repositories. So an
+owner who removed their tenant and joined it again by a link can still
+publish it.
 
 ```json
 {
