@@ -28,9 +28,7 @@ struct SessionScreen: View {
             header
             Divider()
             if session.state == .inClaudeApp {
-                // No terminal: the session's bar, then the worktree's diff at full width.
-                SessionTerminalView(session: session)
-                    .fixedSize(horizontal: false, vertical: true)
+                // No terminal: the worktree's diff at full width.
                 diff
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -56,22 +54,38 @@ struct SessionScreen: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            SessionStateGlyph(state: session.state)
-            Text(session.title)
-                .font(Theme.Fonts.paneHeading)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Badge(session.state.label)
-            Button {
-                Task { await model.open(session.origin.key) }
-            } label: {
-                Label {
-                    Text(verbatim: "\(session.origin.repository.name)#\(session.origin.number)")
-                } icon: {
-                    Image(systemName: session.origin.isPullRequest ? "arrow.triangle.pull" : "smallcircle.filled.circle")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    SessionStateGlyph(state: session.state)
+                    Text(session.title)
+                        .font(Theme.Fonts.paneHeading)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Badge(session.state.label)
                 }
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await model.open(session.origin.key) }
+                    } label: {
+                        Label {
+                            Text(verbatim: "\(session.origin.repository.name)#\(session.origin.number)")
+                        } icon: {
+                            Image(systemName: session.origin.symbolName)
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .help(session.origin.isPullRequest ? "Open the pull request this session started from" : "Open the issue this session started from")
+                    SessionEnvironmentLabel(session.environment)
+                    if let branch = session.branch {
+                        Label(branch, systemImage: "arrow.triangle.branch")
+                            .help("Branch \(branch)")
+                    }
+                }
+                .font(Theme.Fonts.meta)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
             }
-            .help(session.origin.isPullRequest ? "Open the pull request this session started from" : "Open the issue this session started from")
             Spacer(minLength: 8)
             if !session.origin.isPullRequest, let pullRequest = model.linkedPullRequest(of: session) {
                 Button {
@@ -106,6 +120,7 @@ struct SessionScreen: View {
                     .help(showsDiff ? "Hide the diff to give the transcript the full width" : "Show the diff")
                 }
             }
+            SessionActions(session: session)
         }
         .padding(.horizontal, Theme.detailInset)
         .padding(.vertical, 8)
@@ -125,12 +140,28 @@ struct SessionScreen: View {
                 DiffScreen(
                     source: .workingTree(directory: directory, baseRef: baseRef), client: model.client, repoCache: model.repoCache
                 )
+            } else if session.state == .inClaudeApp {
+                ContentUnavailableView {
+                    Label("Running in the Claude App", systemImage: "arrow.up.forward.app")
+                } description: {
+                    Text(claudeAppDescription)
+                } actions: {
+                    Button("Open in Claude App") { session.restart() }
+                }
             } else {
                 ContentUnavailableView(
                     "No Local Diff", systemImage: "cloud",
                     description: Text("This session does not run in a worktree on this Mac, so there are no local changes to show.")
                 )
             }
+        }
+    }
+
+    /// Where a Claude-app session without a worktree on this Mac runs.
+    private var claudeAppDescription: String {
+        switch session.environment {
+        case .cloud(let environment): "The session runs in \(environment.name). Its changes aren't on this Mac."
+        case .local: "The session has no worktree on this Mac, so there are no local changes to show."
         }
     }
 }

@@ -57,9 +57,11 @@ environment in the Claude app, whose picker lists every local, cloud, and
 Remote Control target.
 
 Hermes opens the link itself and still lists the session, with no terminal.
-The session screen shows the worktree's diff at full width, under a bar with
-"Open in Claude App". The session reads "In Claude App" and never counts as
-running, because Hermes cannot see the Claude app's session.
+The session screen shows the worktree's diff at full width, and the header's
+Open in Claude App button opens the session again. A cloud session has no
+worktree on this Mac, so the screen names its environment and offers the same
+button. The session reads "In Claude App" and never counts as running, because
+Hermes cannot see the Claude app's session.
 
 ## Command line
 
@@ -134,7 +136,11 @@ The terminal is libghostty, through `libghostty-spm`.
 
 ## The session screen
 
-`SessionScreen` in the app target shows the terminal beside a `DiffScreen`.
+`SessionScreen` in the app target shows the terminal beside a `DiffScreen`,
+under one header. The header shows the title, state, origin, environment, and
+branch. Its buttons come from `SessionActions` in `SessionsUI`, which also owns
+the close and restart dialogs. `SessionTerminalView` draws only the terminal
+and, once the process exits, a bar with Restart.
 The diff is the worktree against its base, and it reloads as files change. A
 picker switches it to one branch of the local stack against its parent.
 A header button (⌥⌘D) hides the diff so the terminal takes the full width; the
@@ -142,8 +148,8 @@ choice is stored in `sessionShowsDiff` and applies to every session.
 Stacks come from the `gh stack` extension when it tracks the checkout, and are
 otherwise inferred from branch history.
 
-A cloud session has no worktree on this Mac, so its diff pane says there is no
-local diff.
+A cloud session in a terminal has no worktree on this Mac, so its diff pane
+says there is no local diff.
 
 ## Linking sessions to pull requests
 
