@@ -441,6 +441,10 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             let identifier = NSUserInterfaceItemIdentifier("code")
             let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NativeLineCell ?? NativeLineCell()
             cell.identifier = identifier
+            cell.lookUp = { [weak self, weak cell] lookup, name, path, rect in
+                guard let self, let cell else { return }
+                self.lookUp(lookup, name: name, from: path, at: rect.map { cell.convert($0, to: self.tableView) })
+            }
             show(item, in: cell, isNewRow: true)
             return cell
         }
@@ -819,7 +823,10 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         } else if let name = pressedIdentifier, let hit = lineCell(at: tableView.convert(event.locationInWindow, from: nil)),
                   hit.cell.identifier(at: hit.point)?.name == name, let file = hit.cell.file
         {
-            showDefinition(of: name, from: file.diff.path, at: hit.cell.identifierRect(at: hit.point).map { hit.cell.convert($0, to: tableView) })
+            lookUp(
+                DefinitionModel.Lookup(event.modifierFlags), name: name, from: file.diff.path,
+                at: hit.cell.identifierRect(at: hit.point).map { hit.cell.convert($0, to: tableView) }
+            )
         }
         pressedIdentifier = nil
         pressedBadge = nil
@@ -828,9 +835,9 @@ final class DiffTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     // MARK: Popover
 
     /// Looks `name` up in the definition popover, shown over `rect` of the table.
-    private func showDefinition(of name: String, from path: String, at rect: CGRect?) {
+    func lookUp(_ lookup: DefinitionModel.Lookup, name: String, from path: String, at rect: CGRect?) {
         let peek = model.peek
-        peek.lookUp(name: name, from: path)
+        peek.lookUp(lookup, name: name, from: path)
         let content = DefinitionPane(model: model, definitions: peek, style: .popover { [weak self, model] in
             if let page = peek.current { model.definitions.show(page) }
             self?.popover.close()

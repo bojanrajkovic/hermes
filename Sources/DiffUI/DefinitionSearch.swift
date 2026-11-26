@@ -45,17 +45,22 @@ enum DefinitionSearch {
     ///   - paths: Files that contain the name, in any order, possibly repeated.
     ///   - origin: The file the name was clicked in.
     static func candidates(among paths: [String], origin: String, limit: Int = candidateLimit) -> [String] {
+        Array(ranked(paths, origin: origin).lazy.filter { Language(path: $0).hasDefinitions }.prefix(limit))
+    }
+
+    /// Removes duplicate paths and orders the rest by closeness to `origin`:
+    /// `origin` itself, files in its directory, files in its language, then the rest.
+    static func ranked(_ paths: [String], origin: String) -> [String] {
         func directory(_ path: String) -> Substring { path[..<(path.lastIndex(of: "/") ?? path.startIndex)] }
         let language = Language(path: origin)
-        var seen: Set<String> = []
-        let ranked = paths.filter { seen.insert($0).inserted && Language(path: $0).hasDefinitions }
+        return Set(paths)
             .map { path -> (rank: Int, path: String) in
                 if path == origin { return (0, path) }
                 if directory(path) == directory(origin) { return (1, path) }
                 return (Language(path: path) == language ? 2 : 3, path)
             }
             .sorted { ($0.rank, $0.path) < ($1.rank, $1.path) }
-        return ranked.prefix(limit).map(\.path)
+            .map(\.path)
     }
 
     /// Looks for the definitions of `name`, in candidate order.
