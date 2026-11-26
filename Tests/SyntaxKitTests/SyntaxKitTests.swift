@@ -536,6 +536,33 @@ private let parsed = Language.allCases.filter { $0 != .plainText }
     }
 }
 
+@Suite struct References {
+    @Test func countsCodeButNotCommentsOrStrings() {
+        let source = """
+            // total is the sum
+            let total = 1
+            print("total")
+            print(total + subtotal)
+            """
+        #expect(Syntax.references(named: "total", in: source, language: .swift) == [1, 3])
+    }
+
+    @Test func aNameThatIsNeverUsedHasNoLines() {
+        #expect(Syntax.references(named: "missing", in: "let a = 1", language: .swift) == [])
+    }
+
+    @Test(arguments: [Language.json, .yaml, .plainText])
+    func languagesWithoutAGrammarReturnNil(language: Language) {
+        #expect(Syntax.references(named: "total", in: "total", language: language) == nil)
+    }
+
+    @Test func oversizedSourceReturnsNil() {
+        let line = "let total = 1\n"
+        let source = String(repeating: line, count: Syntax.maximumSourceBytes / line.utf8.count + 1)
+        #expect(Syntax.references(named: "total", in: source, language: .swift) == nil)
+    }
+}
+
 @Suite struct Definitions {
     @Test func locationAndLineText() {
         let source = "import Foundation\r\n\r\n    func greet() {}\r\n"

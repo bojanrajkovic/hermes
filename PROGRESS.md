@@ -75,6 +75,9 @@ What is built and works, and what is known not to work or is unverified.
 - Go to definition for Swift, TypeScript, TSX, JavaScript, Go, Rust, C#,
   Python, Ruby, Bash, and HCL, in a popover over the identifier that can move
   into a docked pane.
+- Find references with ⌘-click or the line's right-click menu, in the same
+  popover. In those 11 languages, the list leaves out a comment or string
+  that only mentions the name.
 - A file header's name opens the whole file in the docked pane at its first
   change.
 - A pull request's diff reloads in place when the head commit changes, and
@@ -171,8 +174,9 @@ What is built and works, and what is known not to work or is unverified.
 
 - **Sessions do not survive quitting.** The session list lives in memory and
   the terminals end with the app. Worktrees and branches stay on disk.
-- **Go to definition is pointer-only.** A click on an identifier opens the
-  lookup. There is no keyboard command for it.
+- **Go to definition and find references are pointer-only.** A click,
+  ⌘-click, or right-click on an identifier starts the lookup. There is no
+  keyboard command for either.
 
 **Unverified**
 
@@ -199,4 +203,7 @@ What is built and works, and what is known not to work or is unverified.
 - Lists are capped at what one query returns: 1,000 open pull requests per
   account, 100 review requests, and per pull request 100 comments, 100
   reviews, 100 review threads, and 250 commits.
-- A definition lookup reads at most 40 files that contain the name.
+- A definition lookup reads at most 40 files that contain the name. A
+  references search reads at most 100 files and 500 matching lines.
+- Find references searches the head commit, so it doesn't list a use that the
+  pull request deletes.

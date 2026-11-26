@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 import RepoKit
 
@@ -14,6 +14,8 @@ final class DefinitionModel {
             case message(title: String, detail: String)
             /// Several definitions to pick from.
             case choices([DefinitionLocation])
+            /// The lines that use the name. `isTruncated` is true when the search stopped before the last match.
+            case references([ReferenceLocation], isTruncated: Bool)
             /// A file, at a zero-based line that is marked.
             case file(path: String, line: Int, CodeFile)
         }
@@ -47,8 +49,26 @@ final class DefinitionModel {
     func goBack() { if canGoBack { index -= 1 } }
     func goForward() { if canGoForward { index += 1 } }
 
+    /// Whether a click on an identifier looks up its definition or its references.
+    enum Lookup {
+        case definition
+        case references
+
+        /// Maps ⌘-click to `.references` and a plain click to `.definition`.
+        init(_ modifiers: NSEvent.ModifierFlags) {
+            self = modifiers.contains(.command) ? .references : .definition
+        }
+    }
+
     /// Looks up `name`, clicked in the file at `origin`, on a new page.
-    func lookUp(name: String, from origin: String) {
+    func lookUp(_ lookup: Lookup = .definition, name: String, from origin: String) {
+        switch lookup {
+        case .definition: findDefinition(of: name, from: origin)
+        case .references: findReferences(to: name, from: origin)
+        }
+    }
+
+    private func findDefinition(of name: String, from origin: String) {
         let page = push(name: name, phase: .searching(fetchStatus))
         run(on: page) { [tree] model in
             let tree = try await tree()
@@ -72,11 +92,23 @@ final class DefinitionModel {
         }
     }
 
-    /// Opens one of several definitions on a new page.
-    func open(_ location: DefinitionLocation, name: String) {
-        let page = push(name: name, phase: .searching("Opening \(location.path)…"))
+    private func findReferences(to name: String, from origin: String) {
+        let page = push(name: name, phase: .searching(fetchStatus))
+        run(on: page, failure: "Couldn't Find References") { [tree] model in
+            let tree = try await tree()
+            model.update(page, .searching("Searching for uses of “\(name)”…"))
+            let found = try await ReferenceSearch.find(name: name, origin: origin, in: tree)
+            model.update(page, found.locations.isEmpty
+                ? .message(title: "No References Found", detail: "No code in this repository uses “\(name)”.")
+                : .references(found.locations, isTruncated: found.isTruncated))
+        }
+    }
+
+    /// Opens `path` at `line` on a new page. `name` is the identifier the list of definitions or references was for.
+    func open(path: String, line: Int, name: String) {
+        let page = push(name: name, phase: .searching("Opening \(path)…"))
         run(on: page) { [tree] model in
-            model.update(page, try await Self.load(path: location.path, line: location.line, from: try await tree()))
+            model.update(page, try await Self.load(path: path, line: line, from: try await tree()))
         }
     }
 

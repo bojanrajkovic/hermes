@@ -89,7 +89,8 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 - Every changed file in one scrolling list, with a file tree beside it.
 - Unified and side-by-side layouts, syntax highlighting, and intraline changes.
 - Expanders reveal the unchanged lines around a hunk.
-- Click an identifier to see its definition in a pane under the diff.
+- Click an identifier to see its definition in a pane under the diff, or
+  ⌘-click it to list the lines in the repository that use it.
 - Markdown files can show a rendered diff, including Mermaid diagrams.
 - An open pull request reloads in place when its head commit changes.
 

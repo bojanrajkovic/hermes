@@ -107,6 +107,19 @@ struct RenderTests {
                 try host.write(to: output.appending(path: "\(name)-\(layout.rawValue)-\(dark ? "dark" : "light").png"))
             }
         }
+        // `DIFFUI_REFERENCES=<name>` renders the references to a name in the docked pane.
+        if let symbol = environment["DIFFUI_REFERENCES"], let origin = model.files.first?.diff.path {
+            model.layout = .unified
+            model.definitions.lookUp(.references, name: symbol, from: origin)
+            try await wait {
+                if case .searching = model.definitions.current?.phase { false } else { true }
+            }
+            for dark in [false, true] {
+                let host = Host(DiffContent(model: model).environment(\.diffMetrics, DiffMetrics()), dark: dark)
+                try await host.settle()
+                try host.write(to: output.appending(path: "\(name)-references-\(dark ? "dark" : "light").png"))
+            }
+        }
     }
 
     /// Watches a working tree (`DIFFUI_LIVE_TREE`), changes a file in it, and
@@ -252,7 +265,7 @@ struct RenderTests {
             }
             try await shoot("definition", wait: .milliseconds(800))
             if case .choices(let locations) = model.definitions.current?.phase {
-                model.definitions.open(locations[0], name: name)
+                model.definitions.open(path: locations[0].path, line: locations[0].line, name: name)
                 try await shoot("definition-chosen", wait: .milliseconds(1200))
             }
             model.definitions.lookUp(name: "noSuchIdentifierAnywhere", from: origin)

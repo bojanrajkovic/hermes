@@ -155,12 +155,33 @@ public enum Syntax {
     ///   definition support (JSON, YAML, TOML, HTML, CSS, plain text) and for
     ///   over-limit sources.
     public static func identifiers(in source: String, language: Language) -> IdentifierMap {
+        parsedIdentifiers(in: source, language: language)
+            ?? IdentifierMap(lines: Array(repeating: [], count: SourceText(source).lineStarts.count))
+    }
+
+    /// Finds the lines that use `name` as an identifier. It matches identifier nodes
+    /// only, so it skips comments, strings, and other text that contains the word.
+    /// A definition counts as a use.
+    ///
+    /// - Parameters:
+    ///   - name: The exact, case-sensitive identifier.
+    ///   - source: A whole source file.
+    ///   - language: The file's language.
+    /// - Returns: Zero-based line indexes in ascending order, without duplicates.
+    ///   `nil` when the source can't be parsed: the language has no definition
+    ///   support, or the source is over the size limits.
+    public static func references(named name: String, in source: String, language: Language) -> [Int]? {
+        guard let map = parsedIdentifiers(in: source, language: language) else { return nil }
+        return map.lines.indices.filter { line in map.lines[line].contains { $0.name == name } }
+    }
+
+    /// Walks the parse tree and collects each line's identifiers. Returns `nil` when the
+    /// language has no identifier grammar or the source can't be parsed.
+    private static func parsedIdentifiers(in source: String, language: Language) -> IdentifierMap? {
         let text = SourceText(source)
         var lines = [[Identifier]](repeating: [], count: text.lineStarts.count)
         let symbols = Grammar.identifierSymbols(for: language)
-        guard text.isParseable, !symbols.isEmpty, let root = parse(source, as: language)?.rootNode else {
-            return IdentifierMap(lines: lines)
-        }
+        guard text.isParseable, !symbols.isEmpty, let root = parse(source, as: language)?.rootNode else { return nil }
 
         let cursor = root.treeCursor
         walk: while true {
