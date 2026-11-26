@@ -182,31 +182,9 @@ What is built and works, and what is known not to work or is unverified.
 **Unverified**
 
 - **The relay's membership question.** The relay asks GitHub
-  `GET /user/memberships/orgs/{org}` with a tenant App's user token. Its tests
-  stand in for GitHub. No real App's token has been used on that endpoint, for
-  the App's own organization or for another.
-
-- **Renovate.** `renovate.json` passes Renovate's validator, and a local run
-  finds the dependencies in the workflows, `Package.swift`, and
-  `.xcode-version`. Renovate has not run on this repository.
-
-- **Cloud sessions.** `claude --environment <id>` is built from the output of
-  `claude --help`. No cloud session has been run from Hermes.
-- **Approve and Request Changes.** Every pull request in the playground
-  repository is the viewer's own, and GitHub rejects both verdicts on one's
-  own pull request. Hermes disables them there, so neither has been sent.
-- **Relay setup.** The manifest, the page that posts it, and the requests are
-  tested against fixed values. No App has been created from Hermes, and no
-  relay has been registered with.
-- **Relay sign-in and events.** The connection was run against a stand-in
-  WebSocket server, which showed its messages, the `4001` close code, and a
-  refused token, and against a deployed relay for a tenant it does not have.
-  Hermes has not signed in to a relay or received an event from one.
-- **Applied payloads.** Reading a pull request, a comment, a review, a reply,
-  and a resolved thread is tested against deliveries captured from the
-  playground repository. Reading a status, a check run, and a push is tested
-  against payloads written by hand. Hermes has applied no delivery from a
-  running forwarder or relay.
+  `GET /user/memberships/orgs/{org}` only when an organization's App reaches
+  none of the user's repositories. Its tests stand in for GitHub. Every real
+  sign-in so far reached repositories, so no real token has made that call.
 - **Relay discovery.** Reading and committing `hermes-relay.json` are tested
   against a stubbed GitHub. Hermes has committed the file to no repository.
 - **The release workflow.** `release.yml` passes zizmor's auditor checks, but
