@@ -79,7 +79,7 @@ public enum SessionOrigin: Hashable, Sendable {
 
     var repoID: RepoID { RepoID(owner: repository.owner, name: repository.name) }
 
-    var symbolName: String {
+    public var symbolName: String {
         switch self {
         case .pullRequest: "arrow.triangle.pull"
         case .issue: "smallcircle.filled.circle"

@@ -134,7 +134,8 @@ What is built and works, and what is known not to work or is unverified.
   branch fetched from `refs/pull/<number>/head`. It can't push to the fork.
 - Cloning a repository that has no local checkout.
 - The session screen: terminal beside a diff of the worktree that reloads as
-  files change.
+  files change, under one header with the session's origin, environment,
+  branch, and buttons.
 - Closing a session can remove its worktree, and asks before deleting
   uncommitted work.
 - A session started from an issue links to the pull request opened from its
