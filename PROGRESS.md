@@ -185,8 +185,9 @@ What is built and works, and what is known not to work or is unverified.
   `GET /user/memberships/orgs/{org}` only when an organization's App reaches
   none of the user's repositories. Its tests stand in for GitHub. Every real
   sign-in so far reached repositories, so no real token has made that call.
-- **Relay discovery.** Reading and committing `hermes-relay.json` are tested
-  against a stubbed GitHub. Hermes has committed the file to no repository.
+- **Publishing a relay.** Discovery has found a `hermes-relay.json` written
+  with `gh` and offered its tenant. Hermes's own Publish is tested against a
+  stubbed GitHub and has committed the file to no repository.
 - **The release workflow.** `release.yml` passes zizmor's auditor checks, but
   it hasn't run yet. The next published release is its first run. Installing
   with mise was tested against the v0.5.0 zip, not one the workflow built.
