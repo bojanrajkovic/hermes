@@ -19,6 +19,8 @@ final class NativeLineCell: NSView {
     private weak var model: DiffModel?
     /// The review marks of each side.
     private var marks: [LineMarks] = []
+    /// The find matches on each side.
+    private var found: [FoundRanges] = []
     /// The side under the pointer, and the identifier under it as a range of the displayed text.
     private var hover: (side: Int, underline: Range<Int>?)?
     /// The gutter and code of each side, ready to draw. Built on the first draw and after the appearance changes.
@@ -70,6 +72,23 @@ final class NativeLineCell: NSView {
         hitLayout = nil
         self.marks = []
         show(marks: marks)
+        showFound()
+        needsDisplay = true
+    }
+
+    /// Reads the find ranges for the row's lines from the model, and redraws when they change.
+    func showFound() {
+        guard let file, let find = model?.find else { return }
+        let current = find.currentMatch
+        let new = sides.map { side -> FoundRanges in
+            guard let line = side.cell?.line else { return FoundRanges() }
+            return FoundRanges(
+                all: find.ranges[file.id]?[line.numbers] ?? [],
+                current: current.flatMap { $0.row.file == file.id && $0.line == line.numbers ? $0.range : nil }
+            )
+        }
+        guard new != found else { return }
+        found = new
         needsDisplay = true
     }
 
@@ -225,6 +244,18 @@ final class NativeLineCell: NSView {
                     CGRect(x: side.x, y: top, width: 3, height: metrics.lineHeight)
                 )
             }
+            if found.indices.contains(index) {
+                // Yellow stays visible on red and green rows in light and dark mode, like the revealed-line tint.
+                // It stays translucent, so dark mode's light text stays readable on the current match.
+                for range in found[index].all {
+                    let color = NSColor.systemYellow.withAlphaComponent(range == found[index].current ? 0.6 : 0.25)
+                    for rect in codeRects(NSRange(displayRange(of: range, in: cell.line.text)), side: index) {
+                        let path = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: 0), xRadius: 2, yRadius: 2)
+                        color.setFill()
+                        path.fill()
+                    }
+                }
+            }
 
             // SwiftUI sizes a `Text` to whole pixels and right-aligns that box.
             let gutterWidth = (text.gutter.size().width * scale).rounded(.up) / scale
@@ -320,17 +351,23 @@ final class NativeLineCell: NSView {
     /// Where `symbol` first is in each side's code, in the cell's coordinates.
     private func symbolRects(_ symbol: String?) -> [CGRect] {
         guard let symbol, !symbol.isEmpty else { return [] }
-        var rects: [CGRect] = []
-        for (index, side) in sides.enumerated() {
-            guard let cell = side.cell, let layout = layout(side: index) else { continue }
+        return sides.indices.flatMap { index -> [CGRect] in
+            guard let cell = sides[index].cell else { return [] }
             let range = (displayedText(cell.line.text) as NSString).range(of: symbol)
-            guard range.location != NSNotFound else { continue }
-            let glyphs = layout.manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            layout.manager.enumerateEnclosingRects(
-                forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: layout.container
-            ) { rect, _ in
-                rects.append(rect.offsetBy(dx: side.codeX, dy: DiffMetrics.rowPadding))
-            }
+            return range.location == NSNotFound ? [] : codeRects(range, side: index)
+        }
+    }
+
+    /// Returns the rects, in cell coordinates, where a range of a side's displayed text is drawn: one per line it wraps onto.
+    private func codeRects(_ range: NSRange, side index: Int) -> [CGRect] {
+        guard let layout = layout(side: index) else { return [] }
+        let x = sides[index].codeX
+        var rects: [CGRect] = []
+        let glyphs = layout.manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        layout.manager.enumerateEnclosingRects(
+            forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: layout.container
+        ) { rect, _ in
+            rects.append(rect.offsetBy(dx: x, dy: DiffMetrics.rowPadding))
         }
         return rects
     }

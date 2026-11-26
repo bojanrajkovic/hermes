@@ -214,36 +214,10 @@ struct LogView: View {
 
     private var bar: some View {
         HStack(spacing: Metrics.rowSpacing) {
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search Log", text: $model.query)
-                    .textFieldStyle(.plain)
-                    .focused($isSearchFocused)
-                    .onSubmit { model.step(by: 1) }
-                    .onExitCommand { model.query = "" }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.quaternary, in: .rect(cornerRadius: 6))
-            .frame(width: Metrics.searchFieldWidth)
-
-            if !model.query.isEmpty {
-                Text(matchCount)
-                    .font(Theme.Fonts.meta.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            ControlGroup {
-                Button { model.step(by: -1) } label: { Label("Previous Match", systemImage: "chevron.up") }
-                    .keyboardShortcut("g", modifiers: [.command, .shift])
-                    .help("Previous match (⇧⌘G)")
-                Button { model.step(by: 1) } label: { Label("Next Match", systemImage: "chevron.down") }
-                    .keyboardShortcut("g", modifiers: .command)
-                    .help("Next match (⌘G)")
-            }
-            .disabled(model.matches.isEmpty)
-            .fixedSize()
+            FindField(
+                "Search Log", query: $model.query, matchCount: model.matches.count, current: model.currentMatch,
+                isFocused: $isSearchFocused, step: { model.step(by: $0) }, exit: { model.query = "" }
+            )
 
             Spacer(minLength: 0)
 
@@ -275,10 +249,5 @@ struct LogView: View {
                 .keyboardShortcut("f", modifiers: .command)
                 .hidden()
         }
-    }
-
-    private var matchCount: String {
-        guard !model.matches.isEmpty else { return "No matches" }
-        return "\((model.currentMatch ?? 0) + 1) of \(model.matches.count)"
     }
 }

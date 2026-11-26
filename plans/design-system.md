@@ -90,6 +90,7 @@ prose column, to fit code blocks and tables.
 | `LabelChip` | A GitHub label in its own color, adjusted to stay legible in light and dark. |
 | `AvatarView` | A round avatar, loaded once per URL through `AvatarCache`. |
 | `RelativeTime` | A compact age such as `5m` or `17h`. |
+| `FindField` | The search part of a find bar: a field, "3 of 12", and previous and next buttons on ⇧⌘G and ⌘G. The log viewer and the diff use it. |
 | `mainAction(isDisabled:)` | A modifier for a form's main button: prominent while it can be pressed, an ordinary disabled button otherwise, so a disabled one doesn't read as the thing to press. |
 | `commentEditor(placeholder:isEmpty:)` | A modifier for a comment's `TextEditor`: inset body text in a bordered box, with a placeholder while empty. The review summary, the line comment composer, and the conversation's comment box use it. |
 

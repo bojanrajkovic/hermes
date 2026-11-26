@@ -248,6 +248,8 @@ final class DiffModel {
     let definitions: DefinitionModel
     /// The definition popover over a clicked identifier. It reads the same source tree as the pane.
     let peek: DefinitionModel
+    /// The find bar over the list.
+    let find = DiffFind()
     /// A "+" was clicked in a rendered Markdown file of a source that takes no comments.
     var isReadOnlyNoticeShown = false
 
@@ -752,6 +754,36 @@ final class DiffModel {
         file.isCollapsed = false
         file.showsRendered = false
         scroll.scroll(to: row, anchor: .center, symbol: symbol)
+    }
+
+    /// The inputs that change the find results: the query, the layout, the last reload, and the code
+    /// lines each file shows. When the key changes, the find bar's task runs the search again.
+    var findKey: [AnyHashable] {
+        [find.query, layout, updatedAt] + files.map { [$0.showsRendered, $0.rows.count] as [AnyHashable] }
+    }
+
+    /// Finds the query in the code lines shown, off the main actor. Call from a task keyed on
+    /// `findKey`, so a newer search cancels this one.
+    func search() async {
+        let query = find.query
+        guard !query.isEmpty else {
+            // Clear once, not on every change to the rows.
+            if !find.searchedQuery.isEmpty { _ = find.show([], for: "") }
+            return
+        }
+        // Wait out fast typing before scanning a large diff.
+        try? await Task.sleep(for: .milliseconds(120))
+        guard !Task.isCancelled else { return }
+        // Skip files that show rendered Markdown, because they have no code lines.
+        let rows = files.filter { !$0.showsRendered }.map(\.rows)
+        let found = await Task.detached { DiffSearch.matches(of: query, in: rows) }.value
+        guard !Task.isCancelled, let match = find.show(found, for: query) else { return }
+        reveal(match.row)
+    }
+
+    /// Moves to the next (`1`) or previous (`-1`) find match and scrolls to it.
+    func stepFind(by offset: Int) {
+        if let match = find.step(by: offset) { reveal(match.row) }
     }
 
     /// The file's page in the pull request on GitHub. `nil` for local sources.

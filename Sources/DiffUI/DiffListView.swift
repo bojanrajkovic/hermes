@@ -6,11 +6,16 @@ import SwiftUI
 /// The screen for a loaded model: its loading, error, and empty states, or the navigator beside the list.
 struct DiffContent: View {
     let model: DiffModel
+    @FocusState private var isFindFocused: Bool
 
     private var diffColumn: some View {
         VStack(spacing: 0) {
             SummaryBar(model: model)
             Divider()
+            if model.find.isShown {
+                FindBar(model: model, isFocused: $isFindFocused)
+                Divider()
+            }
             VSplitView {
                 DiffList(model: model)
                     .frame(minHeight: DiffMetrics.listMinHeight)
@@ -19,6 +24,15 @@ struct DiffContent: View {
                         .frame(minHeight: DiffMetrics.paneMinHeight, idealHeight: DiffMetrics.paneIdealHeight)
                 }
             }
+        }
+        .background {
+            // A hidden button binds ⌘F, because no visible button opens the find bar.
+            Button("Find in Diff") {
+                model.find.isShown = true
+                isFindFocused = true
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .hidden()
         }
     }
 
@@ -150,6 +164,32 @@ struct SummaryBar: View {
         .padding(.horizontal, 12)
         .frame(height: DiffMetrics.barHeight)
         .background(.bar)
+    }
+}
+
+/// Searches the diff's code lines. ⌘F opens the bar, and Escape or Done clears the query and closes the bar.
+private struct FindBar: View {
+    let model: DiffModel
+    let isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
+        @Bindable var find = model.find
+        HStack(spacing: 10) {
+            FindField(
+                "Find in Diff", query: $find.query, matchCount: find.matches.count, current: find.current,
+                isFocused: isFocused, step: { model.stepFind(by: $0) }, exit: { find.close() }
+            )
+            Spacer(minLength: 0)
+            Button("Done") { find.close() }
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 12)
+        .frame(height: DiffMetrics.barHeight)
+        .background(.bar)
+        // A bar that ⌘F just inserted takes focus once it is on screen.
+        .onAppear { isFocused.wrappedValue = true }
+        // The bar runs this task, so SwiftUI observes the rows only while the bar is visible.
+        .task(id: model.findKey) { await model.search() }
     }
 }
 
