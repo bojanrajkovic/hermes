@@ -237,16 +237,17 @@ struct BranchChips: View {
     }
 }
 
-/// A menu of every pull request in the open one's stack, bottom first.
 /// Merges the pull request when GitHub says it can merge. The button uses the
-/// repository's default method; its menu offers the other allowed ones.
+/// repository's default method; its menu offers the other allowed ones. While the pull
+/// request, or any pull request below it in its stack, is a draft, `MergeButton` shows a
+/// Ready for Review button in place of the Merge menu.
 struct MergeButton: View {
     let pullRequest: PullRequest
     @Environment(WindowModel.self) private var model
     /// The merge waiting for the user's confirmation.
     @State private var pending: PendingMerge?
-    @State private var isMerging = false
-    @State private var failure: String?
+    @State private var isBusy = false
+    @State private var failure: Failure?
 
     private struct PendingMerge: Hashable {
         let method: MergeMethod
@@ -254,12 +255,16 @@ struct MergeButton: View {
         let bypassing: Bool
     }
 
+    private struct Failure {
+        let title: String
+        let message: String
+    }
+
     var body: some View {
         // A pull request that is merged or closed has nothing to merge.
         if model.closedState(of: pullRequest.key) == nil || model.closedState(of: pullRequest.key) == .open {
-            menu
+            control
                 .fixedSize()
-                .disabled(!(readiness?.canMerge == true || canBypass || canEnableAutoMerge || canDisableAutoMerge) || isMerging)
                 .help(help)
                 .confirmationDialog(
                     title, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), presenting: pending
@@ -270,13 +275,32 @@ struct MergeButton: View {
                 } message: { _ in
                     Text(message)
                 }
-                .alert("Could Not Merge", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                .alert(failure?.title ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
                     Button("OK") {}
                 } message: {
-                    Text(failure ?? "")
+                    Text(failure?.message ?? "")
                 }
         }
     }
+
+    @ViewBuilder
+    private var control: some View {
+        if canMarkReady {
+            Button(action: markReady) {
+                Label(isBusy ? "Marking Ready…" : "Ready for Review", systemImage: "checkmark.circle")
+            }
+            .disabled(isBusy)
+        } else {
+            menu
+                .disabled(!(readiness?.canMerge == true || canBypass || canEnableAutoMerge || canDisableAutoMerge) || isBusy)
+        }
+    }
+
+    /// The drafts among the pull requests a merge would include, bottom first. GitHub refuses
+    /// to merge a draft, and `gh stack merge` refuses a stack that has a draft below the pull request.
+    private var drafts: [PullRequest] { model.mergeSet(of: pullRequest).filter(\.isDraft) }
+
+    private var canMarkReady: Bool { !drafts.isEmpty && readiness?.viewerCanPush == true }
 
     /// Loaded by the store while the pull request is on screen, and again when a push, a review,
     /// or a finished check could change it.
@@ -301,7 +325,7 @@ struct MergeButton: View {
     /// Blocked, it is only a menu, so the bypass takes a choice from it.
     @ViewBuilder
     private var menu: some View {
-        let label = Label(isMerging ? "Merging…" : "Merge", systemImage: "arrow.triangle.merge")
+        let label = Label(isBusy ? "Merging…" : "Merge", systemImage: "arrow.triangle.merge")
         if readiness?.canMerge == true {
             Menu { items } label: { label } primaryAction: { pending = readiness.map { PendingMerge(method: $0.defaultMethod, bypassing: false) } }
         } else {
@@ -339,6 +363,11 @@ struct MergeButton: View {
 
     private var help: String {
         guard let readiness else { return "Checking whether this can merge…" }
+        if canMarkReady {
+            if drafts.map(\.key) == [pullRequest.key] { return "Marks this pull request ready for review, so it can merge." }
+            let numbers = drafts.map { "#\($0.number)" }.formatted(.list(type: .and))
+            return "Marks \(numbers) ready for review, so the stack can merge."
+        }
         if let blocker = readiness.blocker {
             if canBypass { return "\(blocker) You can merge anyway from this menu." }
             if canEnableAutoMerge { return "\(blocker) You can turn on auto-merge from this menu." }
@@ -368,27 +397,42 @@ struct MergeButton: View {
         return "This pull request is part of a stack. \(numbers) will be merged together, all or nothing. This can't be undone.\(warning)"
     }
 
-    private func setAutoMerge(_ method: MergeMethod?) {
-        isMerging = true
+    // Skips a confirmation, because a pull request can be converted back to draft on GitHub.
+    private func markReady() {
+        isBusy = true
+        let drafts = drafts
         Task {
-            defer { isMerging = false }
+            defer { isBusy = false }
+            do {
+                try await model.markReadyForReview(drafts)
+            } catch {
+                failure = Failure(title: "Could Not Mark Ready for Review", message: describe(error))
+            }
+            await model.github.loadReadiness(pullRequest.key)
+        }
+    }
+
+    private func setAutoMerge(_ method: MergeMethod?) {
+        isBusy = true
+        Task {
+            defer { isBusy = false }
             do {
                 try await model.setAutoMerge(pullRequest, method: method)
             } catch {
-                failure = describe(error)
+                failure = Failure(title: "Could Not Merge", message: describe(error))
             }
             await model.github.loadReadiness(pullRequest.key)
         }
     }
 
     private func merge(_ method: MergeMethod) {
-        isMerging = true
+        isBusy = true
         Task {
-            defer { isMerging = false }
+            defer { isBusy = false }
             do {
                 try await model.merge(pullRequest, method: method)
             } catch {
-                failure = describe(error)
+                failure = Failure(title: "Could Not Merge", message: describe(error))
                 await model.github.loadReadiness(pullRequest.key)
             }
         }

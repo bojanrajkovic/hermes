@@ -223,6 +223,18 @@ extension GitHubClient {
         _ = try await graphQL(query, variables: ["input": .object(["pullRequestId": .string(pullRequestID)])], as: Ignored.self)
     }
 
+    /// Takes a pull request out of draft. GitHub refuses to merge a draft.
+    ///
+    /// - Throws: `GitHubError.graphQL` with GitHub's reason, for example when the viewer can't change the pull request.
+    public func markReadyForReview(pullRequestID: String) async throws {
+        let query = """
+            mutation($input: MarkPullRequestReadyForReviewInput!) {
+              markPullRequestReadyForReview(input: $input) { clientMutationId }
+            }
+            """
+        _ = try await graphQL(query, variables: ["input": .object(["pullRequestId": .string(pullRequestID)])], as: Ignored.self)
+    }
+
     /// Merges a stack from its bottom up to and including one pull request,
     /// all or nothing, with the `gh stack` extension. GitHub refuses the
     /// ordinary merge call for a stacked pull request.
