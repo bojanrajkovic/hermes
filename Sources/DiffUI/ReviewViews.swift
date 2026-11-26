@@ -315,7 +315,11 @@ struct DraftView: View {
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .confirmationDialog("Delete this pending comment?", isPresented: $isConfirmingDelete) {
-            Button("Delete Comment", role: .destructive) { review.delete(draft.id) }
+            Button("Delete Comment", role: .destructive) {
+                // The `Task` runs the delete after the sheet closes. If the line popover resizes while the sheet
+                // is still animating out, AppKit's layout pass recurses until the stack overflows.
+                Task { review.delete(draft.id) }
+            }
         } message: {
             Text("The comment has not been sent. Deleting it can't be undone.")
         }
