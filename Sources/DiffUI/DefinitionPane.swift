@@ -33,10 +33,10 @@ struct DefinitionPane: View {
             ControlGroup {
                 Button("Back", systemImage: "chevron.left") { definitions.goBack() }
                     .disabled(!definitions.canGoBack)
-                    .help("Show the previous definition")
+                    .help("Show the previous page")
                 Button("Forward", systemImage: "chevron.right") { definitions.goForward() }
                     .disabled(!definitions.canGoForward)
-                    .help("Show the next definition")
+                    .help("Show the next page")
             }
             .fixedSize()
 
@@ -93,7 +93,15 @@ struct DefinitionPane: View {
             ContentUnavailableView(title, systemImage: "questionmark.circle", description: Text(detail))
         case .choices(let locations):
             if let page = definitions.current {
-                DefinitionChooser(name: page.name, locations: locations) { definitions.open($0, name: page.name) }
+                DefinitionChooser(name: page.name, locations: locations) {
+                    definitions.open(path: $0.path, line: $0.line, name: page.name)
+                }
+            }
+        case .references(let locations, let isTruncated):
+            if let page = definitions.current {
+                ReferenceList(name: page.name, locations: locations, isTruncated: isTruncated) {
+                    definitions.open(path: $0.path, line: $0.line, name: page.name)
+                }
             }
         case .file(let path, let line, let file):
             CodeFileView(file: file, path: path, line: line)
@@ -102,7 +110,7 @@ struct DefinitionPane: View {
         case nil:
             ContentUnavailableView(
                 "No Definition", systemImage: "arrow.turn.down.right",
-                description: Text("Click an identifier to see where it is defined.")
+                description: Text("Click an identifier to see where it is defined, or ⌘-click it to see where it is used.")
             )
         }
     }
@@ -175,6 +183,67 @@ private struct DefinitionChooser: View {
     }
 }
 
+/// The lines that use a name, grouped under a header for each file.
+private struct ReferenceList: View {
+    let name: String
+    let locations: [ReferenceLocation]
+    let isTruncated: Bool
+    let open: (ReferenceLocation) -> Void
+    @Environment(\.diffMetrics) private var metrics
+
+    var body: some View {
+        // Each file's lines are adjacent in `locations`, so a location only joins the last group or starts one.
+        let files = locations.reduce(into: [(path: String, lines: [ReferenceLocation])]()) { files, location in
+            if files.last?.path == location.path { files[files.count - 1].lines.append(location) }
+            else { files.append((location.path, [location])) }
+        }
+        List {
+            Text(summary(files: files.count))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .listRowSeparator(.hidden)
+            ForEach(files, id: \.path) { file in
+                Section {
+                    ForEach(file.lines) { location in
+                        Button {
+                            open(location)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(verbatim: String(location.line + 1))
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                    .frame(minWidth: 32, alignment: .trailing)
+                                Text(verbatim: location.lineText.trimmingCharacters(in: .whitespaces))
+                                    .truncationMode(.tail)
+                            }
+                            .font(metrics.font)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.hidden)
+                        .accessibilityLabel("Line \(location.line + 1): \(location.lineText)")
+                    }
+                } header: {
+                    Text(verbatim: file.path)
+                        .truncationMode(.middle)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+    }
+
+    private func summary(files: Int) -> String {
+        let uses = locations.count == 1 ? "1 line uses" : "\(locations.count) lines use"
+        let place = files == 1 ? "1 file" : "\(files) files"
+        let found = "\(uses) “\(name)” in \(place)."
+        return isTruncated ? found + " The search stopped early, so there may be more uses." : found
+    }
+}
+
 /// A whole file, scrolled to a line, which is marked.
 private struct CodeFileView: View {
     let file: CodeFile
@@ -212,7 +281,7 @@ private struct CodeFileLine: View {
             // The arrow marks the line for readers who can't tell the tint apart.
             Text(verbatim: (isMarked ? "▸" : " ") + String(repeating: " ", count: max(digits - number.count, 0)) + number + "  ")
                 .foregroundStyle(isMarked ? .primary : .secondary)
-                .accessibilityLabel(isMarked ? "Line \(number), the definition" : "Line \(number)")
+                .accessibilityLabel(isMarked ? "Line \(number), marked" : "Line \(number)")
             CodeText(text: line.text, source: line.source, path: path, identifiers: line.identifiers, isHovered: isHovered)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

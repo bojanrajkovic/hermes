@@ -2,12 +2,12 @@
 
 The diff viewer shows every changed file of a diff in one scrolling list, with
 a file tree beside it. It takes review comments on a pull request and looks up
-definitions.
+definitions and references.
 
 Three targets make it up:
 
 - `DiffKit` parses unified diffs and does the line math. Pure, no UI.
-- `SyntaxKit` highlights code and finds definitions with tree-sitter. Pure.
+- `SyntaxKit` highlights code and finds definitions and references with tree-sitter. Pure.
 - `DiffUI` holds the views and models. Its entry point is `DiffScreen`.
 
 ## Sources
@@ -51,7 +51,7 @@ flowchart TD
     F --> T["Background: SourceTree at the head commit"]
     T --> R["Hidden regions for context expansion"]
     R --> F
-    T --> D["Go to definition"]
+    T --> D["Go to definition, find references"]
     P --> RV["ReviewModel: threads and drafts matched to lines"]
     RV --> V
 ```
@@ -179,8 +179,8 @@ table's coordinator has them:
 | Comment on a line or a range | A press on the "+" calls `ReviewModel.beginDrag`. Each drag event finds the row at the pointer's height and calls `drag(over:)` with its lines, so rows that scroll into view during the drag count. The release calls `endDrag`. A shift-click extends the open comment's range. |
 | Selection and range marks | The coordinator observes the review's selection, comment ranges, and drag origin, and gives the cells on screen their `LineMarks`. A cell redraws when its marks change. |
 | Find matches | The coordinator observes `DiffFind`'s matches and current match, and each cell on screen reads its lines' ranges into `FoundRanges`. The cell fills each match with light yellow behind the text, and the current match with a stronger yellow. A cell redraws when its ranges change. |
-| Go to definition | The cell lays the hovered side's code out with a layout manager and finds the character under the pointer. The line is parsed for identifiers when the pointer first reaches it. An identifier under the pointer is underlined, the cursor is a pointing hand, and a click looks it up. |
-| Context menu | The cell's `menu(for:)`: Copy Line, and Add Comment… for a pull request. |
+| Go to definition | The cell lays the hovered side's code out with a layout manager and finds the character under the pointer. The line is parsed for identifiers when the pointer first reaches it. An identifier under the pointer is underlined, the cursor is a pointing hand, a click looks up its definition, and a ⌘-click looks up its references. |
+| Context menu | The cell's `menu(for:)`: Go to Definition and Find References over an identifier, Copy Line, and Add Comment… for a pull request. The cell's `lookUp` closure passes the identifier to the coordinator, which owns the popover. |
 | Revealed line | A request that puts a line in the middle (`DiffModel.reveal`) tints its row yellow for 0.3 seconds, then fades the tint over 0.9 seconds. When the request names a symbol, as "Show in Diff" does, its first occurrence on the line is tinted more strongly. With Reduce Motion on, the tint goes away at once instead of fading. A jump from the navigator tints nothing. The tint is a view over the cell, so the row keeps its height. |
 | VoiceOver | Each cell is one element. Its label is "Added line 12", "Removed line 7", or "Line 3", then the text. A custom action per line starts a comment on it. |
 
@@ -357,6 +357,45 @@ graph LR
     Q -- identifier --> Q
     H[File name in a header] --> Q
 ```
+
+## Find references
+
+⌘-clicking an identifier, or choosing Find References from a code line's
+right-click menu, lists the lines that use it. The list opens as a page in the
+popover or pane that shows definitions, so Back and Forward move between
+reference lists and definitions.
+
+1. `git grep` finds the lines that contain the name as a whole word. It
+   searches files in path order and stops at 500 lines
+   (`SourceTreeLimits.matches`). When it stops
+   before reaching the clicked file, `ReferenceSearch` reads that file whole.
+2. `DefinitionSearch.ranked` orders the matching files the same way it orders
+   definition candidates. `ReferenceSearch` reads the first 100 files.
+3. `Syntax.references` parses each file and returns the lines where the name is
+   an identifier. `ReferenceSearch` keeps only those lines, so the list leaves
+   out comments and strings that mention the name. A definition counts as a use.
+4. For a file that tree-sitter can't parse, `ReferenceSearch` keeps every line
+   that grep found. These are files in languages without definition support,
+   such as Markdown or YAML, and files over `Syntax`'s size limits.
+
+```mermaid
+flowchart LR
+    C["⌘-click 'total'"] --> G["git grep -w total"]
+    G --> R["Rank files, read the first 100"]
+    R --> Q{"Syntax.references"}
+    Q -- "lines" --> K["Keep grep lines tree-sitter confirms"]
+    Q -- "nil: can't parse" --> A["Keep every grep line"]
+    K --> L["List grouped by file"]
+    A --> L
+```
+
+The list groups lines by file, closest file first. A click on a line opens the
+file at that line. When grep stops at its limit or `ReferenceSearch` skips
+files past the first 100, the list says the search stopped early.
+
+The search reads the same source tree as definitions: the head commit for a
+pull request, the working directory for a local diff. That tree holds the new
+side of the diff, so the list leaves out a use that the diff deletes.
 
 ## Opening a file
 

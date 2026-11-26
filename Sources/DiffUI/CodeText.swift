@@ -31,7 +31,8 @@ func glyphFrames(in layout: Text.Layout, origin: CGPoint) -> [(rect: CGRect, off
 }
 
 /// One line of code. While the pointer is over the line, its identifiers
-/// underline under the pointer and a click looks up their definition.
+/// underline under the pointer. A click on an identifier looks up its
+/// definition, and a ⌘-click looks up its references.
 struct CodeText: View {
     let text: AttributedString
     /// The line as it is in the file.
@@ -94,7 +95,9 @@ private struct IdentifierLayer: View {
         .pointerStyle(hovered == nil ? nil : .link)
         // The click's own position, not the hover state: a click can arrive without a hover before it.
         .onTapGesture { point in
-            if let identifier = identifier(at: point) { definitions.lookUp(name: identifier.name, from: path) }
+            if let identifier = identifier(at: point) {
+                definitions.lookUp(DefinitionModel.Lookup(NSEvent.modifierFlags), name: identifier.name, from: path)
+            }
         }
         .task {
             guard known == nil else { return }

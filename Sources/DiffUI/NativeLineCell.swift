@@ -30,6 +30,11 @@ final class NativeLineCell: NSView {
     /// The text layout of the side under the pointer, for finding the character at a point.
     private var hitLayout: (side: Int, width: CGFloat, storage: NSTextStorage, manager: NSLayoutManager, container: NSTextContainer)?
     private var menuLine: DiffLine?
+    /// The identifier under the pointer when the context menu opened, and its rect in the cell.
+    private var menuIdentifier: (name: String, rect: CGRect?)?
+    /// Looks up an identifier in the popover: the kind of lookup, the identifier's name, the file's path,
+    /// and the identifier's rect in the cell.
+    var lookUp: ((DefinitionModel.Lookup, _ name: String, _ path: String, CGRect?) -> Void)?
     /// The tint over a line that was just revealed.
     private var highlightView: NSView?
     /// How long the highlight stays before it fades, and how long the fade takes.
@@ -471,14 +476,36 @@ final class NativeLineCell: NSView {
     // MARK: Menu
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let index = sideIndex(at: convert(event.locationInWindow, from: nil)), let line = sides[index].cell?.line else { return nil }
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = sideIndex(at: point), let line = sides[index].cell?.line else { return nil }
         menuLine = line
+        // The cell parses a line when the pointer first hovers over it. After a scroll, a right-click
+        // can arrive before any hover, so parse the line here.
+        if identifiers[index]?.isEmpty ?? true, let file {
+            identifiers[index] = Syntax.identifiers(in: line.text, language: Language(path: file.diff.path)).lines.first ?? []
+        }
+        menuIdentifier = identifier(at: point).map { ($0.name, identifierRect(at: point)) }
         let menu = NSMenu()
+        if let name = menuIdentifier?.name {
+            menu.addItem(withTitle: "Go to Definition", action: #selector(goToDefinition), keyEquivalent: "").target = self
+            menu.addItem(withTitle: "Find References to “\(name)”", action: #selector(findReferences), keyEquivalent: "").target = self
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "Copy Line", action: #selector(copyLine), keyEquivalent: "").target = self
         if model?.review != nil {
             menu.addItem(withTitle: "Add Comment…", action: #selector(addComment), keyEquivalent: "").target = self
         }
         return menu
+    }
+
+    @objc private func goToDefinition() {
+        guard let menuIdentifier, let file else { return }
+        lookUp?(.definition, menuIdentifier.name, file.diff.path, menuIdentifier.rect)
+    }
+
+    @objc private func findReferences() {
+        guard let menuIdentifier, let file else { return }
+        lookUp?(.references, menuIdentifier.name, file.diff.path, menuIdentifier.rect)
     }
 
     @objc private func copyLine() {
