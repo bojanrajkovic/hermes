@@ -80,7 +80,18 @@ private struct RelayRow: View {
         return "\(host), commit \(commit.prefix(7))"
     }
 
+    private var publishAccounts: [String] {
+        let repositories: Set<RepositoryRef> = if case .connected(let repositories) = state { repositories } else { [] }
+        let owned = (store.viewer?.accounts ?? []).filter { $0.kind == .personal || $0.canAdminister }
+        return membership.publishAccounts(repositories: repositories, ownedAccounts: owned.map(\.login))
+    }
+
+    private func publish(in account: String) {
+        Task { await publishRelay(membership.tenant, for: account, client: store.client) }
+    }
+
     var body: some View {
+        let publishAccounts = publishAccounts
         LabeledContent {
             HStack(spacing: 8) {
                 if state == .signedOut {
@@ -90,8 +101,20 @@ private struct RelayRow: View {
                 if let app = membership.app {
                     Link("Install…", destination: RelayAppManifest.installURL(slug: app.slug))
                         .help("Install \(app.slug) on \(app.account), on GitHub")
-                    CopyJoinLinkButton(tenant: membership.tenant)
                 }
+                if publishAccounts.count == 1, let account = publishAccounts.first {
+                    Button("Publish…") { publish(in: account) }
+                        .help("Commit the tenant's file to \(account)/.github-private, so the account's members can find the tenant without a link")
+                } else if !publishAccounts.isEmpty {
+                    Menu("Publish") {
+                        ForEach(publishAccounts, id: \.self) { account in
+                            Button("In \(account)/.github-private…") { publish(in: account) }
+                        }
+                    }
+                    .fixedSize()
+                    .help("Commit the tenant's file to an account's .github-private repository, so its members can find the tenant without a link")
+                }
+                CopyJoinLinkButton(tenant: membership.tenant)
                 Button(role: .destructive) {
                     store.relays.forget(membership)
                 } label: {
@@ -108,12 +131,10 @@ private struct RelayRow: View {
             Text(verbatim: server)
         }
         .contextMenu {
-            if let app = membership.app {
-                Button("Publish in \(app.account)/.github-private…") {
-                    Task { await publishRelay(membership.tenant, for: app.account, client: store.client) }
-                }
-                Button("Copy Join Link") { copyJoinLink(membership.tenant) }
+            ForEach(publishAccounts, id: \.self) { account in
+                Button("Publish in \(account)/.github-private…") { publish(in: account) }
             }
+            Button("Copy Join Link") { copyJoinLink(membership.tenant) }
             Button("Stop Using This Relay", role: .destructive) { store.relays.forget(membership) }
         }
     }
