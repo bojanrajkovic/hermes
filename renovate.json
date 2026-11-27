@@ -53,7 +53,7 @@
       "automerge": false
     },
     {
-      "description": "Swift packages never merge on their own. PROBLEMS.md ties several versions to copied files and to behavior a person checks, which Swift check doesn't cover",
+      "description": "Swift packages never merge on their own. PROBLEMS.md ties several versions to copied files and to behavior a person checks, which CI doesn't cover",
       "matchManagers": ["swift"],
       "automerge": false,
       "postUpgradeTasks": {
@@ -62,7 +62,7 @@
         "executionMode": "branch"
       },
       "prBodyNotes": [
-        "Renovate changes `Package.swift`, and `scripts/renovate/swift-packages.sh` updates `Package.resolved` and re-copies a changed grammar scanner without running Swift. If **Swift check** fails at its first step, run `make packages` on this branch and push the result. [PROBLEMS.md](../blob/main/PROBLEMS.md) says what to check by hand for `libghostty-spm`."
+        "Renovate changes `Package.swift`, and `scripts/renovate/swift-packages.sh` updates `Package.resolved` and re-copies a changed grammar scanner without running Swift. If CI's **Compile and test** job fails at its first step, run `make packages` on this branch and push the result. [PROBLEMS.md](../blob/main/PROBLEMS.md) says what to check by hand for `libghostty-spm`."
       ]
     },
     {

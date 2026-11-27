@@ -87,7 +87,7 @@ pass, and leaves majors and 0.x minors for a person.
 | Dependency | File | Merges on its own |
 |------------|------|-------------------|
 | Node and pnpm | `mise.toml` | Minor and patch |
-| The relay's lint, format, test, and type packages | `relay/package.json` | Minor and patch, once Relay check passes |
+| The relay's lint, format, test, and type packages | `relay/package.json` | Minor and patch, once CI passes |
 | The packages the relay imports, and Wrangler | `relay/package.json` | No |
 | The relay's weekly lockfile refresh | `relay/pnpm-lock.yaml` | No |
 | Actions | `.github/workflows/` | No |
@@ -113,7 +113,7 @@ sequenceDiagram
     participant R as Renovate's worker
     participant G as The package's repository
     participant P as Pull request branch
-    participant C as Swift check (macOS)
+    participant C as CI: Compile and test (macOS)
     Note over R: Changes a version in Package.swift
     R->>G: which commit is the new tag?
     R->>G: the scanner files at that commit
@@ -131,8 +131,8 @@ sequenceDiagram
   `Package.swift`, so the script can stamp it without SwiftPM.
 - **It can't follow a package `Package.swift` doesn't name.** An update to
   `swift-tree-sitter` or `libghostty-spm` can move `tree-sitter` or
-  `DisplayLink`, which only they depend on. `Swift check` runs `make packages`
-  first and fails if it changes anything. Run `make packages` on the branch
+  `DisplayLink`, which only they depend on. The `Compile and
+  test` job runs `make packages` first and fails if that changes any file. Run `make packages` on the branch
   and push the result.
 
 Renovate learns of a new Xcode from `xcodereleases.com`, the feed xcodes
@@ -200,11 +200,40 @@ in.
 
 ## Tests
 
-`make test` runs the tests that need nothing but the machine. The `Swift
-check` workflow runs `make check` and `make test` on GitHub's Xcode 27 image,
-for a pull request or a push to `main` that changes the package, its sources
-or tests, `.xcode-version`, or the Makefile. It first runs `make packages`
-and fails if that changes `Package.resolved` or a copied scanner.
+`make test` runs the tests that need nothing but the machine.
+
+The CI workflow, `.github/workflows/ci.yml`, runs on every pull request and
+every push to `main`. The first job lists the changed paths. Each check job
+runs only when the change touches that job's paths. The last job, `Check`, is
+the only status check that `main` requires. It fails when any earlier job
+failed or was cancelled. It passes when every earlier job passed or was
+skipped. CI filters paths in a job instead of with a workflow-level `paths:`
+filter. When `paths:` skips a workflow, GitHub leaves that workflow's
+required checks pending, so the pull request can't merge.
+
+```mermaid
+flowchart LR
+    C[Find changed paths] --> S[Compile and test]
+    C --> R[Lint, test, and bundle]
+    C --> Z[zizmor]
+    C --> K[Check]
+    S --> K
+    R --> K
+    Z --> K
+```
+
+CI's `Compile and test` job runs `make check` and `make test` on GitHub's
+Xcode 27 image. It runs for a pull request or a push to `main` that changes
+any of these:
+
+- `Package.swift` or `Package.resolved`
+- `Sources/` or `Tests/`
+- `.xcode-version`
+- the Makefile
+- `ci.yml`
+
+It first runs `make packages` and fails if that changes `Package.resolved` or
+a copied scanner.
 
 Other tests run only when an environment variable is set:
 

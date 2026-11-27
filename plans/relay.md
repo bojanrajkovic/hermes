@@ -430,9 +430,9 @@ builds, deploys, or verifies the relay. The workflows pass
 GH_TOKEN=$(gh auth token) uvx zizmor --persona auditor .github/workflows
 ```
 
-The `Workflow security` workflow runs the same audit on a pull request that
-changes a workflow, and on the push to `main`. A finding fails it and shows as
-an annotation on the pull request.
+CI's `zizmor` job runs the same audit on a pull request or a push to `main`
+that changes a workflow. zizmor fails the job on any finding and adds each
+finding to the pull request as an annotation.
 
 Each job names its runner image, `ubuntu-26.04`, so a new `ubuntu-latest`
 can't change what a job runs on, and each has a time limit.
@@ -587,8 +587,8 @@ make relay-check
 
 This installs the packages, then runs `pnpm check` and `pnpm build`. Nothing
 is deployed. It needs [mise](https://mise.jdx.dev), which runs each step with
-the pinned Node and pnpm. The `Relay check` workflow runs the same steps on a
-pull request that changes `relay/` or `mise.toml`.
+the pinned Node and pnpm. CI's `Lint, test, and bundle` job runs the same
+steps on a pull request that changes `relay/` or `mise.toml`.
 
 The relay's scripts run from `relay/`:
 
