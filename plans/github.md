@@ -95,6 +95,7 @@ sequenceDiagram
 | `mergePullRequest(pullRequestID:method:expectedHeadOID:)` | GraphQL mutation | Merges one pull request that is not in a stack. GitHub refuses it when the head has moved. |
 | `enableAutoMerge(pullRequestID:method:expectedHeadOID:)` | GraphQL mutation | GitHub merges with the method once every requirement passes. |
 | `disableAutoMerge(pullRequestID:)` | GraphQL mutation | Turns auto-merge off. |
+| `markReadyForReview(pullRequestID:)` | GraphQL mutation | Takes a pull request out of draft. |
 | `mergeStack(repository:upTo:method:)` | `gh stack merge` | Merges a stack from the bottom up to one pull request, all or nothing. |
 
 The pull request fields load 10 per request because the query costs GitHub
@@ -162,6 +163,16 @@ unstable (a check that is not required fails or still runs), the pull request
 is not a draft, the repository allows a method, and the viewer can push. The
 button uses the viewer's default method and its menu lists the other allowed
 ones. A confirmation names what will merge.
+
+GitHub refuses to merge a draft, and `gh stack merge` refuses a stack that has
+a draft below the pull request being merged. While the pull request, or a
+member below it in its stack, is a draft, a viewer who can push sees a Ready
+for Review button in place of the Merge menu. The button marks each draft
+ready for review, bottom first. It skips a confirmation, because a pull
+request can be converted back to draft on GitHub. Then it reloads those pull
+requests and the merge readiness of the open pull request. Marking a pull
+request ready can start checks and request reviewers, so the Merge menu often
+stays disabled until the checks finish and the reviews arrive.
 
 GitHub refuses the ordinary merge call for a stacked pull request, so a
 stacked one is merged with the `gh stack` extension, which also merges every
@@ -234,7 +245,13 @@ number, which is in no list, loads again on its own.
 
 ## Writes
 
-Writes are submitting a review, merging, and turning auto-merge on or off. `GitHubClient` has no other mutation.
+`GitHubClient` writes to GitHub in four ways and has no other mutation:
+
+- submitting a review
+- merging
+- turning auto-merge on or off
+- marking a pull request ready for review
+
 Live tests that write use `bojanrajkovic/hermes-playground` only.
 
 ## Rate limits

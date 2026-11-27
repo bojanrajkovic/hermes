@@ -247,6 +247,21 @@ final class WindowModel {
         await refetch(pullRequest.key)
     }
 
+    /// Marks each pull request ready for review, in order, and stops at the first one that
+    /// GitHub refuses. Then it reloads all of them, so their draft state matches GitHub's,
+    /// and throws GitHub's error if there was one.
+    func markReadyForReview(_ pullRequests: [PullRequest]) async throws {
+        var refusal: (any Error)?
+        do {
+            for pullRequest in pullRequests { try await client.markReadyForReview(pullRequestID: pullRequest.id) }
+        } catch {
+            refusal = error
+        }
+
+        for pullRequest in pullRequests { await refetch(pullRequest.key) }
+        if let refusal { throw refusal }
+    }
+
     /// Every loaded pull request of `pullRequest`'s stack, bottom first. Empty when it is not in a stack.
     func stack(of pullRequest: PullRequest) -> [PullRequest] { github.stack(of: pullRequest) }
 

@@ -35,7 +35,7 @@ graph TD
 | `accounts[login]` | The account's open pull requests and repositories, as keys, plus its review signals and load state. | The account's refresh. |
 | `issueLists[repo]` | The loaded part of a repository's open issues, as keys, and its cursor. | Issue pages. |
 | `details[key]` | A pull request's description, conversation, reviews, commits, and review threads. The conversation tab and the diff's review threads read it. | The pull request's poll, webhook changes, a submitted review, and a sent comment. |
-| `readiness[key]` | Whether a pull request can merge, and how. | The pull request's poll, when its head, update time, or checks change, and after a merge or an auto-merge change. |
+| `readiness[key]` | Whether a pull request can merge, and how. | The pull request's poll, when its head, update time, or checks change, and after Hermes merges it, turns its auto-merge on or off, or marks it ready for review. |
 | `revisions[key]` | A pull request's head commit, update time, and viewed files. | The pull request's poll, the diff's own load, and viewed marks. |
 | `checks[commit]` | A commit's checks, keyed by repository and commit SHA, so a pull request's checks are its head commit's. The checks tab and the conversation's summary read the same list. | The commit's poll, webhook changes, retries, and reruns. |
 | `issueDetails[key]` | An issue's description and first 100 comments. The comment count is in the issue's record, which the detail load also writes, so the row and the detail show the same number. | The issue view, when it opens and when the issue's update time moves, and a sent comment, which also raises the count. |

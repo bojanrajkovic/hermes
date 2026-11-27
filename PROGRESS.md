@@ -61,6 +61,9 @@ What is built and works, and what is known not to work or is unverified.
 - Merging from the Merge menu, with the methods the repository allows:
   merging now, merging past unmet requirements when GitHub allows a bypass, and
   turning auto-merge on or off, with a badge in the header while it is on.
+  While the pull request, or any pull request below it in its stack, is a
+  draft, a Ready for Review button replaces the Merge menu. The button marks
+  each of those drafts ready for review.
 - An issue pane shows the description, comments, assignees, labels, and the
   pull requests that close it.
 
@@ -201,8 +204,9 @@ What is built and works, and what is known not to work or is unverified.
 
 **Missing**
 
-- Hermes reads, reviews, and merges. It cannot close, resolve threads, edit or
-  delete posted comments, or comment on the conversation.
+- Hermes reads, reviews, and merges pull requests, and marks drafts ready for
+  review. It can't close pull requests, resolve threads, or edit or delete
+  posted comments.
 - Only github.com is supported, not GitHub Enterprise Server.
 - Lists are capped at what one query returns: 1,000 open pull requests per
   account, 100 review requests, and per pull request 100 comments, 100
