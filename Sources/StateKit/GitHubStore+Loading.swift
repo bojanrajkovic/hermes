@@ -134,13 +134,14 @@ extension GitHubStore {
         for key in watched where !listed.contains(key) && pullRequests[key]?.state == .open { await refetch(key) }
     }
 
-    /// Searches for the viewer's review requests, reviews, and mentions, in that order. The pull
-    /// request itself says who it asks and what the viewer reviewed, so these only find the
-    /// ones not held yet, in any repository.
+    /// Returns the searches for the viewer's review requests, reviews, own pull requests, and
+    /// mentions, with mentions last. A pull request's own fields name its requested reviewers, its
+    /// reviews, and its author, so these searches only need to find the pull requests the store
+    /// doesn't have yet, in any repository.
     private func signalSearches(_ login: String) -> [String] {
         [
             PullRequestSearch.reviewRequested(owner: login), PullRequestSearch.reviewedByViewer(owner: login),
-            PullRequestSearch.mentioningViewer(owner: login),
+            PullRequestSearch.authoredByViewer(owner: login), PullRequestSearch.mentioningViewer(owner: login),
         ]
     }
 

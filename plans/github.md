@@ -279,11 +279,13 @@ also caps the server time GraphQL queries use per minute. A large
 organization trips the secondary limit long before the quota, so Hermes:
 
 - loads pull requests and issue counts only for repositories the viewer can
-  push to. Pull requests that involve the viewer or ask for their review load
-  from any repository, and anything opens on demand from a link or ⌘K.
+  push to. A first load also loads every pull request that involves the
+  viewer, from any repository. A refresh adds new pull requests that the
+  viewer opened, reviewed, was asked to review, or was mentioned in. Anything
+  else opens on demand from a link or ⌘K.
 - loads pull request details 2 requests at a time.
 - sends a refresh's searches as one request. GitHub charges a request at least
-  one point, and five small searches together still cost one.
+  one point, and several small searches together still cost one.
 - keeps a first load's progress when it fails part way, and continues from
   there on the next refresh.
 - pauses every request when GitHub reports over HTTP a used-up rate limit that
