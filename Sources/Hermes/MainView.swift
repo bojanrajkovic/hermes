@@ -58,7 +58,7 @@ struct MainView: View {
 
 // MARK: Middle column
 
-/// The middle column of the Columns and Inbox styles.
+/// The middle column: the list for the sidebar's `Scope`.
 struct ListColumn: View {
     @Environment(WindowModel.self) private var model
 

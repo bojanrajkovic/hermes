@@ -143,7 +143,7 @@ Hermes sends only in a request body.
 |---|---|---|
 | Doing nothing | Request counts and timing for the Worker. | — |
 | Calling `POST /invites` with the operator token | Nothing. The call makes an invite code and returns it. It reads no tenant's storage. | — |
-| Reading the Durable Objects' storage in Cloudflare's dashboard | Which accounts are tenants (from the App's client ID), each tenant's two secrets, and the repository IDs of open sockets. No payloads and no tokens: they are not there. | No. Each query is written to Cloudflare's audit log, which only the operator reads. |
+| Reading the Durable Objects' storage in Cloudflare's dashboard | Which accounts are tenants (from the App's client ID); each tenant's App ID, client ID, two secrets, and invite code; and the repository IDs of open sockets. No payloads and no tokens: they are not there. | No. Each query is written to Cloudflare's audit log, which only the operator reads. |
 | Deploying different code | Anything, including payloads. | Yes. The hourly check fails, because the running script is no longer one this repository's workflow attested. |
 | Changing the Worker's settings, such as attaching a Tail Worker | Request addresses and headers: which tenants are active and when. No payloads and no tokens, because neither is ever in an address or a header. | Yes. The hourly check reads the Worker's settings and fails. |
 | Pointing the hostname at another Worker | Anything, including payloads. | No. See [Limits](#limits). |

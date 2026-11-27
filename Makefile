@@ -20,7 +20,7 @@ MIN_MACOS    := 26
 MIN_SWIFT    := 6.0
 
 # The Xcode this repository builds with. `xcodes install` and `xcodes select` read the same file.
-# xcodes installs Xcode 27.1 as Xcode-27.1.0.app, and GitHub's runners have it as Xcode_27.1.app.
+# xcodes installs Xcode <version> as Xcode-<version>.0.app, and GitHub's runners install it as Xcode_<version>.app.
 # When one of those exists, every command make runs uses it, whatever `xcode-select` points at.
 XCODE_VERSION := $(shell cat .xcode-version)
 XCODE_APP     := $(firstword $(wildcard $(foreach v,$(XCODE_VERSION) $(XCODE_VERSION).0,/Applications/Xcode-$(v).app /Applications/Xcode_$(v).app)))

@@ -1,7 +1,9 @@
 # GitHub
 
 `GitHubKit` talks to github.com. It holds the API client, authentication, the
-domain models, and the bot filter. It has no UI and no dependencies.
+domain models, and the bot filter. It also holds the relay client, described in
+[relay-client.md](relay-client.md), and the webhook forwarder, described in
+[webhooks.md](webhooks.md). It has no UI and no dependencies.
 
 ## Authentication
 
@@ -24,17 +26,31 @@ every model that needs it.
 
 - The token is read on first use and kept. When GitHub answers HTTP 401, the
   client drops it, and the next call reads it again.
-- `get` sends a REST request. `graphQL` runs a query or a mutation.
+- `get`, `post`, and `put` send REST requests. `graphQL` runs a query or a
+  mutation.
 - REST requests ignore the URL cache. GitHub marks responses cacheable for 60
   seconds, which would hide a change from a caller that polls.
-- The pull request list query retries up to two more times on HTTP 502 or
-  504, which is how a GraphQL query that ran too long fails. Nothing else
-  retries, and a mutation must not: it may have been applied before the
-  gateway gave up.
 
-Every method throws `GitHubError`. `describe(_:)` in
-`Sources/Hermes/WindowModel.swift` and `DiffLoader.message(for:)` turn an error
-into a sentence for the user.
+When GitHub responds with HTTP 403 or 429 for a used-up rate limit, and the
+limit resets within 5 minutes, the client pauses. Every request, read or
+write, waits for the reset, because GitHub asks clients to wait until then.
+The client reads the reset time from `retry-after`, or from
+`x-ratelimit-reset` when `retry-after` is missing. When GitHub sends neither
+header, the client waits a minute. GraphQL reports a used-up limit with HTTP
+200 and a `RATE_LIMITED` error. The client throws `GitHubError.rateLimited`
+for it but doesn't pause.
+
+`retryingReads` runs a read up to two more times. It retries on HTTP 502 or
+504, which is how a GraphQL query that ran too long fails. It also retries a
+read that hit a rate limit resetting within 60 seconds, once the reset passes. The searches,
+the pull request fields, and the repository list go through it. Other reads,
+such as a pull request's detail, revision, and checks, fail on the first error,
+and their next poll tries again. A mutation never retries: it may have been
+applied before the gateway gave up.
+
+Every method throws `GitHubError`. `describe(_:)` turns an error into a
+sentence for the user. The diff and checks views word some errors their own
+way.
 
 ## What is loaded, and when
 
@@ -83,7 +99,7 @@ sequenceDiagram
 | `repositories(owner:)` | GraphQL | Non-archived repositories the account owns that the viewer can push to (write, maintain, or admin), with open issue counts. Pages every repository with only its permission, then counts issues for the ones kept. |
 | `issues(repository:pageSize:after:)` | GraphQL | One page of a repository's open issues. Loaded when the list is shown. |
 | `pullRequestDetail` | GraphQL | Description, comments, reviews, requested reviewers, commits, review threads. |
-| `pullRequestRevision` | GraphQL | Head commit and update time. The cheap call for polling. |
+| `pullRequestRevision` | GraphQL | Head commit, update time, and which changed files the viewer marked viewed, 100 files a page. The cheap call for polling. |
 | `pullRequestDiff` | REST | Unified diff text. Throws `diffTooLarge` when GitHub refuses to render it. |
 | `checks(repository:commitOID:)` | GraphQL | Check runs and legacy commit statuses of a commit, and its workflow runs that wait for approval. See [Workflow runs waiting for approval](#workflow-runs-waiting-for-approval). |
 | `approveWorkflowRun(repository:runID:)` | REST | Approves a workflow run that waits for a maintainer, so it starts. |
@@ -150,10 +166,9 @@ ordered by position, so a list shows a stack as one node.
 ## Items outside the lists
 
 A closed pull request, or one in another account, is not in the lists.
-`GitHubClient.item(_:)` in `Sources/Hermes/WindowModel.swift` loads a pull
-request or an issue by number in any state. The command palette uses it for
-`repo#123`, and the detail pane uses it to keep showing a pull request after
-it is merged or closed.
+`GitHubClient.item(_:)` loads a pull request or an issue by number in any
+state. The command palette uses it for `repo#123`, and the detail pane uses
+it to keep showing a pull request after it is merged or closed.
 
 ## Merging
 
@@ -245,12 +260,15 @@ number, which is in no list, loads again on its own.
 
 ## Writes
 
-`GitHubClient` writes to GitHub in four ways and has no other mutation:
+Most writes are GraphQL mutations on a pull request, such as a review, a
+merge, or a file marked viewed. GitHub Actions writes, such as approving a run
+or running jobs again, are REST `POST`s. Publishing a relay tenant commits a
+file to the account's `.github-private` repository with a REST `PUT`. See
+[Finding a tenant without a link](relay-client.md#finding-a-tenant-without-a-link).
+A stack merges through `gh stack merge`, described in [Merging](#merging).
 
-- submitting a review
-- merging
-- turning auto-merge on or off
-- marking a pull request ready for review
+A write that `GitHubClient` sends waits out a rate-limit pause like any
+request, but never retries. See [The client](#the-client).
 
 Live tests that write use `bojanrajkovic/hermes-playground` only.
 
@@ -268,8 +286,10 @@ organization trips the secondary limit long before the quota, so Hermes:
   one point, and five small searches together still cost one.
 - keeps a first load's progress when it fails part way, and continues from
   there on the next refresh.
-- pauses every request when GitHub sends `retry-after` of five minutes or
-  less, and retries reads once the pause ends.
+- pauses every request when GitHub reports over HTTP a used-up rate limit that
+  resets within 5 minutes, and retries the list loads when the limit resets
+  within a minute. See
+  [The client](#the-client).
 
 Every request logs one line under the `com.coderinserepeat.hermes` subsystem,
 category `github`: what it was, its status, size, time, and rate limit

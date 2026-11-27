@@ -16,7 +16,7 @@ hermes://bojanrajkovic/airway/pull/94/files#diff-<sha256>R45
 | `hermes://owner/repo` | The repository's pull requests |
 | `…/issues/5` | The issue |
 | `…/issues/5#issuecomment-123` | The issue, scrolled to the comment |
-| `…/pull/12` | The pull request on its current tab |
+| `…/pull/12` | The Files tab |
 | `…/pull/12#issuecomment-123` | The Conversation tab, scrolled to the comment |
 | `…/pull/12#discussion_r456`, `…/pull/12/files#r456` | The Files tab with the thread's popover open on its line |
 | `…/pull/12/files`, `…/pull/12/changes` | The Files tab |
@@ -50,7 +50,8 @@ host has a dot, which a GitHub login cannot have, so none reads as
 
 `RelayLink` (GitHubKit) reads them, and `RelayTenant.joinLink` writes the
 invitation. A tenant's ID is 32 lowercase hex characters, and its server is an
-`https` URL, or `http` on `localhost`.
+`https` URL, or `http` on `localhost` or `127.0.0.1` for a relay run on this
+Mac.
 
 `AppStore.open(_:)` takes a relay link before it tries a place.
 

@@ -105,10 +105,13 @@ can be applied until a load knows the run. `EventBursts` in
 first, and once more five seconds after that load for the ones that came
 meanwhile.
 
-The checks list stops reloading once no check is queued or running. A
-delivery that puts a check back in one of those states makes the store's next
-poll reload it, so a check whose last delivery never arrives does not stay
-"running".
+The checks list reloads while a check is queued or running, while a workflow
+run waits for approval, and for two minutes while the list is empty. The
+two-minute wait covers the few seconds GitHub takes to create a commit's
+checks after a push.
+[store.md](store.md#polling) has the details. A delivery that puts a check
+back in the queued or running state makes the store's next poll reload it, so
+a check whose last delivery never arrives does not stay "running".
 
 The pull request's update time is not applied. The pane loads the detail
 again when it changes, which is at the next refresh, and that load settles
@@ -136,10 +139,11 @@ a review's `body` is `null` in a delivery and a string in the schema.
 
 ## Which repositories
 
-`Forwarders.targets(watched:viewer:organizations:waiting:)` in
-`Sources/Hermes/Forwarders.swift` decides, every 15 seconds. A watched pull
-request is the open one, one with a session, one in the attention inbox, or one
-in the list on screen.
+Every 15 seconds, `Forwarders.targets` picks what to forward from the watched
+pull requests, the signed-in user, and the organizations picked in Settings.
+It skips repositories that a relay covers. A watched pull request is the open
+one, one with a session, one in the attention inbox, or one in the list on
+screen.
 
 - **Organizations the signed-in user owns and picked in Settings**, when one
   has a watched pull request and the `gh` token has the `admin:org_hook` scope.

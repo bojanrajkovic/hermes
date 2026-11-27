@@ -64,10 +64,11 @@ builds.
 - **[xcodes](https://github.com/XcodesOrg/xcodes).** `xcodes install` with no
   argument installs the version in the file.
 - **The Makefile.** It looks for that version in `/Applications`, under the
-  name xcodes gives it (`Xcode-27.1.0.app`) or the name GitHub's runners give
-  it (`Xcode_27.1.app`). When it finds one, it sets `DEVELOPER_DIR`, so every
-  command `make` runs uses that Xcode. The machine's `xcode-select` choice
-  stays as it is, and other projects keep theirs.
+  name xcodes gives it (`Xcode-<version>.0.app`) or the name GitHub's runners
+  give it (`Xcode_<version>.app`). When it finds one, it sets
+  `DEVELOPER_DIR`, so every command `make` runs uses that Xcode. The machine's
+  `xcode-select` choice stays as it is, so other projects keep using the Xcode
+  it points at.
 - **`make deps`.** It fails when `xcodebuild -version` reports another
   version, and says to run `xcodes install`.
 
@@ -149,13 +150,16 @@ preset's `chore(deps):` prefixes are off.
 `Package.swift` uses tools version 6.2, targets macOS 26, and compiles every
 Swift target in Swift 6 language mode.
 
-- Ten library targets and the `Hermes` executable.
+- The library targets and the `Hermes` executable.
   [architecture.md](architecture.md) describes them.
 - `TreeSitterScanners` is a C target. It holds scanner sources that four
   grammar packages do not compile when used as dependencies.
-- Nine test targets: one for each library except `HermesUI` and
-  `TreeSitterScanners`, and `HermesTests` for the app.
-- Dependencies: `swift-tree-sitter`, 15 tree-sitter grammars, and
+- Test targets under `Tests/`, named for the target they test:
+  `DiffKitTests` for `DiffKit`, `HermesTests` for the app. A target gets a
+  test target only when it has tests.
+- `TestSupport`, a library target in `Tests/TestSupport`, holds helpers that
+  several test targets share.
+- Dependencies: `swift-tree-sitter`, the tree-sitter grammars, and
   `libghostty-spm` for the terminal.
 
 [PROBLEMS.md](../PROBLEMS.md) explains the pinned versions and the
@@ -169,12 +173,14 @@ scanner target.
 2. Creates `build/Hermes.app` and copies the executable into `Contents/MacOS`.
 3. Writes `Contents/Info.plist` from `Resources/Info.plist`, replacing
    `__SHORT_VERSION__` with the version and `__BUILD_VERSION__` with a
-   timestamp.
+   timestamp, and writes `Contents/PkgInfo`.
 4. Copies every SwiftPM resource bundle into `Contents/Resources`, except
    bundles whose name ends in `Tests.bundle`. The app needs these bundles for
    tree-sitter queries, the Markdown renderer, and the terminal's resources.
 5. Copies `build/AppIcon.icns` when it exists.
-6. Signs the app with `Hermes/Hermes.entitlements`. If the identity in
+6. When `PROVISION_PROFILE` is set to a file that exists, copies that file to
+   `Contents/embedded.provisionprofile`.
+7. Signs the app with `Hermes/Hermes.entitlements`. If the identity in
    `SIGN_IDENTITY` is not available, it signs ad hoc.
 
 The entitlements file turns the App Sandbox off. Hermes runs `gh`, `git`, and
@@ -244,7 +250,8 @@ Other tests run only when an environment variable is set:
 | `HERMES_LIVE_RELAY=<url>` | The `RelayLiveTests` in `GitHubKitTests`: a relay's `/version`, and a connection to a tenant it does not have. They sign in to nothing and store nothing on the relay. |
 | `HERMES_LIVE_DIR=<dir>` | `SessionsUITests` that start real terminals and write PNGs. `HERMES_LIVE_CLAUDE=1` adds the ones that start `claude`. |
 | `HERMES_SNAPSHOT_DIR=<dir>` | `ChecksUITests` snapshots written as PNGs. |
-| `DIFFUI_RENDER=<dir>` | `DiffUITests` renders of the diff viewer written as PNGs. |
+| `HERMES_SNAPSHOT_COMMIT=owner/name@sha[#check-id]` | With `HERMES_SNAPSHOT_DIR`, a snapshot of the checks screen for that commit, with check run `check-id` selected. `HERMES_SNAPSHOT_SETTLE=<seconds>` sets how long the app waits before the snapshot, 6 seconds by default. Reads only. |
+| `DIFFUI_RENDER=<dir>` | `RenderTests` in `DiffUITests`: renders of the diff viewer written as PNGs, a scroll timing, and a check that the list keeps its scroll position through a reload. The table below lists its inputs. |
 | `HERMES_SHOW_IGNORED=1` | Run the app with the ignore list in Settings switched off, so ignored repositories such as `hermes-playground` show again. The saved list is untouched. |
 | `HERMES_SCROLL_BENCH=<file>` | Run the app's executable with this set to `$TMPDIR/bench.txt`, open a diff, and run `scripts/scroll-bench.sh <name>`. The diff scrolls down and up for six seconds; step times go to the file and a time profile to `$TMPDIR/<name>.trace`. `scripts/profile-hot.py <xml>` totals the profile by function. |
 | `MARKDOWNUI_SNAPSHOT_DIR=<dir>` | Renders every `*.md` file in the directory in light and dark. |
@@ -252,11 +259,47 @@ Other tests run only when an environment variable is set:
 | `DIFFUI_WATCH=<number>` | Watches that playground pull request's threads for a minute. Reads only. |
 | `DIFFUI_VIEWED=<number>` | Marks two files of that playground pull request viewed, one from Hermes and one through the API, checks each side sees the other's mark, then unmarks both. Takes about 40 seconds. |
 
+These choose what `DIFFUI_RENDER` renders. Each needs `DIFFUI_RENDER` set.
+
+| Variable | What it does |
+|----------|--------------|
+| `DIFFUI_DIFF=<file>` | The diff to render. The scroll timing fails without it, and the scroll-position check runs only when it is set. That check needs at least three files, each taller than the window. |
+| `DIFFUI_PR=owner/name#number` | Renders that open pull request instead of `DIFFUI_DIFF`. |
+| `DIFFUI_TREE=<dir>` | Renders a working tree against `DIFFUI_BASE=<ref>`, `HEAD` by default. |
+| `DIFFUI_BRANCH=<checkout>#<branch>` | Renders one branch of the checkout's local stacks. |
+| `DIFFUI_NAME=<name>` | The start of each PNG's file name, `diff` by default. |
+| `DIFFUI_FONT=<points>` | The code font size. |
+| `DIFFUI_EXPAND=<n>` | Reveals 20 lines of hidden region `n` in the first file that has hidden lines. |
+| `DIFFUI_SCROLL=<n>` | Scrolls to file `n` before each render. |
+| `DIFFUI_VIEWED=<number>` | When set, marks the first file viewed before the renders. The same variable runs the viewed-marks test in the table above. |
+| `DIFFUI_REFERENCES=<name>` | Also renders the references to `name` in the docked pane. |
+| `DIFFUI_FIND=<query>` | Also renders the find bar with the query's first match on screen. |
+| `DIFFUI_REVIEW=1` | Renders the review views on `DIFFUI_PR`: comment popovers, Finish Review, and Outdated Comments. Drafts go to a temporary folder, and nothing is sent to GitHub. |
+| `DIFFUI_DEFINE=<name>` | With `DIFFUI_REVIEW`, also renders a definition lookup of `name`. `DIFFUI_DEFINE_FROM=<path>` sets the file it starts from. |
+| `DIFFUI_MARKDOWN=<text>` | With `DIFFUI_REVIEW`, picks the Markdown file shown as rendered Markdown: the first whose path contains the text. Without it, the review renders the first Markdown file. |
+| `DIFFUI_LAYOUT=split` | Uses the split layout for the review renders and the scroll timing. Without it, both use the unified layout. |
+| `DIFFUI_DARK` | When set, renders the review and `DIFFUI_LIVE_TREE` in dark mode. |
+| `DIFFUI_AS_PR` | When set, times the scroll with the review views in the rows. |
+| `DIFFUI_EXACT_HEIGHTS` | When set, times the scroll with exact row heights, as the app does. |
+| `DIFFUI_PASSES=<n>` | Scrolls down and back up `n` times during the timing, for a profiler. |
+| `DIFFUI_LIVE_PR=owner/name#number` | Watches that open pull request for two minutes and prints each reload. Push to its branch while it runs. Reads only. |
+| `DIFFUI_LIVE_TREE=<dir>` | Watches a Hermes checkout's working tree, appends lines to `Sources/DiffKit/Notes.swift`, and writes PNGs that show whether the list kept its scroll position through the reload. Puts the file back afterwards. |
+
 The app executable also renders its own screens. Run
 `build/Hermes.app/Contents/MacOS/Hermes` with `HERMES_SNAPSHOT_DIR=<dir>` to
 write PNGs of each screen in light and dark, with live GitHub data, and exit.
-`HERMES_SNAPSHOT_SCENES` limits it to scenes whose names start with the given
-comma-separated prefixes.
+It only reads from GitHub, and it keeps its settings in a separate
+`hermes-snapshots` defaults suite, so your saved settings stay untouched.
+These variables add or limit
+scenes:
+
+| Variable | What it does |
+|----------|--------------|
+| `HERMES_SNAPSHOT_SCENES=<prefixes>` | Renders only the scenes whose names start with one of these comma-separated prefixes. |
+| `HERMES_SNAPSHOT_ORG=<login>` | Adds two scenes for that organization: its inbox, and the issues of its repository with the most open issues. The organization must be one of the viewer's accounts. Without this variable, the snapshots leave out those scenes. |
+| `HERMES_SNAPSHOT_LOCAL=owner/name` | Adds the repository's Local tab, opened on a branch with no pull request. |
+| `HERMES_SNAPSHOT_MERGED=owner/name#number` | Adds that pull request, loaded by number, on its Conversation tab. |
+| `HERMES_SNAPSHOT_CLOSED=owner/name#number` | Adds that issue, loaded by number. |
 
 ## Release
 
@@ -264,8 +307,8 @@ To cut a release, bump `VERSION` on `main`, then publish a release on GitHub
 with a new tag `vX.Y.Z` and the release notes. Publishing creates the tag, and
 `.github/workflows/release.yml` builds, signs, notarizes, and attests the app,
 then attaches `Hermes-X.Y.Z-macos-arm64.zip` and its `.sha256` to the release.
-The repository's tag ruleset lets only admins create tags, so only an admin can
-publish a release with a new one.
+A tag ruleset lets only admins and the owner's GitHub App for releases create
+tags. Publishing a release creates a tag, so only they can publish one.
 
 ```mermaid
 sequenceDiagram
