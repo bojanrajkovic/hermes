@@ -1,8 +1,8 @@
 # Design system
 
 `HermesUI` holds the type scale, the layout metrics, and the small views every
-feature shares. It depends on no other target, and every `*UI` target and the
-app depend on it.
+feature shares. It depends on `StateKit` for the `.showing` modifier. The app
+and every `*UI` target except `MarkdownUI` depend on it.
 
 ## Rules
 
@@ -21,6 +21,7 @@ app depend on it.
 
 | Token | Style | Used for |
 |-------|-------|----------|
+| `pageTitle` | `.largeTitle` bold | The setup sheet's welcome title. |
 | `detailTitle` | `.title2` semibold | The title of a pull request or issue pane. |
 | `sectionHeading` | `.title2` semibold | The heading of a check's detail. |
 | `paneHeading` | `.headline` | Headings inside a pane, such as "Commits", and a session's title. |
@@ -32,10 +33,9 @@ app depend on it.
 | `meta` | `.caption` | Timestamps, counts, and footers outside list rows. |
 | `badge` | `.caption` medium | `Badge` and `LabelChip` text. |
 
-`pageTitle`, `pageLead`, and `tableNumber` are defined and have no users.
-
 ```mermaid
 graph TD
+    P["pageTitle: largeTitle bold"] --> A
     A["detailTitle, sectionHeading: title2 semibold"] --> B["paneHeading: headline"]
     B --> C["rowTitle, tableCell, body: body"]
     C --> D["code: callout monospaced"]
@@ -51,6 +51,10 @@ All values are points, from `Theme`.
 |-------|--------|-------|
 | Window | minimum size | 900 × 520 |
 | Window | default size | 1360 × 860 |
+| Setup sheet | `setupWidth` × `setupHeight` | 520 × 420 |
+| Setup sheet | `readingHorizontalInset` (padding around the welcome text) | 32 |
+| Settings | `settingsMinWidth` × `settingsMinHeight` | 500 × 260 |
+| Settings | `settingsDefaultHeight` (height it opens at) | 600 |
 | Sidebar | min, ideal, max width | 200, 240, 320 |
 | List column | min, ideal, max width | 400, 420, 560 |
 | Rows | `avatarSize` | 16 |
@@ -65,12 +69,10 @@ All values are points, from `Theme`.
 | Detail panes | `readingSectionSpacing` (between sections) | 28 |
 | Detail panes | `readingHeadingSpacing` (heading to body) | 8 |
 | Badges | corner radius, horizontal and vertical padding | 4, 7, 2 |
+| Find bar | `findFieldWidth` | 200 |
 
 The conversation is capped at 860 points, wider than a
 prose column, to fit code blocks and tables.
-
-`readingMaxWidth`, `readingHorizontalInset`, `readingTopInset`,
-`readingBottomInset`, and `bodyLineSpacing` are defined and have no users.
 
 ## Feature metrics
 
@@ -97,7 +99,7 @@ prose column, to fit code blocks and tables.
 ## macOS idioms in use
 
 - `NavigationSplitView` with three columns: sidebar, list, detail.
-- A `Window` scene, a `Settings` scene, and a menu bar entry with a shortcut
+- A `WindowGroup` scene, a `Settings` scene, and a menu bar entry with a shortcut
   for every action in the window.
 - `ContentUnavailableView` for empty, loading-failed, and no-selection states.
 - System colors and materials only (`.secondary`, `.bar`, the accent color),

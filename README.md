@@ -60,8 +60,9 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 
 - Open pull requests and issues for your personal account or any organization
   you belong to.
-- Inbox navigation: filters across repositories (Needs Your Review, Yours,
-  Failing CI, Drafts, Bots, and All) above the list of repositories.
+- Inbox navigation: filters across repositories (Needs Your Attention, Yours,
+  Failing CI, Drafts, Bots, and All Pull Requests) above the list of
+  repositories.
 - Stacked pull requests are grouped, and you can move up and down a stack.
 - Merge a pull request when GitHub says it can merge, with the repository's
   default method or another it allows. A stacked pull request merges with the
@@ -73,10 +74,10 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 
 **Live updates**
 
-- With "Get changes as they happen" on, a change in a repository you
-  administer shows in about two seconds, through the GitHub CLI's webhook
-  forwarder.
-- A relay does the same for repositories you don't administer. An account's
+- With "Get changes as they happen" on, a change shows in about two seconds.
+  The GitHub CLI's webhook forwarder delivers changes for your own
+  repositories and for organizations that you own and picked in Settings.
+- A relay delivers live changes for an account's other repositories. An account's
   owner sets one up from Settings, which creates a GitHub App that belongs to
   the account, and members connect from Hermes. The relay passes GitHub's
   events on and stores nothing from them. Its code is in `relay/`, and you can
@@ -122,7 +123,9 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 |----------|--------|
 | ⌘K | Command palette |
 | ⌘N | Start a Claude session from the open pull request or issue |
-| ⌘R | Refresh the lists |
+| ⇧⌘N | New window |
+| ⌥⌘O | Open a link in a new window |
+| ⌘R | Refresh the lists, or the checks in the Checks tab |
 | ⇧⌘B | Show or hide all bot pull requests |
 | ⇧⌘O | Open the current item on GitHub |
 | ⌘1, ⌘2, ⌘3, ⌘4 | Conversation, Files, Checks, or Sessions tab of a pull request |
@@ -134,6 +137,7 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 | ⌘↩ | Add the comment being written to the review, submit the review, or send a conversation comment |
 | ⌘F | Search the open diff or log |
 | ⌘G and ⇧⌘G | Next and previous search match in the diff or log |
+| ⌥⌘D | Show or hide a session's diff |
 | ⌘, | Settings |
 
 ## Screenshots

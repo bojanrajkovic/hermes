@@ -104,7 +104,7 @@ header, the payload's `action`, and `repository.id`. `classifyDelivery` in
 | Delivery | Action |
 |---|---|
 | `installation` with action `deleted` (the App was uninstalled) | Close every socket with code `4004` and delete everything the tenant stored. Its ID is unknown afterwards. |
-| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. Close every socket with code `4001`, so each client reconnects and is checked again. |
+| `installation_repositories`, `member`, `membership`, `organization`, `repository`, `team`, `team_add` | Someone's access may have changed. Close every socket with code `4001`, so each client reconnects and is checked again. This skips sockets that haven't sent their hello, because they have no repository list yet, and sockets waiting on GitHub, described under [Connecting](#connecting). |
 | Any other event that names a repository | Send it to the sockets whose user can see that repository. |
 | Anything else | Ignored. |
 
@@ -211,9 +211,11 @@ stateDiagram-v2
     [*] --> awaitingHello: socket opens
     awaitingHello --> authorizing: hello
     awaitingHello --> [*]: 60 seconds pass, or the message is not a hello (4003)
+    awaitingHello --> [*]: tenant gone (4004)
     authorizing --> open: GitHub answers, session sent
-    authorizing --> [*]: GitHub refuses the token, or says the user is outside the organization (4003)
+    authorizing --> [*]: GitHub refuses the token, says the user is outside the organization, or takes more than 5 minutes (4003)
     authorizing --> [*]: GitHub can't be reached (1011)
+    authorizing --> [*]: tenant gone while waiting on GitHub (4004)
     open --> [*]: 8 hours pass, or access changed (4001)
     open --> [*]: tenant gone (4004)
 ```
@@ -286,7 +288,7 @@ the Durable Object fires when the oldest socket runs out.
 |---|---|
 | `1011` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
 | `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
-| `4003` | Sign in again. GitHub refused the refresh token, GitHub said the user is outside the organization the hello named, the first message was not a hello, or none came within 60 seconds. |
+| `4003` | Sign in again. GitHub refused the refresh token, GitHub said the user is outside the organization the hello named, GitHub took more than 5 minutes to answer, the first message was not a hello, or none came within 60 seconds. |
 | `4004` | Stop. The App was uninstalled. |
 
 The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in
@@ -334,8 +336,9 @@ Using a code deletes it, so a second registration with the same code answers
 `403`, and so does one sent after the tenant's App is uninstalled. A code
 never runs out on its own, and the relay has no call that cancels one.
 
-Once a tenant is registered, the relay never looks at its code again. The
-relay has no call that stops a registered tenant.
+Once a tenant is registered, the relay reads the tenant's invite code only to
+check that a repeated registration matches the stored registration. The relay has no call that stops a
+registered tenant.
 
 `OPERATOR_TOKEN` is a Worker secret. The deploy workflow sets it from the
 `relay` environment's secret `RELAY_OPERATOR_TOKEN` on every deploy. While it
@@ -434,8 +437,9 @@ CI's `zizmor` job runs the same audit on a pull request or a push to `main`
 that changes a workflow. zizmor fails the job on any finding and adds each
 finding to the pull request as an annotation.
 
-Each job names its runner image, `ubuntu-26.04`, so a new `ubuntu-latest`
-can't change what a job runs on, and each has a time limit.
+Each job pins a runner image version instead of a `-latest` tag, so a new
+`-latest` image can't change what a job runs on. Each job also has a time
+limit.
 
 ## Running your own relay
 
@@ -476,10 +480,11 @@ A fork that wants them sets the two environments' values described under
 ```
 relay/
 ├── src/                  everything the Worker runs, and nothing else
-│   ├── index.ts          the Worker's entry: exports the routes and the Tenant class
+│   ├── index.ts          the Worker's entry: exports the routes and the Tenant and Invites classes
 │   ├── http/
 │   │   └── app.ts        the routes: parse the request, call the tenant, map the result
 │   ├── tenant.ts         the Tenant Durable Object
+│   ├── invites.ts        the Invites Durable Object
 │   ├── registration.ts   decides whether a registration is accepted
 │   ├── delivery.ts       decides what to do with a webhook delivery
 │   ├── session.ts        a socket's states, how long each lasts, and the hello message
@@ -535,8 +540,9 @@ makes an install fail when:
   the two the relay's packages have, because pnpm already installs the binary
   each one checks for.
 
-The check and deploy workflows also run `pnpm audit signatures`, which fails
-if a package's registry signature doesn't verify.
+CI's `Lint, test, and bundle` job and the deploy workflow also run
+`pnpm audit signatures`, which fails if a package's registry signature doesn't
+verify.
 
 Routing uses [Hono](https://hono.dev). Request bodies are checked with
 [Zod](https://zod.dev).
@@ -595,7 +601,7 @@ The relay's scripts run from `relay/`:
 | Script | What it does |
 |---|---|
 | `pnpm check` | Generates the Worker's types with `wrangler types`, then runs `typecheck`, `lint`, `format:check`, and `test` together and reports every failure instead of stopping at the first. |
-| `pnpm typecheck` | `tsc` on each of the four projects below, against the types `pnpm check` generated. |
+| `pnpm typecheck` | `tsc` on each of the four projects under [Layout](#layout), against the types `pnpm check` generated. |
 | `pnpm test` | The tests, in a random order. A failing run prints its seed, and `pnpm test --sequence.seed=<seed>` replays that order. |
 | `pnpm lint` | [Oxlint](https://oxc.rs/docs/guide/usage/linter), with type-aware rules. |
 | `pnpm format` / `format:check` | [Oxfmt](https://oxc.rs/docs/guide/usage/formatter): rewrite the files, or only report. It formats TypeScript and JSON at a width of 100. |

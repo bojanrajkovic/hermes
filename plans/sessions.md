@@ -78,8 +78,10 @@ Hermes cannot see the Claude app's session.
 The `--` ends the options. Without it, a prompt that starts with `-` is parsed
 as an option, and an unnamed `--remote-control` takes the prompt as its name.
 
-A cloud environment is a name and an ID of the form `ccpool_…`, saved in
-Settings under Sessions.
+A cloud environment is a name and an ID, saved in Settings under Sessions.
+The ID is `ccpool_…` for a self-hosted runner pool, or `env_…` for any other
+cloud environment. The `claude` command line accepts only `ccpool_…` IDs, and
+the Claude app accepts both.
 
 ## Finding the checkout
 
@@ -128,8 +130,8 @@ The terminal is libghostty, through `libghostty-spm`.
   another screen is shown.
 - The script writes its process ID to a file next to it. Hermes watches that
   process and marks the session exited when it ends, as well as when the
-  terminal reports closing. The close report alone did not always arrive for a
-  terminal parked offscreen, which left sessions marked running.
+  terminal reports closing. A terminal parked offscreen doesn't always report
+  closing, so Hermes marks those sessions exited when their process ends.
 - libghostty only runs a surface whose view is in a window. A terminal that no
   screen shows sits in an offscreen window, `TerminalParking`. Without it the
   process would block on its next write.

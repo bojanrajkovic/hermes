@@ -131,6 +131,8 @@ What is built and works, and what is known not to work or is unverified.
 
 - Local Claude Code sessions in an embedded Ghostty terminal, started from a
   pull request or an issue, with or without Remote Control.
+- Cloud sessions on a cloud environment saved in Settings. They run in the
+  embedded terminal, without a local worktree.
 - A worktree per session branch under
   `~/Library/Application Support/Hermes/worktrees`. An existing worktree of
   the branch is reused.
@@ -208,9 +210,10 @@ What is built and works, and what is known not to work or is unverified.
   review. It can't close pull requests, resolve threads, or edit or delete
   posted comments.
 - Only github.com is supported, not GitHub Enterprise Server.
-- Lists are capped at what one query returns: 1,000 open pull requests per
-  account, 100 review requests, and per pull request 100 comments, 100
-  reviews, 100 review threads, and 250 commits.
+- GitHub's search returns at most 1,000 results, so Hermes lists at most
+  1,000 open pull requests and 1,000 review requests per account. A pull
+  request shows at most 250 commits, 50 requested reviewers, and 100 comments
+  in each review thread. An issue shows its first 100 comments.
 - A definition lookup reads at most 40 files that contain the name. A
   references search reads at most 100 files and 500 matching lines.
 - Find references searches the head commit, so it doesn't list a use that the

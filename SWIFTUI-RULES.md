@@ -1,9 +1,8 @@
 # SwiftUI Rules
 
-Hard-won rules from building Moves and other SwiftUI apps. Each rule is
-**imperative** ("do this", "never that") followed by the failure mode
-that taught us. Skim the imperatives; read the failure modes when
-something inexplicable breaks.
+Rules for building SwiftUI apps on macOS. Each rule is **imperative**
+("do this", "never that") followed by the failure it prevents. Skim the
+imperatives; read the failure modes when something inexplicable breaks.
 
 Apply these up front when building a new view. Use them as a checklist
 when reviewing or hardening existing code.
@@ -116,7 +115,7 @@ Without `.lineLimit`, Text wraps to multiple lines. Without
 ("…long thread title" instead of "long thread tit…"). On narrow rows,
 this is the difference between "fits with ellipsis" and "wraps and
 makes the capsule background a tall vertical pill that eats sibling
-space" — see the moves UI glow-up batch 6 for the live example.
+space".
 
 ### 2.4 Centralize layout metrics in a single `enum` of static constants.
 
@@ -165,13 +164,9 @@ func setVisibility(_ thread: Thread, to v: ThreadVisibility) {
 **Why.** `@Observable` propagates "this property changed" through the
 direct observation graph. It does *not* chase down embedded copies in
 other observable properties. Caches built from a snapshot must be
-explicitly invalidated.
-
-The bug that taught us: marking a thread "de-emphasize during work" in
-Moves only worked for the first thread the user changed — every
-subsequent change looked like a no-op until something else
-incidentally rebuilt the cache (capture, start, etc.). The fix was one
-line: rebuild after every setter.
+explicitly invalidated. Without the rebuild, the first change appears
+to work and later ones look like no-ops until something else happens to
+rebuild the cache.
 
 ### 3.2 Don't build "smart" caches that try to incrementally patch themselves.
 
@@ -197,8 +192,7 @@ instance itself. Don't rely on `==` to mean "value-equal."
 
 Don't capture `store.preferences` into a `let` at view init and then
 save it 600ms later — a concurrent change clobbers it on save. Read
-fresh at the click handler, mutate, write. This is the "stale-snapshot
-autosave" lesson from Moves' Phase-5 gate.
+fresh at the click handler, mutate, write.
 
 ---
 
@@ -301,9 +295,9 @@ SwiftUI rendering glitch but is actually a data-layer hygiene issue.
 ### 5.4 Reuse one chip vocabulary across surfaces.
 
 When the same concept (a deadline, a status) renders in three views,
-build *one* component. The capture overlay's parsed-deadline chip and
-the task row's deadline chip and the Current card's deadline chip
-should be the same SwiftUI struct, parameterized only by the data.
+build *one* component. A deadline chip in a list row, a detail pane,
+and a popover should be the same SwiftUI struct, parameterized only by
+the data.
 Future urgency or accessibility changes then land once.
 
 ### 5.5 Compute time-pressure state at the leaf, not the call site.
@@ -350,10 +344,11 @@ silently opts the child *out* of an ancestor tint you may have wanted.
 
 ### 6.1 Prefer `@Environment(\.openSettings)` over `SettingsLink` in nested containers.
 
-`SettingsLink` brings its own NSHostingView shim that triggers
-constraint invalidation when nested inside `safeAreaInset`, `List`
-inset, or other hosted contexts on macOS 14.x. Plain `Button { openSettings() }`
-reaches the same `Settings { }` scene without the hazard.
+`SettingsLink` creates its own `NSHostingView` shim. When `SettingsLink`
+sits inside `safeAreaInset`, a `List` inset, or another hosted context,
+the shim can invalidate constraints during an update (see §1.1). A plain
+`Button { openSettings() }` opens the same `Settings { }` scene without
+the shim.
 
 **Tradeoff.** `openSettings()` can't pre-select a tab; `SettingsLink`
 can. If pre-selection matters, host `SettingsLink` at the
@@ -362,8 +357,8 @@ can. If pre-selection matters, host `SettingsLink` at the
 ### 6.2 In `ToolbarItemGroup(placement: .primaryAction)`, don't lead with `Spacer()`.
 
 The placement already trails items. A leading Spacer is redundant
-*and* confuses the toolbar's intrinsic-content-size computation — on
-macOS 14.4 we observed a launch crash from this. Just list the items.
+*and* can break the toolbar's intrinsic-content-size computation.
+Just list the items.
 
 ### 6.3 Toolbar items reading observable state — keep the read shallow.
 
@@ -371,13 +366,6 @@ A toolbar item that reads `store.someComputedProperty` re-evaluates on
 every redraw. Either keep the property cheap (cached), or push it
 through a small dedicated `View` so SwiftUI's dependency tracking
 scopes the redraw.
-
-### 6.4 For programmatic Settings open, the macOS-14 idiom is `@Environment(\.openSettings)`.
-
-For earlier macOS versions, you'd send `Selector("showSettingsWindow:")`
-to nil — but that selector only works for AppKit-defined Settings,
-not SwiftUI's `Settings { }` scene. Always use `openSettings()` on
-macOS 14+.
 
 ### 6.5 Window scenes don't auto-dismiss when state goes away.
 
@@ -420,55 +408,9 @@ keyboard users.
 
 ### 7.4 Right-click context menus on every actionable row.
 
-macOS users expect them. Build the menu items wired to the same
-AppStore methods the buttons use. Skip items whose target method
+macOS users expect them. Wire the menu items to the same model
+methods that the buttons call. Skip items whose target method
 doesn't exist — never stub a menu item to do nothing.
-
----
-
-## 8. Capture / live parsing / live preview
-
-These rules apply to any UI that shows a live-parsed preview of user
-input (capture palettes, search bars with structured query parsing,
-form fields with date detection).
-
-### 8.1 Never present a parse result as read-only.
-
-Users need an escape hatch. Make the chip clickable (opens an
-editor) and clearable (X button removes it). Natural-language parsing
-fails too often to be a one-way door.
-
-### 8.2 Surface confidence visually.
-
-If your parser can return a `lowConfidence: Bool` flag, propagate it
-to the UI. Tint the chip yellow (instead of orange/red) and swap the
-icon to a question mark. A low-confidence chip says "I think this is
-what you meant — verify before saving."
-
-### 8.3 Strip the matched phrase from the title preview.
-
-If the parser matched "tomorrow at 3pm" out of the input "test API
-tomorrow at 3pm", the preview title should read "test API". Showing
-the raw input alongside the chip is confusing — the user sees both
-"tomorrow" and the chip and wonders if it'll save the literal word.
-
-### 8.4 Tooltip the chip with the absolute date.
-
-Relative dates ("Tomorrow at 3:00 PM") are scannable but ambiguous
-across timezones / week boundaries. `.help(absoluteFormatter.string(from: date))`
-gives the user a verification path without cluttering the chip.
-
-### 8.5 Gate dependent UI on the parse outcome.
-
-If your overlay shows alert-offset chips only when a deadline was
-parsed, gate them on `if dueAt != nil`. Don't render them always and
-make the user wonder why their selection is being ignored.
-
-### 8.6 Surface Esc and Return explicitly.
-
-The standard macOS chord for "dismiss" is Esc, for "commit" is Return.
-Render small keycap glyphs in the overlay footer ("esc to dismiss") so
-new users see the affordance. Don't rely on muscle memory.
 
 ---
 
@@ -483,12 +425,12 @@ the gate.** Run the resulting `.app`, dismiss the window, do one user
 action, confirm the process is still alive. Most constraint crashes
 fire within the first display cycle.
 
-### 9.2 Test on the lowest-spec macOS version you support.
+### 9.2 Test on the oldest macOS version you support.
 
-Constraint-engine strictness varies. A SwiftUI pattern that works on
-macOS 15 may throw on 14.4 (we hit this). If your floor is 14, build a
-14 machine into your gate — VM, CI runner, or a colleague's older Mac
-they're willing to lend.
+Constraint-engine strictness varies between macOS releases. A SwiftUI
+pattern that works on one release can throw on an older one. Run the
+app on your oldest supported release in a VM, on a CI runner, or on a
+spare Mac.
 
 ### 9.3 Visual gates beat unit tests for layout.
 
@@ -499,11 +441,10 @@ ratio rarely pencils out.
 
 ### 9.4 Write a regression test for every fix, even the obvious ones.
 
-The "frozen snapshot" bug in Moves was a one-line fix
-(`Task { await rebuildAvailable() }`). The regression test that locks
-it in is 15 lines of "insert 3 threads, mutate visibility on each,
-read back the cached snapshot." Worth every line — next refactor
-might forget the rebuild.
+The frozen-snapshot fix in §3.1 is one line
+(`Task { await rebuildAvailable() }`). Its test inserts three threads,
+changes each thread's visibility, and reads back the cache. If a later
+refactor drops the rebuild, the test fails.
 
 ### 9.5 When a crash report names a private AppKit symbol, your guess is provisional.
 
@@ -540,8 +481,8 @@ considered, and the constraints that pushed you toward this answer.
 
 ### 10.4 Small, themed batches beat one giant PR.
 
-Eight focused commits ("trust bugs", "row anatomy", "current card",
-"command overlay", …) read clearer than one 4000-line diff. Each
+Several focused commits, each on one theme, are easier to review than
+one 4000-line diff. Each
 batch fits in one reviewer's head and rolls back cleanly if a
 specific theme breaks.
 

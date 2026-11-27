@@ -80,7 +80,8 @@ enum RepositoryList: String, CaseIterable, Identifiable, Sendable {
     var id: Self { self }
 }
 
-/// What the middle column lists in the Columns and Inbox styles.
+/// What the sidebar selected for the middle column to list: an Inbox filter, a repository,
+/// or the sessions.
 enum Scope: Hashable, Sendable {
     case filter(InboxFilter)
     case repository(RepositoryRef)

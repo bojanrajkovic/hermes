@@ -32,6 +32,8 @@ graph TD
     Hermes --> HermesUI
     Hermes --> StateKit
     HermesUI --> StateKit
+    DiffUI --> StateKit
+    ChecksUI --> StateKit
     StateKit --> GitHubKit
 ```
 

@@ -27,9 +27,8 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 - [plans/relay-privacy.md](plans/relay-privacy.md): what the relay handles, who can see each piece, how to check what is running, and where the protection stops.
 - [plans/relay-client.md](plans/relay-client.md): how Hermes sets up, publishes, finds, and joins a relay tenant, keeps its connection, and reloads what an event names.
 - [plans/attention-inbox.md](plans/attention-inbox.md): what puts a pull request in "Needs Your Attention", and how the reasons rank.
-- [plans/navigation-bakeoff.md](plans/navigation-bakeoff.md): the three navigation styles that were compared and why Inbox stayed, with screenshots.
 
 ## Rules
 
-- [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md): instructions for agents working in this repository. The two files have the same content.
+- [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md): instructions for agents working in this repository. AGENTS.md is a symlink to CLAUDE.md.
 - [SWIFTUI-RULES.md](SWIFTUI-RULES.md): general SwiftUI rules with the failure each one prevents. Code comments cite its section numbers.

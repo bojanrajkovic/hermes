@@ -18,7 +18,7 @@ Three targets make it up:
 |--------|-----------------|------------------|----------|
 | `.pullRequest` | GitHub, or the bare clone when GitHub refuses a large diff | The store's revision, which it polls every 10 seconds | Yes |
 | `.workingTree` | `git diff` of a worktree against the merge base of a ref, plus untracked files | Watching the worktree's files | No |
-| `.localBranch` | `git diff parent...branch` in a checkout | Nothing. It loads once | No |
+| `.localBranch` | `git diff parent...branch` in a checkout | Watching the checkout's refs, which every worktree shares, so a commit from any worktree reloads the diff | No |
 
 ## Local stacks
 
@@ -94,8 +94,8 @@ of hosting views.
 
 ```mermaid
 flowchart TD
-    M["FileModel rows, collapsed, rendered"] --> B["DiffList.body: tableRows(files:attached:)"]
-    RV["ReviewModel.attachedLines"] --> B
+    M["FileModel rows, collapsed, rendered"] --> B["DiffList.body: tableRows(files:)"]
+    RV["ReviewModel focusedLine, attachedLines"] -->|"observed by the coordinator"| PO["Popover over the focused line"]
     B --> U["DiffTableView.updateNSView"]
     U --> A["rowChanges: remove and insert row indexes"]
     A --> T[NSTableView]
@@ -259,6 +259,12 @@ and the one comment being written.
   saves its unsent text beside the review as `<number>.comment.md`. Each file
   has one writer: `ReviewModel` rewrites the whole `.json` on each change, so
   the comment box keeps its own file rather than sharing it.
+- A draft in the popover has Edit and Delete buttons. Edit opens the composer
+  on the draft's text, and Update Comment saves the change. Delete asks
+  "Delete this pending comment?" first, because a draft was never sent and
+  can't be restored. The delete runs in a `Task` after the confirmation sheet
+  closes, because a popover that resizes while the sheet is still animating
+  out makes AppKit's layout pass recurse until the stack overflows.
 - `ReviewLayout` matches threads and drafts against the current diff. A draft
   whose line left the diff is outdated. It stays in the Outdated Comments
   list, where it can be moved to a new line or deleted, and it is left out of
@@ -396,6 +402,12 @@ files past the first 100, the list says the search stopped early.
 The search reads the same source tree as definitions: the head commit for a
 pull request, the working directory for a local diff. That tree holds the new
 side of the diff, so the list leaves out a use that the diff deletes.
+
+A local branch has a source tree only while one of the checkout's worktrees
+has it checked out. The source tree is then that worktree's directory. When no
+worktree has the branch checked out, context expansion can't reveal hidden
+lines, and go to definition, find references, and rendered Markdown report
+that the branch's files can't be read.
 
 ## Opening a file
 

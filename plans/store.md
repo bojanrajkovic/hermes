@@ -80,10 +80,10 @@ What it keeps:
 
 Keeping only what the account lists name stops the file from growing across
 launches. Issue lists stay out for the same reason: every refresh reloads
-each issue list the store holds, one request per repository, so carrying
-them across launches would grow that cost without end. A repository's
-Issues list loads its first page when opened, and ⌘K finds issues once a
-list has loaded.
+each issue list the store holds, at one request per 100 loaded issues, so
+carrying them across launches would grow that cost without end. A
+repository's Issues list loads its first page when opened, and ⌘K finds
+issues once a list has loaded.
 
 **A restored value never beats a fetched one.** Restoring merges into the
 tables and keeps any record a fetch already wrote. After that, every fetch
@@ -181,12 +181,14 @@ RootView()
 | Interest | Refreshes | How often |
 |---|---|---|
 | `.account(login)` | The account's open pull requests, its repositories (every 10 minutes), and its opened issue lists. | Every 15 seconds while Hermes is the active app. In the background, every `refreshInterval` from Settings (60 seconds by default). |
-| `.checks(commit)` | The commit's checks: once when a screen starts showing them, then while one is queued or running, or for 2 minutes while the list is empty. A failed refresh tries again after 10 seconds, or once a used-up rate limit resets. A failed first load waits for Retry. | Every 10 seconds. |
+| `.checks(commit)` | The commit's checks: once when a screen starts showing them, then while one is queued or running, while a workflow run waits for approval, or for 2 minutes while the list is empty. A failed refresh tries again after 10 seconds, or once a used-up rate limit resets. A failed first load waits for Retry. | Every 10 seconds. |
 | `.pullRequest(key)` | The pull request's revision. When the head or update time moved, its record and detail. When the head, update time, or checks moved, its merge readiness. | Every 10 seconds. The pull request pane shows it, so every tab gets it. |
 
 A loop polls as soon as a screen shows its interest, then once per interval.
 An account's loop asks `shouldRefresh` whether a tick loads, so in the
-background it waits for `refreshInterval`. Activation and ⌘R refresh at once.
+background it waits for `refreshInterval`. ⌘R refreshes at once. When Hermes
+becomes the active app, it refreshes at once too, unless a refresh succeeded
+in the last 10 seconds.
 
 A poll runs in its own task. When the last screen goes away the loop stops,
 and a poll already running finishes.

@@ -29,7 +29,6 @@ public enum Theme {
     public static let sidebarMinWidth: CGFloat = 200
     public static let sidebarIdealWidth: CGFloat = 240
     public static let sidebarMaxWidth: CGFloat = 320
-    /// A sidebar that holds pull request and issue rows, not only names.
 
     // MARK: List column (the middle column of a three-column layout)
     /// Wide enough for the toolbar above the column to hold the list control, also when the sidebar
@@ -61,18 +60,12 @@ public enum Theme {
     public static let composerMaxHeight: CGFloat = 260
 
     // MARK: Reading column
-    /// Cap the measure so body lines stay near the 60–75 character ideal for
-    /// comfortable reading regardless of window width.
-    public static let readingMaxWidth: CGFloat = 660
+    /// The padding around the setup sheet's welcome text.
     public static let readingHorizontalInset: CGFloat = 32
-    public static let readingTopInset: CGFloat = 28
-    public static let readingBottomInset: CGFloat = 40
     /// Gap between a section heading and the next.
     public static let readingSectionSpacing: CGFloat = 28
     /// Gap between a heading and its body.
     public static let readingHeadingSpacing: CGFloat = 8
-    /// Extra leading added to body paragraphs for readability.
-    public static let bodyLineSpacing: CGFloat = 6
 
     // MARK: Table
     public static let badgeCornerRadius: CGFloat = 4
@@ -88,11 +81,8 @@ public enum Theme {
     // The whole app's typography lives here so hierarchy stays consistent and
     // a future restyle lands in one place.
     public enum Fonts {
-        /// The reading column's page title — the hero.
+        /// The setup sheet's welcome title.
         public static let pageTitle = Font.largeTitle.weight(.bold)
-        /// The standfirst/lead under the title — set in a quieter color, not
-        /// a lighter weight.
-        public static let pageLead = Font.title3
         /// A section heading within the reading column.
         public static let sectionHeading = Font.title2.weight(.semibold)
         /// Reading body copy.
@@ -102,8 +92,6 @@ public enum Theme {
 
         /// A table cell's primary text.
         public static let tableCell = Font.body
-        /// Numeric table cells — tabular figures so columns align.
-        public static let tableNumber = Font.body.monospacedDigit()
         /// The status badge label.
         public static let badge = Font.caption.weight(.medium)
 

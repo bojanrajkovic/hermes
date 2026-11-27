@@ -301,9 +301,9 @@ Hermes offers the relay at that server.
 | `version(of:)` | `GET /version` | The commit the relay was built from |
 | `register(_:as:)` | `PUT /tenants/<tenant>` with an invite code and the App's ID, client ID, client secret, and webhook secret | `403` is `RelayError.inviteRefused`, `409` is `.alreadyRegistered` |
 | `refreshToken(grant:verifier:for:)` | `POST /t/<tenant>/session` with the grant from a `hermes://relay.session` link and the sign-in's verifier | The member's refresh token. `403` is `.grantRefused` |
-| `redeemManifest(code:)` | `POST https://api.github.com/app-manifests/<code>/conversions`, with no sign-in | The App's ID, slug, and secrets |
+| `redeemManifest(code:)` | `POST https://api.github.com/app-manifests/<code>/conversions`, with no sign-in | The App's ID, slug, and secrets. Any status but `201` is `GitHubError.http`, and a response Hermes can't decode is `GitHubError.decoding` |
 
-Any other status is `RelayError.unexpected`.
+For the relay's calls, any other status is `RelayError.unexpected`.
 
 ## The connection
 
@@ -370,7 +370,7 @@ why:
 | The relay sent | Ending | What it means |
 |---|---|---|
 | Close code `4001` | `recheck` | The relay checks access again after 8 hours and after a membership change. Connect again at once. |
-| Close code `4003` | `unauthorized` | GitHub refused the refresh token, GitHub said the member is outside the organization the hello named, or the relay got no hello within 60 seconds. The member signs in again. |
+| Close code `4003` | `unauthorized` | GitHub refused the refresh token, or said the member is outside the organization the hello named. The relay also sends it when it got no hello within 60 seconds, when the first message isn't a valid hello, and when its check with GitHub takes more than 5 minutes. The member signs in again. |
 | Close code `4004`, or `404` to the connection request | `gone` | The tenant's App was uninstalled. |
 | Close code `1011` | `failed` | The relay could not reach GitHub. It did not use the refresh token, so Hermes keeps it. Connect again after a wait. |
 | Anything else | `failed` | The network dropped or the relay failed. Connect again after a wait. |
@@ -441,10 +441,15 @@ category `relay`:
 
 | Message | Level |
 |---|---|
+| `registered a tenant for <account>`: the relay accepted a new tenant | notice |
 | `connecting to tenant <id>` | notice |
 | `tenant <id> covers N repositories`: the relay accepted the sign-in | notice |
 | `tenant <id> ended: <reason>` | notice |
+| `the Keychain refused the token of tenant <id>`: the new refresh token wasn't saved | error |
 | `relay event <name> for <owner/repo>`, one per event | info |
+| `relay event <name> names no repository` | info |
+
+`<id>` is the first 8 characters of the tenant ID.
 
 macOS keeps notice messages, so `log show` finds a tenant's connections after
 the fact. It keeps info messages only in memory, so watch events live:
