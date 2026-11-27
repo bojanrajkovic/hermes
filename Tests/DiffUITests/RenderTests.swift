@@ -27,7 +27,7 @@ struct RenderTests {
         let cache = RepoCache()
         if let reference = environment["DIFFUI_PR"] {
             let parts = reference.split(whereSeparator: { "/#".contains($0) }).map(String.init)
-            let pullRequests = try await client.openPullRequests(owner: parts[0])
+            let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: parts[0])))
             let pullRequest = try #require(pullRequests.first { $0.repository.name == parts[1] && $0.number == Int(parts[2]) })
             let model = DiffModel(source: .pullRequest(pullRequest), client: client, repoCache: cache)
             await model.reload()
@@ -64,7 +64,7 @@ struct RenderTests {
     func pullRequestReloadsOnNewHead() async throws {
         let client = GitHubClient()
         let parts = try #require(environment["DIFFUI_LIVE_PR"]).split(whereSeparator: { "/#".contains($0) }).map(String.init)
-        let pullRequests = try await client.openPullRequests(owner: parts[0])
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: parts[0])))
         let pullRequest = try #require(pullRequests.first { $0.repository.name == parts[1] && $0.number == Int(parts[2]) })
         let model = DiffModel(source: .pullRequest(pullRequest), client: client, repoCache: RepoCache())
         let runner = Task { await model.run() }
@@ -204,7 +204,7 @@ struct RenderTests {
     func renderReview() async throws {
         let client = GitHubClient()
         let parts = try #require(environment["DIFFUI_PR"]).split(whereSeparator: { "/#".contains($0) }).map(String.init)
-        let pullRequests = try await client.openPullRequests(owner: parts[0])
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: parts[0])))
         let pullRequest = try #require(pullRequests.first { $0.repository.name == parts[1] && $0.number == Int(parts[2]) })
         let root = FileManager.default.temporaryDirectory.appending(path: "hermes-render-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

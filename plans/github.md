@@ -95,7 +95,6 @@ sequenceDiagram
 | `pullRequestHits(matchingEach:)` | GraphQL search | Several searches as one request, which costs one point. A search with more than 100 results runs again through `pullRequestHits(matching:)`. |
 | `pullRequests(ids:perRequest:)` | GraphQL | Pull request fields by ID, 2 requests at a time. A first load asks for 10 per request, a refresh for 25. Then one more request per 25 pull requests whose checks failed, to learn whether a required check did. |
 | `viewerTeams()` | REST `/user/teams` | The teams the viewer is on, to match against a pull request's requested reviewers. |
-| `openPullRequests(owner:)` | GraphQL search | Both of the above for every open pull request in the account's non-archived repositories. |
 | `repositories(owner:)` | GraphQL | Non-archived repositories the account owns that the viewer can push to (write, maintain, or admin), with open issue counts. Pages every repository with only its permission, then counts issues for the ones kept. |
 | `issues(repository:pageSize:after:)` | GraphQL | One page of a repository's open issues. Loaded when the list is shown. |
 | `pullRequestDetail` | GraphQL | Description, comments, reviews, requested reviewers, commits, review threads. |
@@ -279,11 +278,13 @@ also caps the server time GraphQL queries use per minute. A large
 organization trips the secondary limit long before the quota, so Hermes:
 
 - loads pull requests and issue counts only for repositories the viewer can
-  push to. Pull requests that involve the viewer or ask for their review load
-  from any repository, and anything opens on demand from a link or ⌘K.
+  push to. A first load also loads every pull request that involves the
+  viewer, from any repository. A refresh adds new pull requests that the
+  viewer opened, reviewed, was asked to review, or was mentioned in. Anything
+  else opens on demand from a link or ⌘K.
 - loads pull request details 2 requests at a time.
 - sends a refresh's searches as one request. GitHub charges a request at least
-  one point, and five small searches together still cost one.
+  one point, and several small searches together still cost one.
 - keeps a first load's progress when it fails part way, and continues from
   there on the next refresh.
 - pauses every request when GitHub reports over HTTP a used-up rate limit that

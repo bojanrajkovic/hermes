@@ -25,6 +25,7 @@ struct PullRequestSearchTests {
 
     @Test func attentionSearchesStayInTheAccount() {
         #expect(PullRequestSearch.reviewedByViewer(owner: "acme") == "is:pr is:open archived:false user:acme reviewed-by:@me")
+        #expect(PullRequestSearch.authoredByViewer(owner: "acme") == "is:pr is:open archived:false user:acme author:@me")
         #expect(PullRequestSearch.mentioningViewer(owner: "acme") == "is:pr is:open archived:false user:acme mentions:@me")
     }
 }

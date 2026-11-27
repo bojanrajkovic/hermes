@@ -223,7 +223,8 @@ extension reported, and when the repository is tried again.
   forwarder of one of its repositories can run at once.
 - Hermes stops its forwarders when it quits. A crash leaves them running,
   holding their targets' webhooks. Each is started with the webhook secret
-  `hermes-forwarder`, and the next launch ends every process that has it.
+  `hermes-forwarder`, and the next launch ends every process that has it,
+  whether "Get changes as they happen" is on or off.
 
 ## Testing
 

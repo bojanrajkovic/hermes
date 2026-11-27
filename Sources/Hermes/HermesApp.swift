@@ -50,7 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await saveSnapshots() }
         NSApp.activate()
-        if store.usesWebhooks { WebhookForwarder.endLeftovers() }
+        // Even with webhooks off, because a crash while they were on leaves forwarders running.
+        WebhookForwarder.endLeftovers()
         store.relays.sync()
         Task { await store.keepForwardersInSync() }
     }

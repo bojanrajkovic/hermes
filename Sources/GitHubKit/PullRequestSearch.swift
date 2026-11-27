@@ -25,6 +25,11 @@ public enum PullRequestSearch {
         "\(base(owner: owner, open: true)) reviewed-by:@me"
     }
 
+    /// The open pull requests the viewer opened.
+    public static func authoredByViewer(owner: String) -> String {
+        "\(base(owner: owner, open: true)) author:@me"
+    }
+
     /// The open pull requests that mention the viewer.
     public static func mentioningViewer(owner: String) -> String {
         "\(base(owner: owner, open: true)) mentions:@me"

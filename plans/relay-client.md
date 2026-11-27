@@ -370,7 +370,7 @@ why:
 | The relay sent | Ending | What it means |
 |---|---|---|
 | Close code `4001` | `recheck` | The relay checks access again after 8 hours and after a membership change. Connect again at once. |
-| Close code `4003` | `unauthorized` | GitHub refused the refresh token, or said the member is outside the organization the hello named. The relay also sends it when it got no hello within 60 seconds, when the first message isn't a valid hello, and when its check with GitHub takes more than 5 minutes. The member signs in again. |
+| Close code `4003` | `unauthorized` | GitHub refused the refresh token, replaced it and then failed to list the repositories, or said the member is outside the organization the hello named. The relay also sends `4003` when no hello arrives within 60 seconds, when the first message isn't a valid hello, and when its check with GitHub takes more than 5 minutes. The member signs in again. |
 | Close code `4004`, or `404` to the connection request | `gone` | The tenant's App was uninstalled. |
 | Close code `1011` | `failed` | The relay could not reach GitHub. It did not use the refresh token, so Hermes keeps it. Connect again after a wait. |
 | Anything else | `failed` | The network dropped or the relay failed. Connect again after a wait. |

@@ -16,7 +16,7 @@ export const closeCode = {
   unreachable: 1011,
   /** Reconnect now: the session ran out, or someone's access changed. */
   recheck: 4001,
-  /** Sign in again: GitHub refused the refresh token, or the client sent none. */
+  /** Sign in again: GitHub refused the refresh token, replaced it before the listing failed, or got none. */
   notAuthorized: 4003,
   /** Stop: the tenant's App was uninstalled. */
   tenantGone: 4004,

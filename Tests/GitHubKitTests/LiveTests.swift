@@ -15,7 +15,7 @@ struct LiveTests {
         let repositories = try await client.repositories(owner: viewer.login)
         #expect(!repositories.isEmpty)
 
-        let pullRequests = try await client.openPullRequests(owner: viewer.login)
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: viewer.login)))
         guard let pullRequest = pullRequests.first else { return }
 
         let detail = try await client.pullRequestDetail(repository: pullRequest.repository, number: pullRequest.number)
@@ -60,7 +60,7 @@ struct LiveTests {
     }
 
     @Test func anOrganizationsPullRequestsAreAllInItsRepositories() async throws {
-        let pullRequests = try await client.openPullRequests(owner: "vapor")
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: "vapor")))
         #expect(pullRequests.count > 50, "More than one page")
         #expect(pullRequests.allSatisfy { $0.repository.owner == "vapor" })
         #expect(Set(pullRequests.map(\.id)).count == pullRequests.count)
