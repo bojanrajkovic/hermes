@@ -232,10 +232,12 @@ confirmation is destructive and names what is unmet. It is never offered for
 conflicts, a draft, or a stacked pull request, because `gh stack merge`
 cannot bypass.
 
-When the repository allows auto-merge and GitHub's `viewerCanEnableAutoMerge`
-is true, the Merge menu offers "Enable Auto-Merge" with each allowed method.
-GitHub sets that flag only while the pull request cannot merge yet, so it never
-sits beside the ordinary merge entries. It has no confirmation, because it can
+The Merge menu offers "Enable Auto-Merge" with each allowed method when the
+repository allows auto-merge, GitHub's `viewerCanEnableAutoMerge` is true, and
+something blocks the merge. GitHub can set that flag on a pull request that
+can already merge, then reject `enablePullRequestAutoMerge` with "Pull request
+is in clean status". That's why Hermes also checks the merge state. The entry
+has no confirmation, because it can
 be turned off before it fires. While it is on, the header shows an
 "Auto-merge" badge with the method, and the menu offers "Disable Auto-Merge".
 Stacked pull requests do not get it, because they merge through `gh stack`.

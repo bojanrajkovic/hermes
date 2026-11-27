@@ -59,7 +59,7 @@ public struct MergeReadiness: Sendable, Hashable, Codable {
     public let viewerCanBypass: Bool
     /// Whether the repository allows auto-merge.
     public let autoMergeAllowed: Bool
-    /// GitHub's `viewerCanEnableAutoMerge`: true only while the pull request cannot merge yet.
+    /// GitHub's `viewerCanEnableAutoMerge`.
     public let viewerCanEnableAutoMerge: Bool
     /// GitHub's `viewerCanDisableAutoMerge`.
     public let viewerCanDisableAutoMerge: Bool
@@ -105,9 +105,12 @@ public struct MergeReadiness: Sendable, Hashable, Codable {
         return state == .blocked || state == .behind
     }
 
-    /// Whether the menu offers to merge automatically once requirements pass.
+    /// Whether the menu offers to merge automatically once requirements pass. It's true only
+    /// while something blocks the merge, because GitHub sets `viewerCanEnableAutoMerge` on a pull
+    /// request that can already merge, then rejects `enablePullRequestAutoMerge` with
+    /// "Pull request is in clean status".
     public var canEnableAutoMerge: Bool {
-        autoMergeAllowed && viewerCanEnableAutoMerge && !allowedMethods.isEmpty
+        autoMergeAllowed && viewerCanEnableAutoMerge && !allowedMethods.isEmpty && !canMerge
     }
 }
 

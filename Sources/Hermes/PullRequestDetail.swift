@@ -419,7 +419,8 @@ struct MergeButton: View {
             do {
                 try await model.setAutoMerge(pullRequest, method: method)
             } catch {
-                failure = Failure(title: "Could Not Merge", message: describe(error))
+                let title = method == nil ? "Could Not Disable Auto-Merge" : "Could Not Enable Auto-Merge"
+                failure = Failure(title: title, message: describe(error))
             }
             await model.github.loadReadiness(pullRequest.key)
         }
