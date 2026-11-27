@@ -183,9 +183,11 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
 }
 
 @Suite struct AutoMergeTests {
-    private func readiness(allowed: Bool = true, canEnable: Bool = true, methods: [MergeMethod] = [.squash]) -> MergeReadiness {
+    private func readiness(
+        state: MergeStateStatus = .blocked, allowed: Bool = true, canEnable: Bool = true, methods: [MergeMethod] = [.squash]
+    ) -> MergeReadiness {
         MergeReadiness(
-            state: .blocked, allowedMethods: methods, defaultMethod: methods.first ?? .merge, viewerCanPush: true,
+            state: state, allowedMethods: methods, defaultMethod: methods.first ?? .merge, viewerCanPush: true,
             autoMergeAllowed: allowed, viewerCanEnableAutoMerge: canEnable
         )
     }
@@ -204,5 +206,10 @@ private func entry(_ stackID: String, position: Int) -> StackEntry {
 
     @Test func notOfferedWithoutAMergeMethod() {
         #expect(!readiness(methods: []).canEnableAutoMerge)
+    }
+
+    @Test(arguments: [MergeStateStatus.clean, .hasHooks, .unstable])
+    func notOfferedWhenThePullRequestCanMergeNow(state: MergeStateStatus) {
+        #expect(!readiness(state: state).canEnableAutoMerge)
     }
 }
