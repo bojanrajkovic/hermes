@@ -213,8 +213,8 @@ stateDiagram-v2
     awaitingHello --> [*]: 60 seconds pass, or the message is not a hello (4003)
     awaitingHello --> [*]: tenant gone (4004)
     authorizing --> open: GitHub answers, session sent
-    authorizing --> [*]: GitHub refuses the token, says the user is outside the organization, or takes more than 5 minutes (4003)
-    authorizing --> [*]: GitHub can't be reached (1011)
+    authorizing --> [*]: GitHub refuses the token, says the user is outside the organization, fails to list after replacing the token, or takes more than 5 minutes (4003)
+    authorizing --> [*]: GitHub can't be reached for the refresh (1011)
     authorizing --> [*]: tenant gone while waiting on GitHub (4004)
     open --> [*]: 8 hours pass, or access changed (4001)
     open --> [*]: tenant gone (4004)
@@ -278,7 +278,9 @@ and the client needs the new one:
 
 The client must store the new refresh token at once. If the connection drops
 before the session arrives, the client holds a spent token, and the user has
-to sign in again.
+to sign in again. The user also signs in again when the repository listing
+fails after GitHub has replaced the token. The relay closes with `4003`,
+because the client's old token no longer works.
 
 A socket stays open for eight hours. Then the relay closes it with code `4001`,
 and the client reconnects, so the user's access is checked again. An alarm on
@@ -286,9 +288,9 @@ the Durable Object fires when the oldest socket runs out.
 
 | Close code | Meaning |
 |---|---|
-| `1011` | GitHub could not be reached. The refresh token was not used, so the client keeps it and tries again. |
+| `1011` | GitHub could not be reached for the refresh. The refresh token was not used, so the client keeps it and tries again. |
 | `4001` | Reconnect now. The eight hours ran out, or a delivery said someone's access changed. |
-| `4003` | Sign in again. GitHub refused the refresh token, GitHub said the user is outside the organization the hello named, GitHub took more than 5 minutes to answer, the first message was not a hello, or none came within 60 seconds. |
+| `4003` | Sign in again. GitHub refused the refresh token, GitHub replaced the token and then failed to list the repositories, GitHub said the user is outside the organization the hello named, GitHub took more than 5 minutes to answer, the first message was not a hello, or none came within 60 seconds. |
 | `4004` | Stop. The App was uninstalled. |
 
 The sockets use the WebSocket Hibernation API, so an idle tenant is not kept in

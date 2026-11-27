@@ -275,6 +275,28 @@ describe("a socket's first message", () => {
     });
   });
 
+  it("closes with 4003 when the listing fails after GitHub replaces the token", async () => {
+    const tenant = await registeredTenant();
+    const headers = { date: new Date().toUTCString() };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+
+      return await Promise.resolve(
+        url.pathname === "/login/oauth/access_token"
+          ? Response.json(refreshed, { headers })
+          : new Response("unavailable", { status: 503 }),
+      );
+    });
+    const opened = await socketTo(tenant);
+
+    opened.socket.send(hello);
+
+    await vi.waitFor(() => {
+      expect(opened.closeCode()).toBe(4003);
+    });
+    expect(opened.messages).toEqual([]);
+  });
+
   it("closes with 4003, and asks GitHub nothing, when it is not a hello", async () => {
     const tenant = await registeredTenant();
     const calls = gitHub(refreshed);

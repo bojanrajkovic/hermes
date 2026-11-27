@@ -200,7 +200,8 @@ decide with them in view.
   its holder forge deliveries to that tenant's members. It reads nothing.
 - **A dropped connection can cost a sign-in.** If the connection drops after
   GitHub replaces the refresh token and before the Mac receives the new one,
-  the member signs in again.
+  the member signs in again. A repository listing that fails after the
+  refresh also makes the member sign in again.
 
 None of these is closed by cryptography. Closing them fully would take
 hardware attestation, where the host signs a statement of what it is running.

@@ -82,14 +82,16 @@ const pageSize = 100;
  * the user belongs to it. The token is the tenant App's, so GitHub answers for an
  * organization only where that App is installed.
  *
- * Returns undefined when GitHub refuses the token. Throws when GitHub can't be reached or
- * the listing fails. The old token is spent by then, so the user has to sign in again.
+ * Returns "refused" when GitHub refuses the token. Returns "spent" when GitHub replaces the
+ * token and the listing then fails, so the user has to sign in again. Throws when GitHub
+ * can't be reached for the refresh. The token is still unused then, so the client can retry
+ * with it.
  */
 export async function accessForRefreshToken(
   app: AppCredentials,
   token: string,
   organization: string | undefined,
-): Promise<Access | undefined> {
+): Promise<Access | "refused" | "spent"> {
   const refreshed = await refresh({
     clientType: "github-app",
     clientId: app.clientID,
@@ -97,17 +99,30 @@ export async function accessForRefreshToken(
     refreshToken: token,
   }).catch((error: unknown) => {
     if (refusedByGitHub(error)) {
-      return undefined;
+      return "refused" as const;
     }
 
     throw error;
   });
-  if (refreshed === undefined) {
-    return undefined;
+  if (refreshed === "refused") {
+    return "refused";
   }
 
   const { authentication } = refreshed;
-  const headers = { authorization: `token ${authentication.token}` };
+  const seen = await visibleTo(authentication.token, organization).catch(() => "spent" as const);
+  if (seen === "spent") {
+    return "spent";
+  }
+
+  return { refreshToken: authentication.refreshToken, ...seen };
+}
+
+/** Lists the repositories a user token can see through the tenant's App, and whether its user is affiliated. */
+async function visibleTo(
+  token: string,
+  organization: string | undefined,
+): Promise<Pick<Access, "repositories" | "affiliated">> {
+  const headers = { authorization: `token ${token}` };
   const installations = await request("GET /user/installations", { headers, per_page: pageSize });
 
   const repositories: Repository[] = [];
@@ -135,7 +150,7 @@ export async function accessForRefreshToken(
     organization === undefined ||
     (await belongsTo(organization, headers));
 
-  return { refreshToken: authentication.refreshToken, repositories, affiliated };
+  return { repositories, affiliated };
 }
 
 /**

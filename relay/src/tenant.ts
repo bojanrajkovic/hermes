@@ -278,8 +278,15 @@ export class Tenant extends DurableObject<Env> {
       return;
     }
 
-    if (access === undefined) {
+    if (access === "refused") {
       this.end(socket, closeCode.notAuthorized, "token refused");
+
+      return;
+    }
+
+    // GitHub already replaced the old token, so the client can't retry with it.
+    if (access === "spent") {
+      this.end(socket, closeCode.notAuthorized, "listing failed");
 
       return;
     }
