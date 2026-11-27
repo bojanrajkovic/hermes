@@ -19,7 +19,8 @@ these four packages with `exact:`. To upgrade one, change its version and run
 `make packages`, which resolves the packages and copies each new
 `src/scanner.c` over the file in `Sources/TreeSitterScanners`. For one of
 Renovate's updates, `scripts/renovate/swift-packages.sh` does the same
-without running Swift, and `Swift check` fails if the two disagree.
+without running Swift. CI's `Compile and test` job fails if `make packages`
+then changes the script's output.
 
 ## tree-sitter-swift is pinned to a tag with generated files
 
