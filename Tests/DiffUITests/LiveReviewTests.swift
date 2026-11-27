@@ -20,7 +20,7 @@ struct LiveReviewTests {
     func threadsReloadWhenSomeoneComments() async throws {
         let number = try #require(ProcessInfo.processInfo.environment["DIFFUI_WATCH"].flatMap(Int.init))
         let client = GitHubClient()
-        let pullRequest = try #require(try await client.openPullRequests(owner: Self.playground.owner)
+        let pullRequest = try #require(try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: Self.playground.owner)))
             .first { $0.repository == Self.playground && $0.number == number })
         let root = FileManager.default.temporaryDirectory.appending(path: "hermes-live-\(UUID().uuidString)")
         let model = DiffModel(source: .pullRequest(pullRequest), client: client, repoCache: RepoCache(), draftsRoot: root)
@@ -41,7 +41,7 @@ struct LiveReviewTests {
     func oneSubmissionCarriesEveryKindOfComment() async throws {
         let number = try #require(ProcessInfo.processInfo.environment["DIFFUI_SUBMIT"].flatMap(Int.init))
         let client = GitHubClient()
-        let pullRequests = try await client.openPullRequests(owner: Self.playground.owner)
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: Self.playground.owner)))
         let pullRequest = try #require(pullRequests.first { $0.repository == Self.playground && $0.number == number })
         let root = FileManager.default.temporaryDirectory.appending(path: "hermes-live-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -92,7 +92,7 @@ struct LiveReviewTests {
     func viewedMarksSyncWithGitHub() async throws {
         let number = try #require(ProcessInfo.processInfo.environment["DIFFUI_VIEWED"].flatMap(Int.init))
         let client = GitHubClient()
-        let pullRequest = try #require(try await client.openPullRequests(owner: Self.playground.owner)
+        let pullRequest = try #require(try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: Self.playground.owner)))
             .first { $0.repository == Self.playground && $0.number == number })
         let root = FileManager.default.temporaryDirectory.appending(path: "hermes-live-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

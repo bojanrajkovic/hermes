@@ -76,17 +76,6 @@ extension GitHubClient {
         }
         """
 
-    /// Loads every open pull request in the non-archived repositories of a
-    /// user or an organization, most recently created first.
-    ///
-    /// GitHub's search returns at most 1,000 results, so an account with more
-    /// open pull requests gets the first 1,000. No pull request appears twice.
-    ///
-    /// - Parameter owner: The login of the user or organization.
-    public func openPullRequests(owner: String) async throws -> [PullRequest] {
-        try await pullRequests(ids: pullRequestIDs(matching: PullRequestSearch.open(owner: owner)))
-    }
-
     /// The node IDs of the pull requests a search finds, in its order, without
     /// repeats. Stops at GitHub's limit of 1,000 results.
     ///

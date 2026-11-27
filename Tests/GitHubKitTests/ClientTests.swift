@@ -112,8 +112,8 @@ actor TokenCounter {
         #expect(StubProtocol.requests.withLock { $0.map { $0.body.contains(#""paging":true"#) } } == [false, true, true])
     }
 
-    /// Answers the two queries of `openPullRequests`: a search that finds
-    /// `PR_0` to `PR_24` over two pages, and the fields of the IDs asked for.
+    /// Stubs the responses for `pullRequestIDs(matching:)` and `pullRequests(ids:)`: a search
+    /// that returns `PR_0` to `PR_24` over two pages, and the fields of each requested ID.
     private func pullRequestList() throws -> @Sendable (StubProtocol.Recorded) -> StubProtocol.Response {
         let json = try JSONSerialization.jsonObject(with: fixture("pull_requests")) as? [String: [String: [String: Any]]]
         let template = try #require((json?["data"]?["search"]?["nodes"] as? [[String: Any]])?.first)
@@ -143,7 +143,7 @@ actor TokenCounter {
     @Test func pullRequestsLoadByIDInSearchOrderWithoutRepeats() async throws {
         let client = client(respond: try pullRequestList())
 
-        let pullRequests = try await client.openPullRequests(owner: "o")
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: "o")))
 
         #expect(pullRequests.map(\.id) == (0...24).map { "PR_\($0)" })
         #expect(pullRequests.first?.title == "feat(contract): define query results and the agent row cap")
@@ -202,7 +202,7 @@ actor TokenCounter {
             failed.withLock { $0.insert(request.body).inserted } ? .init(status: 502, body: "<html>") : respond(request)
         }
 
-        let pullRequests = try await client.openPullRequests(owner: "o")
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: "o")))
 
         #expect(pullRequests.count == 25)
         #expect(StubProtocol.requests.withLock { $0.count } == 10)
@@ -218,7 +218,7 @@ actor TokenCounter {
                 : respond(request)
         }
 
-        let pullRequests = try await client.openPullRequests(owner: "o")
+        let pullRequests = try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: "o")))
 
         #expect(pullRequests.count == 25)
     }
@@ -372,7 +372,7 @@ actor TokenCounter {
         let client = client { _ in .init(status: 502) }
 
         await #expect(throws: GitHubError.http(status: 502, message: "")) {
-            try await client.openPullRequests(owner: "o")
+            try await client.pullRequests(ids: client.pullRequestIDs(matching: PullRequestSearch.open(owner: "o")))
         }
         #expect(StubProtocol.requests.withLock { $0.count } == 3)
     }
