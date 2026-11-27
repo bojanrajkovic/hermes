@@ -86,6 +86,8 @@ final class WindowModel {
     var diffTarget: DeepLink.PullRequestTarget?
     /// The comment a link asked the open conversation to scroll to, by its REST ID. The conversation takes it.
     var commentToShow: Int?
+    /// The places ⌘[ and ⌘] move through. `select(_:)` clears it when the account changes.
+    var history = NavigationHistory()
     /// A link that arrived before the accounts were loaded.
     var pendingLink: DeepLink?
     /// Tree nodes the user opened or closed, by node ID. Other nodes use their default.
@@ -125,7 +127,11 @@ final class WindowModel {
         if account == nil { account = store.account(login ?? store.lastLogin) ?? viewer.accounts.first }
         if let link = pendingLink {
             pendingLink = nil
-            Task { await open(link) }
+            // A window opened on a link starts its history there, as a browser tab does.
+            Task {
+                await open(link)
+                startHistory()
+            }
         }
         await refresh()
     }
@@ -137,6 +143,7 @@ final class WindowModel {
         destination = nil
         scope = .filter(.needsAttention)
         expansion = [:]
+        startHistory()
         Task { await refresh() }
     }
 
@@ -310,17 +317,25 @@ final class WindowModel {
         if let tab { pullRequestTab = tab }
 
         switch destination {
+        case .pullRequest(let key): reveal(key.repository, list: .pullRequests)
+        case .issue(let key): reveal(key.repository, list: .issues)
+        case .session: scope = .sessions
+        case .localBranch(let key): reveal(key.repository, list: .localStacks)
+        }
+        bringIntoView(destination)
+    }
+
+    /// Expands the stack that contains `destination`'s row and scrolls the list to that row.
+    func bringIntoView(_ destination: Destination) {
+        switch destination {
         case .pullRequest(let key):
-            reveal(key.repository, list: .pullRequests)
             if let stackID = pullRequest(key)?.stack?.stackID { expansion["stack:\(stackID)"] = true }
             if let id = pullRequest(key)?.id { scroll(to: id) }
         case .issue(let key):
-            reveal(key.repository, list: .issues)
             if let id = issue(key)?.id { scroll(to: id) }
         case .session:
-            scope = .sessions
+            break
         case .localBranch(let key):
-            reveal(key.repository, list: .localStacks)
             scroll(to: key)
         }
     }

@@ -34,7 +34,7 @@ only. Nothing is written to git or GitHub.
 
 The stack switcher covers both. On a pull request it lists the GitHub stack,
 then the local branches built on its top that have no pull request yet. On a
-local branch it lists the branch's local stack. ⌘[ and ⌘] move through the
+local branch it lists the branch's local stack. ⌥⌘[ and ⌥⌘] move through the
 same list. `LocalStacks` caches each repository's stacks for every window and
 reads them again when a list or screen that shows them appears.
 

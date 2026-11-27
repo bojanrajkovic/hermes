@@ -129,7 +129,8 @@ so it takes a few minutes. See [plans/build-system.md](plans/build-system.md).
 | ⇧⌘B | Show or hide all bot pull requests |
 | ⇧⌘O | Open the current item on GitHub |
 | ⌘1, ⌘2, ⌘3, ⌘4 | Conversation, Files, Checks, or Sessions tab of a pull request |
-| ⌘[ and ⌘] | Down and up the stack |
+| ⌘[ and ⌘] | Go back and forward through what the window showed |
+| ⌥⌘[ and ⌥⌘] | Down and up the stack |
 | ⌃⌘↓ and ⌃⌘↑ | Next and previous file in the diff |
 | ⌃⌘V | Mark the current file as viewed or unviewed |
 | ⌃⌘L | Switch between the unified and side-by-side layouts |

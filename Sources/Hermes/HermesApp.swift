@@ -162,6 +162,9 @@ struct WindowRoot: View {
                     model.store.lastPlace = state.url
                 }
             }
+            // Records history for every way of moving. SwiftUI calls this once per view update, so a
+            // move that sets the destination, scope, and tab makes one entry.
+            .onChange(of: model.place, initial: true) { model.recordPlace() }
             // Kept current, so a restored window shows its account and what it showed.
             .onChange(of: WindowState(
                 id: state.id, login: model.account?.login, url: model.placeURL, tab: model.pullRequestTab, expansion: model.expansion
@@ -208,15 +211,22 @@ struct HermesCommands: Commands {
         }
 
         CommandMenu("Go") {
+            Button("Back") { model?.goBack() }
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(model?.canGoBack != true)
+            Button("Forward") { model?.goForward() }
+                .keyboardShortcut("]", modifiers: .command)
+                .disabled(model?.canGoForward != true)
+            Divider()
             Button("Command Palette…") { model?.isPaletteShown.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(model?.viewer == nil)
             Divider()
             Button("Down the Stack") { model?.moveInStack(by: -1) }
-                .keyboardShortcut("[", modifiers: .command)
+                .keyboardShortcut("[", modifiers: [.command, .option])
                 .disabled(model?.canMoveDownStack != true)
             Button("Up the Stack") { model?.moveInStack(by: 1) }
-                .keyboardShortcut("]", modifiers: .command)
+                .keyboardShortcut("]", modifiers: [.command, .option])
                 .disabled(model?.canMoveUpStack != true)
             Divider()
             Button("Open on GitHub") {
