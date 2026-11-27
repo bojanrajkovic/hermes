@@ -286,6 +286,10 @@ struct DetailPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(title)
+        .toolbar {
+            // macOS draws navigation items at the leading edge of the list column, as Finder and Mail do.
+            ToolbarItemGroup(placement: .navigation) { HistoryButtons() }
+        }
     }
 
     private var title: String {
@@ -308,6 +312,21 @@ struct DetailPane: View {
                 Link("Open on GitHub", destination: url)
             }
         }
+    }
+}
+
+/// The back and forward buttons. A view of their own, because whether they're enabled depends on
+/// the lists, and the detail pane shouldn't redraw when the lists change.
+private struct HistoryButtons: View {
+    @Environment(WindowModel.self) private var model
+
+    var body: some View {
+        Button("Back", systemImage: "chevron.backward") { model.goBack() }
+            .help("Go back (⌘[)")
+            .disabled(!model.canGoBack)
+        Button("Forward", systemImage: "chevron.forward") { model.goForward() }
+            .help("Go forward (⌘])")
+            .disabled(!model.canGoForward)
     }
 }
 

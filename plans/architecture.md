@@ -99,6 +99,37 @@ graph LR
     W3["WindowModel (org)"] --> G
 ```
 
+### Back and forward
+
+Each window keeps its own history of places. Go ▸ Back (⌘[), Go ▸ Forward (⌘]), and the
+chevron buttons at the leading edge of the list column move through it. A `Place` stores the
+sidebar scope, the repository list, the open item, and the pull request tab.
+`NavigationHistory` stores the places.
+
+`WindowRoot` records the window's place in one `onChange` that runs whenever the place
+changes. Every way of moving changes the place, so that `onChange` records all of them: the
+sidebar, a list, ⌘K, a `hermes://` link, a link between items, and the stack switcher.
+SwiftUI calls `onChange` once per view update, so `navigate(to:)`, which sets the destination
+and then the scope, makes one entry.
+
+A place with the current place's scope and item replaces the current place. Switching tabs
+or lists updates the current entry, so going back reopens an item on the tab you left it on.
+Any other place becomes current, and the history clears the forward places, as a browser
+does. The history keeps at most 100 places behind the current one.
+
+```mermaid
+graph LR
+    A["Needs Your Attention"] -->|"pick #12"| B["#12, Files"]
+    B -->|"⌘3"| B2["#12, Checks (replaces)"]
+    B2 -->|"sidebar: airway"| C["airway, #12, Checks"]
+    C -.->|"⌘["| B2
+```
+
+Back and forward skip and drop places that the window can no longer show, such as a
+repository that left the sidebar or a session that ended. They always keep a pull request or
+issue, because the detail pane can load an item that left the lists. Switching accounts clears the history, because
+the old account's places aren't in the new account's lists.
+
 ## Data flow
 
 ```mermaid

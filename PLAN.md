@@ -11,7 +11,7 @@ documentation. Read it with [PROGRESS.md](PROGRESS.md) to get up to speed.
 
 ## How it works
 
-- [plans/architecture.md](plans/architecture.md): the targets, what each owns, and how state and data flow.
+- [plans/architecture.md](plans/architecture.md): the targets, what each owns, how state and data flow, and each window's back and forward history.
 - [plans/store.md](plans/store.md): `GitHubStore`, the one copy of everything Hermes knows about GitHub, which answer wins when two fetches disagree, how polling follows what's on screen, and the cache that shows the lists at launch.
 - [plans/github.md](plans/github.md): authentication through `gh`, the API client, and how the lists load.
 - [plans/diff-viewer.md](plans/diff-viewer.md): loading, rendering, and refreshing a diff; review comments; go to definition.

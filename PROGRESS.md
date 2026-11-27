@@ -29,6 +29,9 @@ What is built and works, and what is known not to work or is unverified.
 - Relay discovery: an owner can publish a tenant as `hermes-relay.json` in the account's `.github-private` repository, after confirming. Publish is on the tenant's row in Settings, also for a tenant the owner joined by a link. Hermes looks there once a launch for each of the viewer's accounts and offers a tenant it finds, so members need no join link. A tenant turned down is not asked about again, and Settings lists it with a Connect button.
 - Ignored repositories: a list in Settings, picked from the repositories Hermes has loaded. Their pull requests leave every list, the sidebar, and ⌘K. `HERMES_SHOW_IGNORED=1` switches the list off for one run.
 - Inbox navigation: filters across repositories, then the repositories, with one list in the middle column.
+- Back and forward: ⌘[ and ⌘] and the list column's chevron buttons return to the window's
+  earlier sidebar scope, list, item, and tab. Each window has its own history. Switching accounts
+  clears it. See [plans/architecture.md](plans/architecture.md#back-and-forward).
 - Local stacks: a repository with a checkout has a Local tab of its stacked
   branches, and a branch with no pull request opens a read-only diff against
   its parent. The stack switcher includes local branches above a pull request.

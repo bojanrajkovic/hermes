@@ -55,6 +55,36 @@ import Testing
         #expect(other.placeURL == nil)
     }
 
+    @Test func goingBackRestoresTheScopeListItemAndTab() {
+        model.navigate(to: .issue(key(1)))
+        model.recordPlace()
+        model.show(.filter(.drafts))
+        model.navigate(to: .pullRequest(key(7)), tab: .checks)
+        model.recordPlace()
+
+        model.goBack()
+        #expect(model.scope == .repository(airway))
+        #expect(model.repositoryList == .issues)
+        #expect(model.destination == .issue(key(1)))
+
+        model.goForward()
+        #expect(model.destination == .pullRequest(key(7)))
+        #expect(model.pullRequestTab == .checks)
+    }
+
+    @Test func switchingAccountsClearsHistory() {
+        let avatar = URL(string: "https://github.com/octo.png")!
+        model.navigate(to: .issue(key(1)))
+        model.recordPlace()
+        model.navigate(to: .issue(key(2)))
+        model.recordPlace()
+        #expect(model.canGoBack)
+
+        model.select(Account(kind: .organization, login: "octo", name: nil, avatarURL: avatar))
+
+        #expect(!model.canGoBack)
+    }
+
     @Test func slowOpenByNumberDoesNotOverrideLaterNavigation() async {
         stub.enqueue(item(pullRequestJSON(7)), delay: 0.2)
 
