@@ -465,7 +465,7 @@ struct StackSwitcher: View {
                 Label("Stack \(position + 1) of \(sequence.count)", systemImage: "square.stack.3d.up")
             }
             .fixedSize()
-            .help("Switch to another branch in this stack (⌘[ and ⌘])")
+            .help("Switch to another branch in this stack (⌥⌘[ and ⌥⌘])")
         }
     }
 
