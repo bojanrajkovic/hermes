@@ -63,10 +63,21 @@ enum DefinitionSearch {
             .map(\.path)
     }
 
+    /// Returns the locations that aren't import lines. When every location is an
+    /// import line, returns only the ones in `origin`, the file that contains the
+    /// clicked name. A name imported from a relative path is usually defined in
+    /// the repository. Dropping its import line leaves only that definition, so
+    /// the click opens it without showing a list.
+    static func preferred(_ locations: [DefinitionLocation], origin: String) -> [DefinitionLocation] {
+        let declared = locations.filter { $0.kind != .import }
+        return declared.isEmpty ? locations.filter { $0.path == origin } : declared
+    }
+
     /// Looks for the definitions of `name`, in candidate order.
     static func find(name: String, origin: String, in tree: any SourceTree) async throws -> Outcome {
         let paths = try await tree.grep(word: name).map(\.path)
-        let candidates = candidates(among: paths, origin: origin)
+        // Grep stops at SourceTreeLimits.matches, possibly before the clicked file and its import line.
+        let candidates = candidates(among: paths + [origin], origin: origin)
         guard !candidates.isEmpty else { return paths.isEmpty ? .notFound : .unsupported(files: Set(paths).count) }
 
         let found = await withTaskGroup(of: (Int, [DefinitionLocation]).self) { group in
@@ -81,7 +92,7 @@ enum DefinitionSearch {
             }
             var byIndex: [Int: [DefinitionLocation]] = [:]
             for await (index, locations) in group { byIndex[index] = locations }
-            return candidates.indices.flatMap { byIndex[$0] ?? [] }
+            return preferred(candidates.indices.flatMap { byIndex[$0] ?? [] }, origin: origin)
         }
         return found.isEmpty ? .notFound : .found(found)
     }

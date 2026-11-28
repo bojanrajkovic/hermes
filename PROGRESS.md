@@ -84,7 +84,8 @@ What is built and works, and what is known not to work or is unverified.
 - Rendered Markdown diffs with Mermaid.
 - Go to definition for Swift, TypeScript, TSX, JavaScript, Go, Rust, C#,
   Python, Ruby, Bash, and HCL, in a popover over the identifier that can move
-  into a docked pane.
+  into a docked pane. In JavaScript, TypeScript, Python, and Rust, clicking a
+  name imported from a library shows its import line.
 - Find references with ⌘-click or the line's right-click menu, in the same
   popover. In those 11 languages, the list leaves out a comment or string
   that only mentions the name.

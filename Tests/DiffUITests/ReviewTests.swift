@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import GitHubKit
 import os
+import RepoKit
 import SwiftUI
 import StateKit
 import Testing
@@ -206,6 +207,33 @@ struct DefinitionCandidateTests {
     @Test func candidatesAreCapped() {
         let paths = (0..<100).map { "pkg/file\($0).go" }
         #expect(DefinitionSearch.candidates(among: paths, origin: "main.go", limit: 5).count == 5)
+    }
+
+    @Test func findReturnsImportLinesOnlyFromTheClickedFileWhenNothingElseDefinesTheName() async throws {
+        let tree = MemoryTree(files: [
+            "src/app.ts": "import { debounce } from 'lodash-es'\nimport { total } from './util'\nimport { other } from 'x'",
+            "src/util.ts": "export function total() {}",
+            "src/other.ts": "import { elsewhere } from 'x'\nelsewhere()",
+        ])
+        let library = try await DefinitionSearch.find(name: "debounce", origin: "src/app.ts", in: tree)
+        #expect(library == .found([
+            DefinitionLocation(path: "src/app.ts", line: 0, kind: .import, lineText: "import { debounce } from 'lodash-es'")
+        ]))
+
+        let relative = try await DefinitionSearch.find(name: "total", origin: "src/app.ts", in: tree)
+        #expect(relative == .found([
+            DefinitionLocation(path: "src/util.ts", line: 0, kind: .function, lineText: "export function total() {}")
+        ]))
+
+        #expect(try await DefinitionSearch.find(name: "elsewhere", origin: "src/app.ts", in: tree) == .notFound)
+    }
+
+    @Test func findReadsTheClickedFileWhenGrepStopsBeforeIt() async throws {
+        let uses = Array(repeating: "useState()", count: SourceTreeLimits.matches).joined(separator: "\n")
+        let tree = MemoryTree(files: ["a.ts": uses, "src/app.ts": "import { useState } from 'react'"])
+        #expect(try await DefinitionSearch.find(name: "useState", origin: "src/app.ts", in: tree) == .found([
+            DefinitionLocation(path: "src/app.ts", line: 0, kind: .import, lineText: "import { useState } from 'react'")
+        ]))
     }
 }
 
