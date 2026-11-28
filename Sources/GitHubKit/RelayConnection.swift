@@ -202,12 +202,24 @@ public enum RelayKeychain {
 
     /// Stores a tenant's refresh token in place of the one before. Passing nil removes it.
     ///
+    /// This updates an existing item in place, so the item's access list stays the same and
+    /// every app the user allowed to read the token stays allowed. When the update fails,
+    /// this deletes the item and adds a new one, because the relay has already spent the
+    /// old token.
+    ///
     /// - Returns: False when the Keychain refused, which leaves the tenant without a token.
     @discardableResult
     public static func set(refreshToken: String?, for tenant: RelayTenant) -> Bool {
+        guard let refreshToken else {
+            SecItemDelete(query(tenant) as CFDictionary)
+            return true
+        }
+        let data = Data(refreshToken.utf8)
+        if SecItemUpdate(query(tenant) as CFDictionary, [kSecValueData: data] as CFDictionary) == errSecSuccess {
+            return true
+        }
         SecItemDelete(query(tenant) as CFDictionary)
-        guard let refreshToken else { return true }
-        let item = query(tenant).merging([kSecValueData: Data(refreshToken.utf8)]) { _, new in new }
+        let item = query(tenant).merging([kSecValueData: data]) { _, new in new }
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 }

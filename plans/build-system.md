@@ -23,7 +23,7 @@ flowchart LR
 
 | Command | What it does |
 |---------|--------------|
-| `make build` (or `make`) | Debug build into `build/Hermes.app`, signed ad hoc. |
+| `make build` (or `make`) | Debug build into `build/Hermes.app`, signed with the identity in `DEV_IDENTITY`, or ad hoc when it's unset. [relay-client.md](relay-client.md#the-refresh-token) explains why a Developer ID stops Keychain prompts. |
 | `make run` | Release build, then opens the app. A debug build scrolls the diff noticeably slower. |
 | `make test` | Runs `swift test`. |
 | `make check` | Runs `swift build` only. No bundle and no signing. |
