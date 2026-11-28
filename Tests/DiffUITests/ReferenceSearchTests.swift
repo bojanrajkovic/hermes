@@ -4,7 +4,7 @@ import Testing
 @testable import DiffUI
 
 /// Serves files from a dictionary. `grep` matches whole words the way `git grep -w` does.
-private struct MemoryTree: SourceTree {
+struct MemoryTree: SourceTree {
     var files: [String: String]
 
     func readFile(_ path: String) async throws -> String {

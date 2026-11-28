@@ -126,6 +126,7 @@ extension DefinitionKind {
         case .variable: "Variable"
         case .property: "Property"
         case .module: "Module"
+        case .import: "Import"
         }
     }
 
@@ -137,6 +138,7 @@ extension DefinitionKind {
         case .variable: "v.square"
         case .property: "p.square"
         case .module: "shippingbox"
+        case .import: "arrow.down.square"
         }
     }
 }

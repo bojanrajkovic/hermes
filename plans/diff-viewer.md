@@ -340,9 +340,17 @@ Clicking an identifier in the diff or in the definition pane looks it up:
 1. `git grep` finds the files that contain the name as a whole word.
 2. `DefinitionSearch.candidates` ranks them: the file that was clicked, files
    in its directory, files in its language, then the rest. It keeps the first
-   40.
+   40. The clicked file is always a candidate, even when grep stops at its
+   500-line limit before reaching it.
 3. `Syntax.definitions` parses each candidate and returns the places that
    define the name.
+4. In JavaScript, TypeScript, Python, and Rust, `Syntax.definitions` also
+   returns each name that an import brings in. `DefinitionSearch.preferred`
+   keeps an import line only when it's in the clicked file and nothing else
+   defines the name. Clicking a name from a library then shows its import
+   line instead of "not found". A name imported from a relative path is
+   usually defined in the repository. Dropping its import line leaves only
+   that definition, so the click opens it without showing a list.
 
 A click in the diff shows the result in a popover over the identifier. One
 result opens the file at the definition, and several show a list. Identifiers

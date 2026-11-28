@@ -210,6 +210,8 @@ public enum Syntax {
     /// Definitions are functions, methods, types, type aliases, modules, fields and
     /// properties, enum cases, top-level constants and variables, and in HCL the
     /// `resource`, `data`, `variable`, `output`, `module`, and `locals` entries.
+    /// In JavaScript, TypeScript, Python, and Rust, a name that an import brings
+    /// into the file is a definition of kind ``DefinitionKind/import``.
     /// Local variables and parameters are not definitions.
     ///
     /// A file that does not contain `name` returns without being parsed, so this is

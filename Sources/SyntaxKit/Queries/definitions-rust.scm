@@ -7,3 +7,10 @@
 ; Trait methods without a body.
 (function_signature_item name: (identifier) @name) @definition.method
 (associated_type name: (type_identifier) @name) @definition.type
+
+; use x::{A, b::C, D as E} brings in A, C, and E.
+(use_declaration argument: (identifier) @name) @definition.import
+(use_declaration argument: (scoped_identifier name: (identifier) @name)) @definition.import
+(use_list (identifier) @name) @definition.import
+(use_list (scoped_identifier name: (identifier) @name)) @definition.import
+(use_as_clause alias: (identifier) @name) @definition.import
