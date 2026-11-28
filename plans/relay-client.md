@@ -472,6 +472,21 @@ login Keychain, under the service `com.coderinserepeat.hermes.relay`. The token
 lets the relay read, for eight hours at a time, what both the member and the
 tenant's App can read, so it does not belong in the settings file.
 
-A debug build is signed ad hoc, and its signature changes with each build, so
-macOS asks for the Keychain password when a new build reads an item an older
-one stored.
+The relay sends a new refresh token on every connection. `RelayKeychain`
+updates the item in place, so the item's access list stays the same. Deleting
+and re-adding the item would reset the access list to only the app that added
+it. An app you allowed with Always Allow then stays allowed, however many times
+it reconnects.
+
+The Keychain identifies an app by its signature. Each debug build signed ad hoc
+has a different signature, so macOS asks for the Keychain password the first
+time each new build reads the token. To stop the prompts, set `DEV_IDENTITY` to
+the release's Developer ID, and `make build` signs debug builds with it:
+
+```sh
+export DEV_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+```
+
+Every build signed with that identity satisfies the release app's designated
+requirement (same team ID and bundle ID), so the Keychain treats all of them as
+the same app.
