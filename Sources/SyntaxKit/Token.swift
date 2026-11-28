@@ -117,6 +117,9 @@ public enum DefinitionKind: String, Sendable, Hashable, CaseIterable {
     /// A field or property of a type.
     case property
     case module
+    /// A name that an import statement brings into its file, such as `debounce` in
+    /// `import { debounce } from 'lodash-es'`.
+    case `import`
 
     /// Maps the suffix of a `@definition.*` capture from a `tags.scm` query.
     init?(tagName: some StringProtocol) {
@@ -128,6 +131,7 @@ public enum DefinitionKind: String, Sendable, Hashable, CaseIterable {
         case "variable": self = .variable
         case "property", "field": self = .property
         case "module": self = .module
+        case "import": self = .import
         default: return nil
         }
     }

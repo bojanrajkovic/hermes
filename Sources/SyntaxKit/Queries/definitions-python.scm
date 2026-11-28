@@ -9,3 +9,9 @@
     left: (attribute object: (identifier) @_self attribute: (identifier) @name)) @definition.field)))
   (#eq? @_init "__init__")
   (#eq? @_self "self"))
+
+; from x import a, b as c brings in a and c.
+; import os.path brings in os.
+(import_from_statement name: (dotted_name . (identifier) @name)) @definition.import
+(import_statement name: (dotted_name . (identifier) @name)) @definition.import
+(aliased_import alias: (identifier) @name) @definition.import

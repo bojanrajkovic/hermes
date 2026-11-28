@@ -599,6 +599,46 @@ private let parsed = Language.allCases.filter { $0 != .plainText }
         #expect(definitions("Z", in: record, .csharp) == [])
     }
 
+    @Test(arguments: [
+        ("debounce", "import debounce from 'lodash-es'", Language.javascript),
+        ("ns", "import * as ns from 'x'", .javascript),
+        ("a", "import { a } from 'x'", .javascript),
+        ("b", "import { a as b } from 'x'", .javascript),
+        ("Def", "import Def, { a } from 'x'", .javascript),
+        ("debounce", "const { debounce } = require('lodash')", .javascript),
+        ("d", "var { debounce: d } = require('lodash')", .javascript),
+        ("debounce", "const { debounce } = require('lodash')", .typescript),
+        ("debounce", "import debounce from 'lodash-es'", .typescript),
+        ("ns", "import * as ns from 'x'", .typescript),
+        ("a", "import { a } from 'x'", .typescript),
+        ("b", "import { a as b } from 'x'", .typescript),
+        ("Props", "import type { Props } from './props'", .tsx),
+        ("foo", "from x import foo", .python),
+        ("bar", "from .x import (foo, bar)", .python),
+        ("os", "import os.path", .python),
+        ("np", "import numpy as np", .python),
+        ("b", "from x import a as b", .python),
+        ("Deserialize", "use serde::Deserialize;", .rust),
+        ("A", "use x::{A, b::C};", .rust),
+        ("C", "use x::{A, b::C};", .rust),
+        ("Z", "use x::Y as Z;", .rust),
+        ("regex", "use regex;", .rust),
+    ])
+    func importedNamesAreDefinitions(name: String, source: String, language: Language) {
+        #expect(definitions(name, in: source, language) == [.import])
+    }
+
+    @Test func importPathsAndOriginalNamesAreNotDefinitions() {
+        #expect(definitions("a", in: "import { a as b } from 'x'", .typescript) == [])
+        #expect(definitions("debounce", in: "const { debounce: d } = require('lodash')", .javascript) == [])
+        #expect(definitions("a", in: "const { a } = load('x')", .javascript) == [])
+        #expect(definitions("a", in: "from x import a as b", .python) == [])
+        #expect(definitions("lodash", in: "from lodash import x", .python) == [])
+        #expect(definitions("path", in: "import os.path", .python) == [])
+        #expect(definitions("serde", in: "use serde::Deserialize;", .rust) == [])
+        #expect(definitions("Y", in: "use x::Y as Z;", .rust) == [])
+    }
+
     @Test func usesAreNotDefinitions() {
         let source = "func run() {}\nrun()\nlet x = run\n"
         #expect(Syntax.definitions(named: "run", in: source, language: .swift).map(\.line) == [0])
